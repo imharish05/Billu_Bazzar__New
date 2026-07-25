@@ -11,7 +11,6 @@ const Customer = sequelize.define('Customer', {
   avatar: { type: DataTypes.STRING(500) },
   address: { type: DataTypes.JSON, defaultValue: {} },
   loyaltyPoints: { type: DataTypes.INTEGER, defaultValue: 0 },
-  isVerified: { type: DataTypes.BOOLEAN, defaultValue: false },
   isActive: { type: DataTypes.BOOLEAN, defaultValue: true },
   referralCode: { type: DataTypes.STRING(20), unique: true },
   preferredCurrency: { type: DataTypes.STRING(5), defaultValue: 'INR' },

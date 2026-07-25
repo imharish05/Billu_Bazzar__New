@@ -108,9 +108,9 @@ const ExclusiveCollection = () => {
             >
               <Link to={`/products/${product.slug}`} className="block focus-visible:outline-brand-gold">
                 <div className="relative aspect-[3/4] overflow-hidden bg-brand-light mb-3">
-                  {product.images?.[0] ? (
+                  {(product.defaultProductImage || product.images?.[0]) ? (
                     <img
-                      src={product.images[0]}
+                      src={product.defaultProductImage || product.images[0]}
                       alt={product.name}
                       className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                       loading="lazy"

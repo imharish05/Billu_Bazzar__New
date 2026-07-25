@@ -21,7 +21,22 @@ const Product = sequelize.define('Product', {
   warehouseId: { type: DataTypes.INTEGER, allowNull: true },
   lowStockThreshold: { type: DataTypes.INTEGER, defaultValue: 10, allowNull: true },
   gstRate: { type: DataTypes.STRING(20), defaultValue: '18%', allowNull: true },
-  defaultProductImage: { type: DataTypes.STRING(500), allowNull: true },
+  defaultProductImage: {
+    type: DataTypes.STRING(500),
+    allowNull: true,
+    get() {
+      const val = this.getDataValue('defaultProductImage');
+      if (val) return val;
+      const rawImgs = this.getDataValue('images');
+      let imgs = [];
+      if (typeof rawImgs === 'string') {
+        try { imgs = JSON.parse(rawImgs); } catch (e) { imgs = []; }
+      } else if (Array.isArray(rawImgs)) {
+        imgs = rawImgs;
+      }
+      return (imgs && imgs.length > 0) ? imgs[0] : null;
+    }
+  },
   has360View: { type: DataTypes.BOOLEAN, defaultValue: false },
   hasVideo: { type: DataTypes.BOOLEAN, defaultValue: false },
   videoUrl: { type: DataTypes.STRING(500), allowNull: true },
@@ -30,10 +45,20 @@ const Product = sequelize.define('Product', {
     defaultValue: [],
     get() {
       const rawValue = this.getDataValue('images');
+      let imgs = [];
       if (typeof rawValue === 'string') {
-        try { return JSON.parse(rawValue); } catch (e) { return []; }
+        try { imgs = JSON.parse(rawValue); } catch (e) { imgs = []; }
+      } else if (Array.isArray(rawValue)) {
+        imgs = rawValue;
       }
-      return rawValue || [];
+      const defaultImg = this.getDataValue('defaultProductImage');
+      if (defaultImg && (!imgs || imgs.length === 0)) {
+        return [defaultImg];
+      }
+      if (defaultImg && imgs.length > 0 && !imgs.includes(defaultImg)) {
+        return [defaultImg, ...imgs];
+      }
+      return imgs || [];
     }
   },
   // 360-degree spin image frames (array of ordered URLs)

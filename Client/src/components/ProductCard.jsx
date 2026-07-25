@@ -55,7 +55,7 @@ const ProductCard = ({ product, index = 0 }) => {
         variantId: v.id,
         price: v.price !== null && v.price !== undefined ? parseFloat(v.price) : parseFloat(prod.price),
         mrp: v.mrp !== null && v.mrp !== undefined ? parseFloat(v.mrp) : (prod.comparePrice ? parseFloat(prod.comparePrice) : null),
-        image: v.image || prod.images?.[0] || '',
+        image: v.image || prod.defaultProductImage || prod.images?.[0] || '',
         attributes: attrs
       };
     }
@@ -80,7 +80,7 @@ const ProductCard = ({ product, index = 0 }) => {
       variantId: null,
       price: parseFloat(prod.price),
       mrp: prod.comparePrice ? parseFloat(prod.comparePrice) : null,
-      image: prod.images?.[0] || '',
+      image: prod.defaultProductImage || prod.images?.[0] || '',
       attributes: defaultAttrs
     };
   };
@@ -118,13 +118,16 @@ const ProductCard = ({ product, index = 0 }) => {
   const handleAddToCart = (e) => {
     e.preventDefault();
     const cartPayload = {
-      productId: product.id,
+      id: product.id,
       name: product.name,
-      image: resolvedDefault.image || product.images?.[0],
-      priceAtAdd: displayPrice,
-      quantity: 1,
+      slug: product.slug,
+      image: resolvedDefault.image || product.defaultProductImage || product.images?.[0] || '',
+      price: displayPrice,
+      comparePrice: displayComparePrice,
+      stock: product.stock,
       variantId: resolvedDefault.variantId,
-      selectedVariant: resolvedDefault.attributes
+      selectedVariant: resolvedDefault.attributes,
+      quantity: 1
     };
     dispatch(addLocal(cartPayload));
     dispatch(openCart());
@@ -137,7 +140,7 @@ const ProductCard = ({ product, index = 0 }) => {
       productId: product.id,
       name: product.name,
       slug: product.slug,
-      image: resolvedDefault.image || product.images?.[0] || '',
+      image: resolvedDefault.image || product.defaultProductImage || product.images?.[0] || '',
       price: displayPrice,
       comparePrice: displayComparePrice,
       inStock: product.stock > 0,
@@ -164,7 +167,7 @@ const ProductCard = ({ product, index = 0 }) => {
         {/* Skeleton while image loads */}
         {!imgLoaded && <div className="skeleton absolute inset-0" aria-hidden="true" />}
         <img
-          src={product.defaultProductImage || product.images?.[0] || getPlaceholderSvg(product.name)}
+          src={resolvedDefault.image || product.defaultProductImage || product.images?.[0] || getPlaceholderSvg(product.name)}
           alt={product.name}
           className={`w-full h-full object-cover transition-transform duration-500 group-hover:scale-105 ${imgLoaded ? 'opacity-100' : 'opacity-0'}`}
           loading="lazy"

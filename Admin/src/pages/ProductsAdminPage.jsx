@@ -2153,10 +2153,10 @@ const ProductsAdminPage = () => {
   const executeDelete = async (id) => {
     try {
       await dispatch(deleteProduct(id)).unwrap();
-      toast.success('Product deactivated successfully');
+      toast.success('Product deleted successfully');
       dispatch(fetchAdminProducts({ search: search || undefined }));
     } catch (err) {
-      toast.error('Failed to deactivate product');
+      toast.error('Failed to deleted product');
     }
   };
 
@@ -2164,8 +2164,8 @@ const ProductsAdminPage = () => {
     toast((t) => (
       <div className="flex flex-col gap-2 p-1">
         <p className="text-sm font-semibold text-neutral-800">Confirm Deactivation</p>
-        <p className="text-xs text-neutral-600">Are you sure you want to deactivate this product?</p>
-        <div className="flex justify-end gap-2 mt-2">
+        <p className="text-xs text-neutral-600">Are you sure you want to deleted this product?</p>
+        <div className="flex justify-center gap-2 mt-2">
           <button
             onClick={() => {
               toast.dismiss(t.id);
@@ -2173,7 +2173,7 @@ const ProductsAdminPage = () => {
             }}
             className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold uppercase tracking-wider transition-colors rounded shadow-sm"
           >
-            Yes, Deactivate
+            Yes, Deleted
           </button>
           <button
             onClick={() => toast.dismiss(t.id)}
@@ -2226,7 +2226,7 @@ const ProductsAdminPage = () => {
               ) : items.map(product => (
                 <tr key={product.id} className="border-b border-brand-light hover:bg-brand-light/20 transition-colors">
                   <td className="px-4 py-3">
-                    <img src={product.images?.[0] || 'https://images.unsplash.com/photo-1469334031218-e382a71b716b?w=80'} alt={product.name} className="w-10 h-12 object-cover rounded" />
+                    <img src={product.defaultProductImage || product.images?.[0] || product.variants?.[0]?.image || 'https://images.unsplash.com/photo-1469334031218-e382a71b716b?w=80'} alt={product.name} className="w-10 h-12 object-cover rounded" />
                   </td>
                   <td className="px-4 py-3">
                     <p className="font-medium line-clamp-1">{product.name}</p>

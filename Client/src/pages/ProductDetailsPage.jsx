@@ -234,16 +234,70 @@ const ProductDetailsPage = () => {
 
   useEffect(() => {
     if (product && parsedVariants.length > 0) {
-      setSelectedAttributes(parsedVariants[0].attributes || {});
+      const firstValid = parsedVariants.find(v => v.stock === undefined || parseInt(v.stock, 10) > 0) || parsedVariants[0];
+      setSelectedAttributes(firstValid.attributes || {});
     } else {
       setSelectedAttributes({});
     }
   }, [product, parsedVariants]);
 
+  const handleSelectAttribute = (groupKey, value) => {
+    if (!parsedVariants || parsedVariants.length === 0) {
+      setSelectedAttributes(prev => ({ ...prev, [groupKey]: value }));
+      return;
+    }
+
+    const tentativeAttrs = { ...selectedAttributes, [groupKey]: value };
+
+    // 1. Exact match with current selectedAttributes + (groupKey: value)
+    const exactMatch = parsedVariants.find(v =>
+      variantAttributeKeys.every(k =>
+        v.attributes && String(v.attributes[k]).toLowerCase() === String(tentativeAttrs[k] || '').toLowerCase()
+      )
+    );
+
+    let nextAttrs = tentativeAttrs;
+
+    if (exactMatch) {
+      nextAttrs = exactMatch.attributes || tentativeAttrs;
+    } else {
+      // 2. Find candidate variants that have groupKey = value
+      const candidateVariants = parsedVariants.filter(v =>
+        v.attributes && String(v.attributes[groupKey]).toLowerCase() === String(value).toLowerCase()
+      );
+
+      if (candidateVariants.length > 0) {
+        let bestVariant = candidateVariants[0];
+        let maxMatchCount = -1;
+
+        candidateVariants.forEach(candidate => {
+          let matchCount = 0;
+          variantAttributeKeys.forEach(k => {
+            if (k !== groupKey && candidate.attributes && selectedAttributes[k]) {
+              if (String(candidate.attributes[k]).toLowerCase() === String(selectedAttributes[k]).toLowerCase()) {
+                matchCount++;
+              }
+            }
+          });
+          if (matchCount > maxMatchCount) {
+            maxMatchCount = matchCount;
+            bestVariant = candidate;
+          }
+        });
+
+        nextAttrs = bestVariant.attributes || tentativeAttrs;
+      }
+    }
+
+    setSelectedAttributes(nextAttrs);
+  };
+
   const selectedVariant = useMemo(() => {
     if (!product || parsedVariants.length === 0) return null;
     return parsedVariants.find(v => {
-      return variantAttributeKeys.every(key => v.attributes[key] === selectedAttributes[key]);
+      return variantAttributeKeys.every(key => 
+        v.attributes && String(v.attributes[key]).toLowerCase() === String(selectedAttributes[key] || '').toLowerCase()
+      );
     });
   }, [parsedVariants, selectedAttributes, variantAttributeKeys]);
 
@@ -277,9 +331,9 @@ const ProductDetailsPage = () => {
 
   const rawImages = useMemo(() => {
     if (!product) return [];
-    return Array.isArray(product.images) && product.images.length
-      ? product.images
-      : [product.images || getPlaceholderSvg(product.name || 'Product')];
+    if (Array.isArray(product.images) && product.images.length > 0) return product.images;
+    if (product.defaultProductImage) return [product.defaultProductImage];
+    return [getPlaceholderSvg(product.name || 'Product')];
   }, [product]);
 
   const baseImages = useMemo(() => {
@@ -638,74 +692,56 @@ const ProductDetailsPage = () => {
               const isColorKey = key.toLowerCase() === 'color' || key.toLowerCase() === 'colour';
 
               return (
-                <div key={key} className="space-y-3">
+                <div key={key} className="space-y-2.5">
+                  {/* Header: KEY: Value */}
+                  <p className="font-extrabold text-sm text-neutral-900 tracking-wider uppercase">
+                    {key}: {currentVal && <span className="text-[#964B00] font-bold ml-1.5 normal-case">{currentVal}</span>}
+                  </p>
+
                   {isColorKey ? (
                     /* ── Color Swatch Selector ── */
-                    <>
-                      <div className="flex items-center justify-between">
-                        <p className="font-semibold text-sm text-brand-text">
-                          Colour
-                          {currentVal && (
-                            <span className="ml-2 font-normal text-brand-gold capitalize">— {currentVal}</span>
-                          )}
-                        </p>
-                        {values.length > 3 && (
-                          <span className="text-[11px] text-brand-grey bg-neutral-100 border border-neutral-200 px-2 py-0.5 rounded-full font-medium">
-                            {values.length} colours available
-                          </span>
-                        )}
-                      </div>
+                    <div className="flex flex-wrap items-center gap-3">
+                      {values.map(val => {
+                        const directVariantMatch = parsedVariants.length > 0 ? parsedVariants.find(v =>
+                          variantAttributeKeys.every(k =>
+                            v.attributes && String(v.attributes[k]).toLowerCase() === String(k === key ? val : (selectedAttributes[k] || '')).toLowerCase()
+                          )
+                        ) : null;
+                        const anyVariantWithVal = parsedVariants.length > 0 ? parsedVariants.find(v =>
+                          v.attributes && String(v.attributes[key]).toLowerCase() === String(val).toLowerCase()
+                        ) : true;
+                        const isOutOfStock = directVariantMatch
+                          ? (directVariantMatch.stock !== undefined && parseInt(directVariantMatch.stock, 10) <= 0)
+                          : (anyVariantWithVal && anyVariantWithVal.stock !== undefined ? parseInt(anyVariantWithVal.stock, 10) <= 0 : false);
+                        const isSelected = String(currentVal || '').toLowerCase() === String(val).toLowerCase();
+                        const cssColor = resolveColor(val);
+                        const isGradient = cssColor.includes('gradient');
+                        const lowerVal = val.toLowerCase();
+                        const isLightColor = ['white', 'cream', 'beige', 'ivory', 'off', 'yellow', 'lemon'].some(c => lowerVal.includes(c)) || cssColor === '#f9fafb' || cssColor === '#ffffff';
 
-                      <div className="flex flex-wrap gap-3">
-                        {values.map(val => {
-                          const isExists = parsedVariants.some(v => v.attributes[key] === val);
-                          const testCombo = { ...selectedAttributes, [key]: val };
-                          const fullMatchVariant = parsedVariants.find(v =>
-                            variantAttributeKeys.every(k => v.attributes[k] === testCombo[k])
-                          );
-                          const isOutOfStock = fullMatchVariant ? (parseInt(fullMatchVariant.stock, 10) <= 0) : false;
-                          const isSelected = currentVal === val;
-                          const cssColor = resolveColor(val);
-                          const isGradient = cssColor.includes('gradient');
-
-                          return (
-                            <button
-                              key={val}
-                              type="button"
-                              disabled={!isExists || isOutOfStock}
-                              onClick={() => {
-                                const newAttrs = { ...selectedAttributes, [key]: val };
-                                const snapVariant = parsedVariants.find(v => v.attributes[key] === val);
-                                if (snapVariant) {
-                                  variantAttributeKeys.forEach(k => {
-                                    if (k !== key) newAttrs[k] = snapVariant.attributes[k];
-                                  });
-                                }
-                                setSelectedAttributes(newAttrs);
-                              }}
-                              title={!isExists ? 'Combination unavailable' : (isOutOfStock ? `${val} — Out of stock` : val)}
-                              className="relative group focus-visible:outline-none"
-                              aria-label={`Select colour ${val}`}
-                              id={`color-swatch-${val.replace(/\s+/g, '-').toLowerCase()}`}
+                        return (
+                          <button
+                            key={val}
+                            type="button"
+                            disabled={isOutOfStock || (!directVariantMatch && !anyVariantWithVal)}
+                            onClick={() => handleSelectAttribute(key, val)}
+                            title={isOutOfStock ? `${val} — Out of stock` : (!directVariantMatch && anyVariantWithVal ? `Click to select variant with ${key}: ${val}` : val)}
+                            className="relative group focus-visible:outline-none"
+                            aria-label={`Select ${key} ${val}`}
+                          >
+                            <span
+                              className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
+                                isSelected
+                                  ? 'border-2 border-[#D4AF37] p-0.5 ring-2 ring-[#D4AF37]/30 scale-105'
+                                  : (!directVariantMatch && anyVariantWithVal ? 'border-2 border-dashed border-amber-400 p-0.5 hover:scale-105' : 'border-2 border-transparent p-0.5 hover:scale-105')
+                              }`}
                             >
-                              {/* Selection ring */}
                               <span
-                                className={`absolute inset-0 -m-1 rounded-full border-2 transition-all duration-200 ${
-                                  isSelected
-                                    ? 'border-brand-text scale-100 opacity-100'
-                                    : 'border-transparent scale-95 opacity-0 group-hover:opacity-60 group-hover:border-brand-grey group-hover:scale-100'
-                                }`}
-                              />
-                              {/* Circle swatch */}
-                              <span
-                                className={`block w-9 h-9 rounded-full shadow-md transition-transform duration-200 ${
-                                  isSelected ? 'scale-95' : 'group-hover:scale-90'
-                                } ${
-                                  !isExists || isOutOfStock ? 'opacity-40' : ''
+                                className={`w-full h-full rounded-full flex items-center justify-center shadow-md relative overflow-hidden ${
+                                  isOutOfStock ? 'opacity-40' : ''
                                 }`}
                                 style={isGradient ? { background: cssColor } : { backgroundColor: cssColor }}
                               >
-                                {/* Out-of-stock diagonal line */}
                                 {isOutOfStock && (
                                   <span className="absolute inset-0 rounded-full overflow-hidden">
                                     <span
@@ -716,76 +752,65 @@ const ProductDetailsPage = () => {
                                     />
                                   </span>
                                 )}
-                                {/* Checkmark for selected */}
-                                {isSelected && (
-                                  <span className="absolute inset-0 flex items-center justify-center">
-                                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                                      <path d="M2.5 7L5.5 10L11.5 4" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                    </svg>
-                                  </span>
+                                {isSelected && !isOutOfStock && (
+                                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                                    <path
+                                      d="M2.5 7L5.5 10L11.5 4"
+                                      stroke={isLightColor ? '#111111' : '#ffffff'}
+                                      strokeWidth="2.5"
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                    />
+                                  </svg>
                                 )}
                               </span>
-                              {/* Color name label */}
-                              <span className={`absolute -bottom-5 left-1/2 -translate-x-1/2 whitespace-nowrap text-[10px] font-medium transition-opacity duration-200 ${
-                                isSelected ? 'opacity-100 text-brand-text' : 'opacity-0 group-hover:opacity-70 text-brand-grey'
-                              }`}>
-                                {val}
-                              </span>
-                            </button>
-                          );
-                        })}
-                      </div>
-
-                      {/* Spacer for label below swatches */}
-                      <div className="h-4" />
-                    </>
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
                   ) : (
-                    /* ── Non-color Variant Selector (text pills) ── */
-                    <>
-                      <p className="font-semibold text-sm text-brand-text">
-                        Select {key} {currentVal && <span className="text-brand-gold font-normal">— {currentVal}</span>}
-                      </p>
-                      <div className="flex flex-wrap gap-2">
-                        {values.map(val => {
-                          const isExists = parsedVariants.some(v => v.attributes[key] === val);
-                          const testCombo = { ...selectedAttributes, [key]: val };
-                          const fullMatchVariant = parsedVariants.find(v =>
-                            variantAttributeKeys.every(k => v.attributes[k] === testCombo[k])
-                          );
-                          const isOutOfStock = fullMatchVariant ? (parseInt(fullMatchVariant.stock, 10) <= 0) : false;
-                          const isSelected = currentVal === val;
+                    /* ── Non-color Variant Selector (Text Pills) ── */
+                    <div className="flex flex-wrap gap-3">
+                      {values.map(val => {
+                        const directVariantMatch = parsedVariants.length > 0 ? parsedVariants.find(v =>
+                          variantAttributeKeys.every(k =>
+                            v.attributes && String(v.attributes[k]).toLowerCase() === String(k === key ? val : (selectedAttributes[k] || '')).toLowerCase()
+                          )
+                        ) : null;
+                        const anyVariantWithVal = parsedVariants.length > 0 ? parsedVariants.find(v =>
+                          v.attributes && String(v.attributes[key]).toLowerCase() === String(val).toLowerCase()
+                        ) : true;
+                        const isOutOfStock = directVariantMatch
+                          ? (directVariantMatch.stock !== undefined && parseInt(directVariantMatch.stock, 10) <= 0)
+                          : (anyVariantWithVal && anyVariantWithVal.stock !== undefined ? parseInt(anyVariantWithVal.stock, 10) <= 0 : false);
+                        const isSelected = String(currentVal || '').toLowerCase() === String(val).toLowerCase();
 
-                          let btnStyle = "border-brand-light text-brand-text hover:border-brand-grey";
-                          if (isSelected) {
-                            btnStyle = "border-brand-text bg-brand-text text-white font-semibold";
-                          } else if (!isExists || isOutOfStock) {
-                            btnStyle = "border-dashed border-neutral-300 bg-neutral-100 text-neutral-400 opacity-60 line-through cursor-not-allowed";
-                          }
+                        let btnStyle = "bg-white text-neutral-900 border border-neutral-300 hover:border-neutral-400";
+                        if (isSelected) {
+                          btnStyle = "bg-black text-[#F5B800] border-black shadow-md font-extrabold";
+                        } else if (isOutOfStock) {
+                          btnStyle = "bg-neutral-100 text-neutral-400 border border-neutral-300 line-through opacity-50 cursor-not-allowed";
+                        } else if (!directVariantMatch && anyVariantWithVal) {
+                          btnStyle = "bg-amber-50/40 text-neutral-800 border border-dashed border-amber-300 hover:border-amber-500 hover:bg-amber-100/50";
+                        } else if (!anyVariantWithVal) {
+                          btnStyle = "bg-neutral-100 text-neutral-400 border border-dashed border-neutral-200 line-through opacity-40 cursor-not-allowed";
+                        }
 
-                          return (
-                            <button
-                              key={val}
-                              type="button"
-                              disabled={!isExists || isOutOfStock}
-                              onClick={() => {
-                                const newAttrs = { ...selectedAttributes, [key]: val };
-                                const snapVariant = parsedVariants.find(v => v.attributes[key] === val);
-                                if (snapVariant) {
-                                  variantAttributeKeys.forEach(k => {
-                                    if (k !== key) newAttrs[k] = snapVariant.attributes[k];
-                                  });
-                                }
-                                setSelectedAttributes(newAttrs);
-                              }}
-                              className={`px-4 h-11 border text-sm font-medium transition-all focus-visible:outline-brand-gold relative ${btnStyle}`}
-                              title={!isExists ? 'Combination unavailable' : (isOutOfStock ? 'Out of stock' : `${key}: ${val}`)}
-                            >
-                              {val}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </>
+                        return (
+                          <button
+                            key={val}
+                            type="button"
+                            disabled={isOutOfStock || (!directVariantMatch && !anyVariantWithVal)}
+                            onClick={() => handleSelectAttribute(key, val)}
+                            className={`px-5 py-2.5 min-w-[80px] rounded-2xl text-sm font-extrabold transition-all duration-150 focus-visible:outline-none ${btnStyle}`}
+                            title={isOutOfStock ? `${val} — Out of stock` : (!directVariantMatch && anyVariantWithVal ? `Click to select variant with ${key}: ${val}` : `${key}: ${val}`)}
+                          >
+                            {val}
+                          </button>
+                        );
+                      })}
+                    </div>
                   )}
                 </div>
               );
@@ -932,20 +957,6 @@ const ProductDetailsPage = () => {
                   <p className="text-[11px] text-brand-grey mt-0.5 leading-relaxed">
                     Certified 100% genuine luxury item. Accompanied by official designer brand tags, validation certificates, and master artisan credentials.
                   </p>
-                </div>
-              </div>
-            )}
-
-            {/* Product attributes */}
-            {attributes && Object.keys(attributes).filter(k => !['sizes', 'size', 'material', 'heelheight'].includes(k.toLowerCase())).length > 0 && (
-              <div className="border-t border-brand-light pt-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2.5">
-                  {Object.entries(attributes).filter(([k]) => !['sizes', 'size', 'material', 'heelheight'].includes(k.toLowerCase())).map(([key, val]) => (
-                    <div key={key} className="text-sm">
-                      <span className="text-brand-grey capitalize mr-2">{key}:</span>
-                      <span className="font-medium text-brand-text">{Array.isArray(val) ? val.join(', ') : val}</span>
-                    </div>
-                  ))}
                 </div>
               </div>
             )}

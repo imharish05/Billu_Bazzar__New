@@ -125,8 +125,12 @@ const processProductData = (req) => {
   data.images = [...existingImages, ...newImages];
   delete data.existingImages;
 
-  // Fallback for defaultProductImage if not explicitly uploaded
-  if (!data.defaultProductImage && data.images && data.images.length > 0) {
+  // Sync defaultProductImage and images array
+  if (data.defaultProductImage) {
+    if (!data.images.includes(data.defaultProductImage)) {
+      data.images = [data.defaultProductImage, ...data.images];
+    }
+  } else if (data.images && data.images.length > 0) {
     data.defaultProductImage = data.images[0];
   }
 
@@ -504,15 +508,42 @@ const remove = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Product not found' });
     }
 
-    // Delete associated entries including order history
-    const { WarehouseStock, CartItem, Wishlist, Review, StockAlert, OrderItem } = require('../models');
+    // Delete associated entries including variants and logs
+    const { ProductVariant, WarehouseStock, CartItem, Wishlist, Review, StockAlert, OrderItem, InventoryMovementLog } = require('../models');
+
+    // 1. Find and clean up variant-level dependencies
+    const variants = await ProductVariant.findAll({ where: { productId: id }, transaction });
+    const variantIds = variants.map(v => v.id);
+
+    if (variantIds.length > 0) {
+      await WarehouseStock.destroy({ where: { variantId: variantIds }, transaction });
+      await CartItem.destroy({ where: { variantId: variantIds }, transaction });
+      await Wishlist.destroy({ where: { variantId: variantIds }, transaction });
+      await OrderItem.destroy({ where: { variantId: variantIds }, transaction });
+      await InventoryMovementLog.destroy({ where: { variantId: variantIds }, transaction });
+    }
+
+    // 2. Delete product-level dependencies
     await WarehouseStock.destroy({ where: { productId: id }, transaction });
     await CartItem.destroy({ where: { productId: id }, transaction });
     await Wishlist.destroy({ where: { productId: id }, transaction });
     await Review.destroy({ where: { productId: id }, transaction });
     await StockAlert.destroy({ where: { productId: id }, transaction });
     await OrderItem.destroy({ where: { productId: id }, transaction });
+    await InventoryMovementLog.destroy({ where: { productId: id }, transaction });
 
+    // 3. Delete ProductVariants
+    await ProductVariant.destroy({ where: { productId: id }, transaction });
+
+    // 4. Clean up local files
+    if (Array.isArray(product.images)) {
+      product.images.forEach(img => deleteLocalFile(img));
+    }
+    if (product.defaultProductImage) {
+      deleteLocalFile(product.defaultProductImage);
+    }
+
+    // 5. Delete product
     await product.destroy({ transaction });
 
     await transaction.commit();
@@ -520,6 +551,7 @@ const remove = async (req, res) => {
     res.json({ success: true, message: 'Product deleted successfully' });
   } catch (err) {
     await transaction.rollback();
+    console.error(`[Delete Product Error]:`, err);
     res.status(500).json({ success: false, message: err.message });
   }
 };

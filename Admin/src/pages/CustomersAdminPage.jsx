@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { Search, CheckCircle, Star } from 'lucide-react';
+import { Search, Star } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
 import { PaginationTop, PaginationBottom } from '../components/Pagination';
 import { fetchCustomers } from '../redux/slices/customersSlice';
@@ -32,7 +32,7 @@ const CustomersAdminPage = () => {
           <table className="w-full text-sm" aria-label="Customers table">
             <thead>
               <tr className="bg-brand-light/40 text-left">
-                {['Customer', 'Phone', 'Loyalty Pts', 'Orders', 'Verified', 'Joined', 'Actions'].map(h => (
+                {['Customer', 'Phone', 'Loyalty Pts', 'Orders', 'Joined'].map(h => (
                   <th key={h} className="px-4 py-3 text-xs font-semibold text-brand-grey uppercase tracking-wider">{h}</th>
                 ))}
               </tr>
@@ -41,7 +41,7 @@ const CustomersAdminPage = () => {
               {loading ? (
                 [...Array(8)].map((_, i) => (
                   <tr key={i} className="border-b border-brand-light">
-                    {[...Array(7)].map((_, j) => <td key={j} className="px-4 py-3"><div className="skeleton h-4 w-20" /></td>)}
+                    {[...Array(5)].map((_, j) => <td key={j} className="px-4 py-3"><div className="skeleton h-4 w-20" /></td>)}
                   </tr>
                 ))
               ) : items.map(customer => (
@@ -65,17 +65,7 @@ const CustomersAdminPage = () => {
                     </div>
                   </td>
                   <td className="px-4 py-3 text-center">{customer.orders?.length || 0}</td>
-                  <td className="px-4 py-3">
-                    {customer.isVerified ? (
-                      <CheckCircle size={16} className="text-green-500" />
-                    ) : (
-                      <span className="text-xs text-brand-grey">Pending</span>
-                    )}
-                  </td>
                   <td className="px-4 py-3 text-brand-grey text-xs">{new Date(customer.createdAt).toLocaleDateString('en-IN')}</td>
-                  <td className="px-4 py-3">
-                    <button className="text-xs text-brand-gold hover:underline focus-visible:outline-brand-gold" id={`view-cust-${customer.id}`}>View</button>
-                  </td>
                 </tr>
               ))}
             </tbody>
