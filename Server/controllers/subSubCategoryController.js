@@ -33,9 +33,39 @@ const deleteLocalFile = (imagePath) => {
 
 const getAll = async (req, res) => {
   try {
-    const { all } = req.query;
+    const { all, page, limit, subCategoryId, search } = req.query;
+    const { Op } = require('sequelize');
     const where = {};
     if (!all) where.isActive = true;
+    if (subCategoryId) where.subCategoryId = subCategoryId;
+    if (search) where.name = { [Op.like]: `%${search}%` };
+
+    if (page !== undefined || limit !== undefined) {
+      const p = Math.max(1, parseInt(page || 1, 10));
+      const l = Math.max(1, parseInt(limit || 10, 10));
+
+      const { count, rows } = await SubSubCategory.findAndCountAll({
+        where,
+        include: [{
+          model: SubCategory,
+          as: 'subcategory',
+          attributes: ['id', 'name', 'categoryId']
+        }],
+        order: [['sortOrder', 'ASC']],
+        limit: l,
+        offset: (p - 1) * l
+      });
+
+      return res.json({
+        success: true,
+        subSubCategories: rows,
+        total: count,
+        page: p,
+        limit: l,
+        totalPages: Math.ceil(count / l)
+      });
+    }
+
     const subSubCategories = await SubSubCategory.findAll({
       where,
       include: [{

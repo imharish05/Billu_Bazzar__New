@@ -2,30 +2,32 @@ import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Search, CheckCircle, Star } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
+import { PaginationTop, PaginationBottom } from '../components/Pagination';
 import { fetchCustomers } from '../redux/slices/customersSlice';
 
 const CustomersAdminPage = () => {
   const dispatch = useDispatch();
-  const { items, loading, total } = useSelector(s => s.customers);
+  const { items, loading, total, totalPages } = useSelector(s => s.customers);
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
 
   useEffect(() => {
-    dispatch(fetchCustomers({ search: search || undefined }));
-  }, [search, dispatch]);
+    dispatch(fetchCustomers({ search: search || undefined, page, limit }));
+  }, [search, page, limit, dispatch]);
 
   return (
     <AdminLayout title="Customers">
-      <div className="flex gap-3 mb-6">
-        <div className="relative flex-1 max-w-md">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-brand-grey" />
-          <input type="search" placeholder="Search by name or email..." value={search} onChange={e => setSearch(e.target.value)} className="w-full pl-9 pr-4 py-2.5 border border-brand-light text-sm focus:outline-none focus:border-brand-gold" id="customers-search" aria-label="Search customers" />
-        </div>
-      </div>
-
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-        <div className="px-5 py-3 border-b border-brand-light">
-          <p className="text-sm text-brand-grey">{total} customers</p>
-        </div>
+        <PaginationTop
+          search={search}
+          onSearchChange={(s) => { setSearch(s); setPage(1); }}
+          searchPlaceholder="Search name or email..."
+          currentPage={page}
+          totalItems={total || 0}
+          limit={limit}
+          onLimitChange={(l) => { setLimit(l); setPage(1); }}
+        />
         <div className="overflow-x-auto">
           <table className="w-full text-sm" aria-label="Customers table">
             <thead>
@@ -80,6 +82,12 @@ const CustomersAdminPage = () => {
           </table>
           {!loading && items.length === 0 && <div className="py-12 text-center text-brand-grey">No customers found.</div>}
         </div>
+        <PaginationBottom
+          currentPage={page}
+          totalPages={totalPages || 1}
+          totalItems={total || 0}
+          onPageChange={(p) => setPage(p)}
+        />
       </div>
     </AdminLayout>
   );

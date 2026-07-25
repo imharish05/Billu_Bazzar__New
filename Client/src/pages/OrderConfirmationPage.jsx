@@ -1,9 +1,12 @@
-import { useSelector } from 'react-redux';
-import { Link } from 'react-router-dom';
+import { useEffect } from 'react';
+import { useSelector, useDispatch } from 'react-redux';
+import { Link, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { CheckCircle, Package, Download, MessageCircle, MapPin } from 'lucide-react';
 import Footer from '../components/Footer';
 import { printInvoice } from '../utils/invoiceGenerator';
+import { formatPrice } from '../utils/currency';
+import { fetchOrderById } from '../redux/slices/ordersSlice';
 
 /* Mock tracking steps */
 const trackingSteps = [
@@ -15,8 +18,19 @@ const trackingSteps = [
 ];
 
 const OrderConfirmationPage = () => {
+  const dispatch = useDispatch();
+  const location = useLocation();
+  const searchParams = new URLSearchParams(location.search);
+  const orderIdFromUrl = searchParams.get('orderId');
+
   const { current: order } = useSelector(s => s.orders);
   const { code: currencyCode, rate: currencyRate } = useSelector(s => s.currency);
+
+  useEffect(() => {
+    if (!order && orderIdFromUrl) {
+      dispatch(fetchOrderById(orderIdFromUrl));
+    }
+  }, [order, orderIdFromUrl, dispatch]);
 
   const fmt = (v) => formatPrice(v, currencyCode, currencyRate);
 

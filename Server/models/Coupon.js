@@ -9,7 +9,7 @@ const Coupon = sequelize.define('Coupon', {
   value: { type: DataTypes.DECIMAL(10, 2), allowNull: false },
   minOrderValue: { type: DataTypes.DECIMAL(10, 2), defaultValue: 0 },
   maxDiscount: { type: DataTypes.DECIMAL(10, 2) },
-  usageLimit: { type: DataTypes.INTEGER, defaultValue: 100 },
+  usageLimit: { type: DataTypes.INTEGER, allowNull: true, defaultValue: 1 },
   usageCount: { type: DataTypes.INTEGER, defaultValue: 0 },
   validFrom: { type: DataTypes.DATE, allowNull: false },
   validUntil: { type: DataTypes.DATE, allowNull: false },

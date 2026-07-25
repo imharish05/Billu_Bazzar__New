@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Instagram, Facebook, Youtube, Twitter, Mail, Phone, MapPin } from 'lucide-react';
+import { Instagram, Facebook, Youtube, Twitter, Mail, Phone } from 'lucide-react';
 import Logo from './Logo';
 import api from '../services/api';
+
+
 
 const Footer = () => {
   const [categories, setCategories] = useState([]);
@@ -90,19 +92,15 @@ const Footer = () => {
 
         {/* Contact */}
         <div>
-          <h3 className="font-playfair text-lg font-semibold text-white mb-5">Get in Touch</h3>
-          <ul className="space-y-4">
-            <li className="flex gap-3 text-white/60 text-sm">
-              <MapPin size={16} className="text-brand-gold mt-0.5 flex-shrink-0" />
-              <span>14 Linking Road, Bandra West,<br />Mumbai, Maharashtra 400050</span>
+          <h3 className="font-playfair text-lg font-semibold text-white mb-5">Contact Us</h3>
+          <ul className="space-y-3">
+            <li className="flex gap-2.5 text-white/60 text-sm">
+              <Phone size={15} className="text-brand-gold mt-0.5 flex-shrink-0" />
+              <a href="tel:+919999999999" className="hover:text-brand-gold transition-colors">+91 99999 99999</a>
             </li>
-            <li className="flex gap-3 text-white/60 text-sm">
-              <Phone size={16} className="text-brand-gold mt-0.5 flex-shrink-0" />
-              <a href="tel:+919999999999" className="hover:text-brand-gold transition-colors focus-visible:outline-brand-gold">+91 99999 99999</a>
-            </li>
-            <li className="flex gap-3 text-white/60 text-sm">
-              <Mail size={16} className="text-brand-gold mt-0.5 flex-shrink-0" />
-              <a href="mailto:hello@billubazaar.com" className="hover:text-brand-gold transition-colors focus-visible:outline-brand-gold">hello@billubazaar.com</a>
+            <li className="flex gap-2.5 text-white/60 text-sm">
+              <Mail size={15} className="text-brand-gold mt-0.5 flex-shrink-0" />
+              <a href="mailto:hello@billubazaar.com" className="hover:text-brand-gold transition-colors">hello@billubazaar.com</a>
             </li>
           </ul>
         </div>

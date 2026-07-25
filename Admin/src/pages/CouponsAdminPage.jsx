@@ -3,21 +3,34 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, X, Copy, Edit, Trash2 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import AdminLayout from '../components/AdminLayout';
+import { PaginationTop, PaginationBottom } from '../components/Pagination';
 import api from '../services/api';
 
 const CouponsAdminPage = () => {
   const [coupons, setCoupons] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({ code: '', type: 'PERCENT', value: '', minOrderValue: 0, maxDiscount: '', usageLimit: 1, validFrom: '', validTo: '', isActive: true });
 
   const load = async () => {
-    try { setLoading(true); const res = await api.get('/coupons').catch(() => ({ data: { coupons: [] } })); setCoupons(res.data?.coupons || []); }
-    catch { } finally { setLoading(false); }
+    try {
+      setLoading(true);
+      const query = `/coupons?page=${page}&limit=${limit}${search ? `&search=${encodeURIComponent(search)}` : ''}`;
+      const res = await api.get(query).catch(() => ({ data: { coupons: [] } }));
+      setCoupons(res.data?.coupons || []);
+      setTotal(res.data?.total || 0);
+      setTotalPages(res.data?.totalPages || 1);
+    } catch { } finally { setLoading(false); }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [page, limit, search]);
 
   const openAddModal = () => {
     setForm({ code: '', type: 'PERCENT', value: '', minOrderValue: 0, maxDiscount: '', usageLimit: 1, validFrom: '', validTo: '', isActive: true });
@@ -32,7 +45,7 @@ const CouponsAdminPage = () => {
       value: coupon.value,
       minOrderValue: coupon.minOrderValue || 0,
       maxDiscount: coupon.maxDiscount || '',
-      usageLimit: coupon.usageLimit || 1,
+      usageLimit: coupon.usageLimit !== null && coupon.usageLimit !== undefined ? coupon.usageLimit : '',
       validFrom: coupon.validFrom ? coupon.validFrom.split('T')[0] : '',
       validTo: coupon.validUntil ? coupon.validUntil.split('T')[0] : (coupon.validTo ? coupon.validTo.split('T')[0] : ''),
       isActive: coupon.isActive ?? true
@@ -83,11 +96,16 @@ const CouponsAdminPage = () => {
   const handleSave = async (e) => {
     e.preventDefault();
     try {
+      const payload = {
+        ...form,
+        usageLimit: form.usageLimit === '' || form.usageLimit === null || form.usageLimit === undefined || form.usageLimit === '0' || form.usageLimit === 0 ? null : Number(form.usageLimit)
+      };
+
       if (editingId) {
-        await api.put(`/coupons/${editingId}`, form);
+        await api.put(`/coupons/${editingId}`, payload);
         toast.success('Coupon updated successfully.');
       } else {
-        await api.post('/coupons', form);
+        await api.post('/coupons', payload);
         toast.success('Coupon created successfully.');
       }
       setModalOpen(false);
@@ -102,9 +120,9 @@ const CouponsAdminPage = () => {
 
   // Seed fallback data if API returns empty
   const displayCoupons = coupons.length ? coupons : [
-    { id: 1, code: 'WELCOME20', type: 'PERCENT', value: 20, minOrderValue: 500, usageCount: 142, usageLimit: 1000, validTo: '2025-12-31', isActive: true },
-    { id: 2, code: 'LUXE15', type: 'PERCENT', value: 15, minOrderValue: 2000, usageCount: 67, usageLimit: 500, validTo: '2025-10-31', isActive: true },
-    { id: 3, code: 'FLAT500', type: 'FLAT', value: 500, minOrderValue: 3000, usageCount: 23, usageLimit: 200, validTo: '2025-09-30', isActive: false },
+    { id: 1, code: 'WELCOME20', type: 'PERCENT', value: 20, minOrderValue: 500, usageCount: 142, usageLimit: 1, validTo: '2025-12-31', isActive: true },
+    { id: 2, code: 'LUXE15', type: 'PERCENT', value: 15, minOrderValue: 2000, usageCount: 67, usageLimit: 2, validTo: '2025-10-31', isActive: true },
+    { id: 3, code: 'FLAT500', type: 'FLAT', value: 500, minOrderValue: 3000, usageCount: 23, usageLimit: 5, validTo: '2025-09-30', isActive: false },
     { id: 4, code: 'BILLU10', type: 'PERCENT', value: 10, minOrderValue: 0, usageCount: 89, usageLimit: null, validTo: '2025-12-31', isActive: true },
   ];
 
@@ -116,17 +134,26 @@ const CouponsAdminPage = () => {
       </div>
 
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+        <PaginationTop
+          search={search}
+          onSearchChange={(s) => { setSearch(s); setPage(1); }}
+          searchPlaceholder="Search coupon code..."
+          currentPage={page}
+          totalItems={total}
+          limit={limit}
+          onLimitChange={(l) => { setLimit(l); setPage(1); }}
+        />
         <div className="overflow-x-auto">
           <table className="w-full text-sm" aria-label="Coupons table">
             <thead>
               <tr className="bg-brand-light/40 text-left">
-                {['Code', 'Type', 'Value', 'Min Order', 'Usage', 'Valid Until', 'Status', 'Actions'].map(h => (
+                {['Code', 'Type', 'Value', 'Min Order', 'Limit (Per Person)', 'Total Used', 'Valid Until', 'Status', 'Actions'].map(h => (
                   <th key={h} className="px-4 py-3 text-xs font-semibold text-brand-grey uppercase tracking-wider">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {loading ? [...Array(4)].map((_, i) => <tr key={i} className="border-b border-brand-light">{[...Array(8)].map((_,j)=><td key={j} className="px-4 py-3"><div className="skeleton h-4 w-20"/></td>)}</tr>)
+              {loading ? [...Array(4)].map((_, i) => <tr key={i} className="border-b border-brand-light">{[...Array(9)].map((_,j)=><td key={j} className="px-4 py-3"><div className="skeleton h-4 w-20"/></td>)}</tr>)
               : displayCoupons.map(coupon => (
                 <tr key={coupon.id} className="border-b border-brand-light hover:bg-brand-light/20 transition-colors">
                   <td className="px-4 py-3">
@@ -138,13 +165,18 @@ const CouponsAdminPage = () => {
                   <td className="px-4 py-3"><span className={`text-xs px-2 py-0.5 rounded-full ${coupon.type === 'PERCENT' ? 'bg-blue-50 text-blue-700' : 'bg-purple-50 text-purple-700'}`}>{coupon.type}</span></td>
                   <td className="px-4 py-3 font-semibold">{coupon.type === 'PERCENT' ? `${coupon.value}%` : `₹${coupon.value}`}</td>
                   <td className="px-4 py-3 text-brand-grey">₹{coupon.minOrderValue || 0}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <span className="text-brand-text font-medium">{coupon.usageCount}</span>
-                      <span className="text-brand-grey">/ {coupon.usageLimit || '∞'}</span>
-                    </div>
-                    {coupon.usageLimit && <div className="w-24 h-1 bg-brand-light rounded-full mt-1"><div className="h-full bg-brand-gold rounded-full" style={{width:`${Math.min((coupon.usageCount/coupon.usageLimit)*100,100)}%`}}/></div>}
+                  <td className="px-4 py-3 font-medium text-brand-text">
+                    {coupon.usageLimit ? (
+                      <span className="bg-amber-50 text-amber-900 border border-amber-200/60 px-2 py-0.5 rounded text-xs font-semibold">
+                        {coupon.usageLimit} {coupon.usageLimit === 1 ? 'use' : 'uses'} / person
+                      </span>
+                    ) : (
+                      <span className="bg-emerald-50 text-emerald-800 border border-emerald-200/60 px-2 py-0.5 rounded text-xs font-semibold">
+                        ∞ Infinite
+                      </span>
+                    )}
                   </td>
+                  <td className="px-4 py-3 text-brand-grey font-medium">{coupon.usageCount || 0}</td>
                   <td className="px-4 py-3 text-brand-grey text-xs">{coupon.validUntil ? new Date(coupon.validUntil).toLocaleDateString('en-IN') : (coupon.validTo ? new Date(coupon.validTo).toLocaleDateString('en-IN') : '—')}</td>
                   <td className="px-4 py-3"><span className={`text-xs px-2 py-0.5 rounded-full ${coupon.isActive ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{coupon.isActive ? 'Active' : 'Inactive'}</span></td>
                   <td className="px-4 py-3">
@@ -162,6 +194,12 @@ const CouponsAdminPage = () => {
             </tbody>
           </table>
         </div>
+        <PaginationBottom
+          currentPage={page}
+          totalPages={totalPages}
+          totalItems={total}
+          onPageChange={(p) => setPage(p)}
+        />
       </div>
 
       <AnimatePresence>
@@ -201,8 +239,21 @@ const CouponsAdminPage = () => {
                       <input id="coup-max" type="number" value={form.maxDiscount} onChange={e=>setForm(p=>({...p,maxDiscount:e.target.value}))} disabled={form.type === 'FLAT'} className="w-full border border-brand-light px-2.5 py-2 text-xs focus:outline-none focus:border-brand-gold disabled:bg-neutral-100 disabled:text-neutral-400" placeholder="N/A"/>
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-brand-grey mb-1.5" htmlFor="coup-limit">Usage Limit</label>
-                      <input id="coup-limit" type="number" value={form.usageLimit} onChange={e=>setForm(p=>({...p,usageLimit:e.target.value}))} className="w-full border border-brand-light px-2.5 py-2 text-xs focus:outline-none focus:border-brand-gold"/>
+                      <label className="block text-xs font-medium text-brand-grey mb-1" htmlFor="coup-limit">
+                        Per Person Limit
+                      </label>
+                      <input
+                        id="coup-limit"
+                        type="number"
+                        min="1"
+                        value={form.usageLimit}
+                        onChange={e=>setForm(p=>({...p,usageLimit:e.target.value}))}
+                        className="w-full border border-brand-light px-2.5 py-2 text-xs focus:outline-none focus:border-brand-gold"
+                        placeholder="Infinite"
+                      />
+                      <span className="block text-[10px] text-neutral-400 mt-1 font-medium italic">
+                        (Leave blank for infinite)
+                      </span>
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-4">

@@ -1,6 +1,6 @@
 'use strict';
 const { Op } = require('sequelize');
-const { Review, Product, Customer, Order, OrderItem } = require('../models');
+const { Review, Product, Customer, Order, OrderItem, SiteSetting, LoyaltyLedger } = require('../models');
 
 /**
  * Helper: Recalculates and updates average rating & review count for a product.
@@ -263,11 +263,45 @@ const createReview = async (req, res) => {
 
     const updatedStats = await recalculateProductRating(productId);
 
+    // Award bonus points for submitting a review
+    let reviewBonusPoints = 0;
+    try {
+      const siteSetting = await SiteSetting.findOne({ where: { key: 'loyalty' } });
+      let loyaltySettings = { reviewPointsEnabled: true, reviewPoints: 20 };
+      if (siteSetting && siteSetting.value) {
+        try { loyaltySettings = { ...loyaltySettings, ...JSON.parse(siteSetting.value) }; } catch (e) {}
+      }
+
+      const reviewPts = Number(loyaltySettings.reviewPoints || 0);
+      if (loyaltySettings.reviewPointsEnabled !== false && reviewPts > 0) {
+        const customer = await Customer.findByPk(customerId);
+        if (customer) {
+          reviewBonusPoints = reviewPts;
+          const newBalance = Number(customer.loyaltyPoints || 0) + reviewPts;
+          await customer.update({ loyaltyPoints: newBalance });
+          await LoyaltyLedger.create({
+            customerId: customer.id,
+            type: 'BONUS',
+            points: reviewPts,
+            balance: newBalance,
+            description: `Reward for writing a product review`
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('[ReviewController] Error awarding review bonus points:', e.message);
+    }
+
+    const message = reviewBonusPoints > 0
+      ? `Review submitted successfully! You earned +${reviewBonusPoints} bonus loyalty points!`
+      : 'Review submitted successfully!';
+
     return res.status(201).json({
       success: true,
-      message: 'Review submitted successfully!',
+      message,
       review,
       productStats: updatedStats,
+      bonusPointsEarned: reviewBonusPoints,
     });
   } catch (error) {
     console.error('[ReviewController] Error in createReview:', error);
@@ -361,7 +395,7 @@ const deleteReview = async (req, res) => {
  */
 const getAllReviewsAdmin = async (req, res) => {
   try {
-    const { status, search } = req.query;
+    const { status, search, page, limit } = req.query;
     const whereClause = {};
 
     if (status === 'approved') {
@@ -399,10 +433,26 @@ const getAllReviewsAdmin = async (req, res) => {
       });
     }
 
+    const total = filtered.length;
+    let paginated = filtered;
+    let p = 1;
+    let l = total;
+
+    if (page !== undefined || limit !== undefined) {
+      p = Math.max(1, parseInt(page || 1, 10));
+      l = Math.max(1, parseInt(limit || 10, 10));
+      const offset = (p - 1) * l;
+      paginated = filtered.slice(offset, offset + l);
+    }
+
     return res.json({
       success: true,
-      count: filtered.length,
-      reviews: filtered.map((r) => ({
+      count: total,
+      total,
+      page: p,
+      limit: l,
+      totalPages: l > 0 ? Math.ceil(total / l) : 1,
+      reviews: paginated.map((r) => ({
         id: r.id,
         productId: r.productId,
         productName: r.product?.name || 'Product',

@@ -117,7 +117,7 @@ const add = async (req, res) => {
     if (price !== undefined && Number(price) < 0) return res.status(400).json({ success: false, message: 'Price cannot be negative' });
     if (stock !== undefined && Number(stock) < 0) return res.status(400).json({ success: false, message: 'Stock cannot be negative' });
 
-    const finalSku = sku ? sku.trim() : generateSku();
+    const finalSku = (sku && sku.trim() !== '') ? sku.trim() : generateSku();
 
     // Check SKU conflicts
     const conflict = await ProductVariant.findOne({ where: { sku: finalSku } });

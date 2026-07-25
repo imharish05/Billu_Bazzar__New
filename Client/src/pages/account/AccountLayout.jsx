@@ -70,13 +70,15 @@ const AccountLayout = () => {
   const [confirmPwError, setConfirmPwError] = useState('');
   const [resetLoading, setResetLoading]   = useState(false);
 
-  // Read URL query params for initial view (e.g. /account?view=forgot&email=user@domain.com)
+  // Read URL query params for initial view (e.g. /account?view=forgot&email=user@domain.com or /account?view=register)
   useEffect(() => {
     const viewParam = searchParams.get('view');
     const emailParam = searchParams.get('email');
     if (viewParam === 'forgot' || viewParam === 'forgot_email') {
       setView(VIEW_FORGOT_EMAIL);
       if (emailParam) setForgotEmail(emailParam);
+    } else if (viewParam === 'register') {
+      setView(VIEW_REGISTER);
     }
   }, [searchParams]);
 

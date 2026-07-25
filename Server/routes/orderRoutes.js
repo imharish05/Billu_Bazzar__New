@@ -1,9 +1,10 @@
 'use strict';
 const router = require('express').Router();
-const { getAll, getOne, getMyOrders, getMyOrderById, cancelMyOrder, placeOrder, updateStatus, getDashboardStats } = require('../controllers/orderController');
+const { getAll, getOne, getMyOrders, getMyOrderById, cancelMyOrder, placeOrder, updateStatus, getDashboardStats, getStatusCounts } = require('../controllers/orderController');
 const { verifyCustomer, verifyAdmin, optionalCustomer } = require('../middleware/auth');
 
 router.get('/stats', verifyAdmin, getDashboardStats);
+router.get('/status-counts', verifyAdmin, getStatusCounts);
 router.get('/my', verifyCustomer, getMyOrders);
 router.get('/my/:id', verifyCustomer, getMyOrderById);
 router.post('/my/:id/cancel', verifyCustomer, cancelMyOrder);

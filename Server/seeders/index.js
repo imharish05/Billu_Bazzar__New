@@ -60,101 +60,10 @@ const seedAll = async () => {
     console.log('✅ Categories seeded (13 total)');
   }
 
-  // ─── Vendors ──────────────────────────────────────────────────────────────
-  if (await isTableEmpty(Vendor)) {
-    await Vendor.bulkCreate([
-      { name: 'Zara Couture House', email: 'zara.couture@vendor.com', phone: '9876543210', gstin: '27AAACZ1234A1Z5', commissionRate: 12.5, rating: 4.7 },
-      { name: 'Rani Jewels Pvt Ltd', email: 'rani.jewels@vendor.com', phone: '9765432109', gstin: '27AAACR5678B2Z3', commissionRate: 8.0, rating: 4.9 },
-      { name: 'Aromatic House India', email: 'aromatic@vendor.com', phone: '9654321098', gstin: '27AAACA9012C3Z1', commissionRate: 10.0, rating: 4.5 },
-      { name: 'Sole Luxe Footwear', email: 'sole.luxe@vendor.com', phone: '9543210987', gstin: '27AAACS3456D4Z8', commissionRate: 11.0, rating: 4.6 },
-      { name: 'Glam Accessories Co.', email: 'glam.acc@vendor.com', phone: '9432109876', gstin: '27AAACG7890E5Z2', commissionRate: 9.5, rating: 4.4 },
-      { name: 'Royal Threads Mumbai', email: 'royal.threads@vendor.com', phone: '9321098765', gstin: '27AAACR2345F6Z7', commissionRate: 13.0, rating: 4.8 },
-    ]);
-    console.log('✅ Vendors seeded');
-  }
-
-  // ─── Warehouses ───────────────────────────────────────────────────────────
-  if (await isTableEmpty(Warehouse)) {
-    await Warehouse.bulkCreate([
-      { name: 'India Fulfillment Warehouse', code: 'IND-FULFILL', city: 'Mumbai', state: 'Maharashtra', pincode: '400001', contactName: 'Rajesh Kumar', contactPhone: '9988776655', isFulfillment: true, isActive: true },
-      { name: 'Dubai Procurement Source', code: 'DXB-SOURCE', city: 'Dubai', state: 'Dubai', pincode: '00000', contactName: 'Ahmed Al-Maktoum', contactPhone: '9714400000', isFulfillment: false, isActive: true },
-    ]);
-    console.log('✅ Warehouses seeded');
-  }
-
-  // ─── Coupons ──────────────────────────────────────────────────────────────
-  if (await isTableEmpty(Coupon)) {
-    const now = new Date();
-    const future = new Date(now.getTime() + 90 * 86400000);
-    await Coupon.bulkCreate([
-      { code: 'WELCOME20', type: 'PERCENT', value: 20, minOrderValue: 999, maxDiscount: 2000, validFrom: now, validUntil: future, description: 'Welcome offer — 20% off your first order' },
-      { code: 'FLAT500', type: 'FLAT', value: 500, minOrderValue: 2500, validFrom: now, validUntil: future, description: 'Flat ₹500 off on orders above ₹2500' },
-      { code: 'FREESHIP', type: 'FREE_SHIPPING', value: 0, minOrderValue: 1499, validFrom: now, validUntil: future, description: 'Free shipping on orders above ₹1499' },
-      { code: 'LUXE15', type: 'PERCENT', value: 15, minOrderValue: 3999, maxDiscount: 3000, validFrom: now, validUntil: future, description: 'Luxury collection — 15% off' },
-      { code: 'FESTIVE30', type: 'PERCENT', value: 30, minOrderValue: 5999, maxDiscount: 5000, validFrom: now, validUntil: future, description: 'Festive season special — 30% off' },
-      { code: 'BILLU10', type: 'PERCENT', value: 10, minOrderValue: 0, validFrom: now, validUntil: future, description: 'Always-on 10% loyalty code' },
-    ]);
-    console.log('✅ Coupons seeded');
-  }
-
-  // ─── Affiliates ───────────────────────────────────────────────────────────
-  if (await isTableEmpty(Affiliate)) {
-    await Affiliate.bulkCreate([
-      { name: 'Meera Kapoor', email: 'meera.kapoor@influencer.com', referralCode: 'MEERA2024', commissionRate: 7.0, totalEarnings: 45000, totalClicks: 8500, totalOrders: 234 },
-      { name: 'StyleByRiya', email: 'riya.style@blogger.com', referralCode: 'RIYA2024', commissionRate: 6.5, totalEarnings: 32000, totalClicks: 6200, totalOrders: 178 },
-      { name: 'FashionWithPriya', email: 'priya.fashion@yt.com', referralCode: 'PRIYA2024', commissionRate: 8.0, totalEarnings: 67000, totalClicks: 12000, totalOrders: 312 },
-      { name: 'GlamBySana', email: 'sana.glam@insta.com', referralCode: 'SANA2024', commissionRate: 5.5, totalEarnings: 18500, totalClicks: 4100, totalOrders: 95 },
-      { name: 'Luxe Looks India', email: 'luxelooks@partner.com', referralCode: 'LUXE2024', commissionRate: 9.0, totalEarnings: 89000, totalClicks: 15000, totalOrders: 420 },
-    ]);
-    console.log('✅ Affiliates seeded');
-  }
-
-  // ─── Banners ──────────────────────────────────────────────────────────────
-  if (await isTableEmpty(Banner)) {
-    const countdownDate = new Date(Date.now() + 3 * 86400000);
-    await Banner.bulkCreate([
-      { title: 'The Grand Festive Edit', subtitle: 'Celebrate in luxury. New arrivals every Friday.', ctaText: 'Explore Collection', ctaLink: '/products', image: 'https://images.unsplash.com/photo-1469334031218-e382a71b716b?w=1440', type: 'HERO', position: 1, isActive: true },
-      { title: 'Up to 40% Off Party Wear', subtitle: 'For the season\'s most glamorous moments.', ctaText: 'Shop Party Wear', ctaLink: '/products?category=party-wear', image: 'https://images.unsplash.com/photo-1583391733956-6c78276477e2?w=1440', type: 'HERO', position: 2, isActive: true },
-      { title: 'Deal of the Month', subtitle: 'Emerald Silk Kaftan — Now ₹4,999 only', ctaText: 'Grab Now', ctaLink: '/products', image: 'https://images.unsplash.com/photo-1618932260643-eee4a2f652a6?w=800', type: 'COUNTDOWN', position: 1, badgeText: '52% OFF', countdown: countdownDate, isActive: true },
-      { title: 'Signature Fragrances', subtitle: 'Discover our curated perfume collection', ctaText: 'Shop Perfumes', ctaLink: '/products?category=perfumes', image: 'https://images.unsplash.com/photo-1541643600914-78b084683702?w=800', type: 'PROMO', position: 1, isActive: true },
-      { title: 'Jewelry That Tells A Story', subtitle: 'Heirloom-quality pieces for every occasion', ctaText: 'Explore Jewelry', ctaLink: '/products?category=jewelry', image: 'https://images.unsplash.com/photo-1617038260897-41a1f14a8ca0?w=800', type: 'PROMO', position: 2, isActive: true },
-      { title: 'Fine Jewelry', subtitle: 'Kundan, Polki, Diamonds & more', ctaText: 'Shop Now', ctaLink: '/products?category=jewelry', image: 'https://images.unsplash.com/photo-1617038260897-41a1f14a8ca0?w=800', type: 'EXCLUSIVE_DEAL', position: 1, badgeText: 'Up to 30% OFF', isActive: true },
-      { title: 'The Bridal Edit', subtitle: 'Timeless pieces for your most cherished day', ctaText: 'View Bridal', ctaLink: '/products?tag=bridal', image: 'https://images.unsplash.com/photo-1594552072238-b8a33785b6cd?w=800', type: 'BRAND', position: 1, isActive: true },
-      { title: 'Summer Resort Collection', subtitle: 'Lightweight luxury for the sun-soaked days ahead', ctaText: 'Shop Resort', ctaLink: '/products?tag=resort', image: 'https://images.unsplash.com/photo-1570976447640-ac859083963f?w=800', type: 'PROMO', position: 3, isActive: true },
-    ]);
-    console.log('✅ Banners seeded (8 total)');
-  }
-
-  // ─── Products ─────────────────────────────────────────────────────────────
-  if (await isTableEmpty(Product)) {
-    const cats = await Category.findAll({ where: { parentId: null } });
-    const rawCatMap = {};
-    cats.forEach(c => { rawCatMap[c.slug] = c.id; });
-
-    const subCats = await Category.findAll({ where: { parentId: cats.map(c => c.id) } });
-    subCats.forEach(c => { rawCatMap[c.slug] = c.id; });
-
-    const vendors = await Vendor.findAll();
-    const rawVMap = vendors.reduce((acc, v, i) => { acc[i] = v.id; return acc; }, {});
-
-    // Proxy wrapper for category lookups with fuzzy matching and safety fallback
-    const catMap = new Proxy(rawCatMap, {
-      get: (target, prop) => {
-        if (typeof prop !== 'string') return target[prop];
-        if (target[prop]) return target[prop];
-        // Fuzzy matching (e.g. 'footwear' matches 'foot-wear')
-        const normalized = prop.replace(/-/g, '').toLowerCase();
-        const matchedKey = Object.keys(target).find(k => k.replace(/-/g, '').toLowerCase() === normalized);
-        if (matchedKey) return target[matchedKey];
-        // Safe database fallback
-        return cats[0]?.id || subCats[0]?.id || 1;
-      }
-    });
-
     // Proxy wrapper for vendor lookups with safety fallback
     const vMap = new Proxy(rawVMap, {
       get: (target, prop) => {
-        return target[prop] || vendors[0]?.id || 1;
+        return target[prop] || vendors[0]?.id || null;
       }
     });
 

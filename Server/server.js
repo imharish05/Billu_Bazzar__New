@@ -38,6 +38,18 @@ const start = async () => {
       console.log('⚠️ Pre-sync Wishlists alter note:', alterErr.message);
     }
 
+    // Run safe database alters for Vendors table BEFORE syncing models
+    try {
+      const queryInterface = sequelize.getQueryInterface();
+      const vendorTableDesc = await queryInterface.describeTable('Vendors').catch(() => null);
+      if (vendorTableDesc && !vendorTableDesc.contactPerson) {
+        await sequelize.query("ALTER TABLE Vendors ADD COLUMN contactPerson VARCHAR(150) NULL AFTER name");
+        console.log('✅ Vendors table contactPerson column added');
+      }
+    } catch (alterErr) {
+      console.log('⚠️ Pre-sync Vendors alter note:', alterErr.message);
+    }
+
     // 2. Sync all models (safe — doesn't drop data)
     await sequelize.sync();
     console.log('✅ Models synced');

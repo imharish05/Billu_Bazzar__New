@@ -9,6 +9,33 @@ import { toggleItem } from '../redux/slices/wishlistSlice';
 import { formatPrice } from '../utils/currency';
 import { getPlaceholderSvg } from '../utils/placeholder';
 
+/** Map common color names → CSS color values for swatch display */
+const COLOR_MAP = {
+  red: '#e53e3e', crimson: '#dc143c', maroon: '#800000', pink: '#f687b3', rose: '#f43f5e', magenta: '#d53f8c',
+  blue: '#3b82f6', navy: '#1e3a8a', cobalt: '#0047ab', royal: '#4169e1', sky: '#38bdf8', cyan: '#06b6d4', teal: '#0d9488',
+  green: '#22c55e', olive: '#6b8e23', mint: '#3eb489', emerald: '#10b981', forest: '#228b22', lime: '#84cc16',
+  yellow: '#f59e0b', gold: '#b8860b', amber: '#f59e0b', lemon: '#fff44f',
+  orange: '#f97316', coral: '#ff6b6b', salmon: '#fa8072',
+  purple: '#9333ea', lavender: '#c4b5fd', violet: '#7c3aed', indigo: '#6366f1', mauve: '#9f8fba', plum: '#8b008b', lilac: '#c8a2c8',
+  brown: '#92400e', tan: '#d2b48c', beige: '#f5f5dc', caramel: '#c68642',
+  black: '#111111', charcoal: '#374151', grey: '#9ca3af', gray: '#9ca3af', silver: '#c0c0c0',
+  white: '#f9fafb', cream: '#fffdd0', ivory: '#fffff0', off: '#faf9f6',
+  multicolor: 'linear-gradient(135deg,#e53e3e,#f59e0b,#22c55e,#3b82f6,#9333ea)',
+  multi: 'linear-gradient(135deg,#e53e3e,#f59e0b,#22c55e,#3b82f6,#9333ea)',
+};
+
+const resolveColor = (name = '') => {
+  const lower = name.toLowerCase().trim();
+  // Exact match
+  if (COLOR_MAP[lower]) return COLOR_MAP[lower];
+  // Partial match — find first key that appears in the color string
+  for (const [key, val] of Object.entries(COLOR_MAP)) {
+    if (lower.includes(key)) return val;
+  }
+  // Fallback: try as a CSS color directly (handles hex, rgb, named)
+  return lower;
+};
+
 /**
  * ProductCard — used in grids, carousels, search results.
  * Hover state exposes quick-view + add-to-cart. Framer Motion stagger entrance.
@@ -217,11 +244,94 @@ const ProductCard = ({ product, index = 0 }) => {
             <span className="text-[11px] text-brand-grey ml-1 font-medium">{parseFloat(product.rating).toFixed(1)} ({product.reviewCount})</span>
           </div>
         )}
-        {resolvedDefault.attributes && Object.keys(resolvedDefault.attributes).length > 0 && (
-          <p className="text-[10px] text-brand-gold/80 font-medium mb-1 truncate">
-            Default: {Object.entries(resolvedDefault.attributes).map(([k,v]) => `${k}: ${v}`).join(' · ')}
-          </p>
-        )}
+        {(() => {
+          const entries = Object.entries(resolvedDefault.attributes || {}).filter(([k, v]) => {
+            if (!v || v === 'undefined' || v === 'null') return false;
+            if (k === 'variant' && v === 'Standard') return false;
+            const kLower = k.toLowerCase();
+            return kLower !== 'color' && kLower !== 'colour';
+          });
+          if (entries.length === 0) return null;
+          const attrString = entries.map(([k, v]) => `${k}: ${v}`).join(' · ');
+          return (
+            <p className="text-xs text-brand-gold font-medium mt-0.5 mb-1 line-clamp-1" title={attrString}>
+              {attrString}
+            </p>
+          );
+        })()}
+
+        {/* Color swatches — collect unique colors from all variants */}
+        {(() => {
+          const variants = product.variants || [];
+          const colorKey = variants.length > 0
+            ? Object.keys(
+                (typeof variants[0]?.attributes === 'string'
+                  ? JSON.parse(variants[0]?.attributes || '{}')
+                  : variants[0]?.attributes) || {}
+              ).find(k => k.toLowerCase() === 'color' || k.toLowerCase() === 'colour')
+            : null;
+
+          if (!colorKey) {
+            // No variant colors — try product-level attributes
+            const prodAttrs = typeof product.attributes === 'string'
+              ? JSON.parse(product.attributes || '{}')
+              : (product.attributes || {});
+            const colorAttrKey = Object.keys(prodAttrs).find(k => k.toLowerCase() === 'color' || k.toLowerCase() === 'colour' || k.toLowerCase() === 'colors' || k.toLowerCase() === 'colours');
+            if (!colorAttrKey) return null;
+            const colorList = Array.isArray(prodAttrs[colorAttrKey])
+              ? prodAttrs[colorAttrKey]
+              : [prodAttrs[colorAttrKey]];
+            const SHOW = 3;
+            const visible = colorList.slice(0, SHOW);
+            const extra = colorList.length - SHOW;
+            return (
+              <div className="flex items-center gap-1.5 mb-1.5">
+                {visible.map((c, i) => (
+                  <span
+                    key={i}
+                    title={c}
+                    className="w-4 h-4 rounded-full border border-neutral-300 shadow-sm flex-shrink-0"
+                    style={{ background: resolveColor(c) }}
+                  />
+                ))}
+                {extra > 0 && (
+                  <span className="text-[10px] text-brand-grey font-medium">+{extra} more</span>
+                )}
+              </div>
+            );
+          }
+
+          // Collect unique color values from variants
+          const colorValues = [];
+          const seen = new Set();
+          variants.forEach(v => {
+            const attrs = typeof v.attributes === 'string' ? JSON.parse(v.attributes || '{}') : (v.attributes || {});
+            const c = attrs[colorKey];
+            if (c && !seen.has(c)) { seen.add(c); colorValues.push(c); }
+          });
+          if (colorValues.length === 0) return null;
+
+          const SHOW = 3;
+          const visible = colorValues.slice(0, SHOW);
+          const extra = colorValues.length - SHOW;
+
+          return (
+            <div className="flex items-center gap-1.5 mb-1.5">
+              {visible.map((c, i) => (
+                <span
+                  key={i}
+                  title={c}
+                  className="w-4 h-4 rounded-full border border-neutral-300 shadow-sm flex-shrink-0"
+                  style={{ background: resolveColor(c) }}
+                />
+              ))}
+              {extra > 0 && (
+                <span className="text-[10px] text-brand-grey font-medium">+{extra} more</span>
+              )}
+            </div>
+          );
+        })()}
+
         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-auto">
           <span className="font-semibold text-brand-text whitespace-nowrap">{fmt(displayPrice)}</span>
           {displayComparePrice && Number(displayComparePrice) > Number(displayPrice) && (

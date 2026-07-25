@@ -1,31 +1,70 @@
 import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
+import { useSearchParams } from 'react-router-dom';
 import { AlertTriangle, Eye } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
 import AdminOrderDetailsModal from '../components/AdminOrderDetailsModal';
+import { PaginationTop, PaginationBottom } from '../components/Pagination';
 import { fetchAdminOrders, updateOrderStatus } from '../redux/slices/ordersSlice';
 import currencyJs from 'currency.js';
 
 const fmt = (v) => currencyJs(v, { symbol: '₹', precision: 0 }).format();
 
-const STATUS_TABS = ['All', 'PENDING', 'CONFIRMED', 'PROCESSING', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED'];
+const STATUS_TABS = ['All', 'PENDING', 'CONFIRMED', 'PROCESSING', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED', 'RTO', 'RETURNED'];
+const STATUS_LABELS = {
+  All: 'All',
+  PENDING: 'New Orders',
+  CONFIRMED: 'Confirmed',
+  PROCESSING: 'Packing',
+  SHIPPED: 'Dispatched',
+  OUT_FOR_DELIVERY: 'Out for Delivery',
+  DELIVERED: 'Delivered',
+  CANCELLED: 'Cancelled',
+  RTO: 'RTO',
+  RETURNED: 'Returned',
+};
 const STATUS_COLORS = {
-  PENDING: 'bg-yellow-50 text-yellow-700', CONFIRMED: 'bg-blue-50 text-blue-700',
-  PROCESSING: 'bg-purple-50 text-purple-700', SHIPPED: 'bg-indigo-50 text-indigo-700',
-  OUT_FOR_DELIVERY: 'bg-orange-50 text-orange-700', DELIVERED: 'bg-green-50 text-green-700',
-  CANCELLED: 'bg-red-50 text-red-500',
+  PENDING: 'bg-amber-50 text-amber-800 font-medium',
+  CONFIRMED: 'bg-blue-50 text-blue-800 font-medium',
+  PROCESSING: 'bg-yellow-50 text-yellow-800 font-medium',
+  SHIPPED: 'bg-purple-50 text-purple-800 font-medium',
+  OUT_FOR_DELIVERY: 'bg-sky-50 text-sky-800 font-medium',
+  DELIVERED: 'bg-emerald-50 text-emerald-800 font-medium',
+  CANCELLED: 'bg-rose-50 text-rose-800 font-medium',
+  RTO: 'bg-slate-100 text-slate-800 font-medium',
+  RETURNED: 'bg-pink-50 text-pink-800 font-medium',
 };
 const PAY_COLORS = { PAID: 'bg-green-50 text-green-700', UNPAID: 'bg-yellow-50 text-yellow-700', REFUNDED: 'bg-gray-100 text-gray-500' };
 
 const OrdersAdminPage = () => {
   const dispatch = useDispatch();
-  const { items: orders, loading, total } = useSelector(s => s.orders);
-  const [activeStatus, setActiveStatus] = useState('All');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { items: orders, loading, total, totalPages } = useSelector(s => s.orders);
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
   const [selectedOrderModal, setSelectedOrderModal] = useState(null);
 
+  const statusFromUrl = searchParams.get('status');
+  const activeStatus = statusFromUrl || 'All';
+
   useEffect(() => {
-    dispatch(fetchAdminOrders({ status: activeStatus === 'All' ? undefined : activeStatus }));
-  }, [activeStatus, dispatch]);
+    dispatch(fetchAdminOrders({
+      status: activeStatus === 'All' ? undefined : activeStatus,
+      search: search || undefined,
+      page,
+      limit
+    }));
+  }, [activeStatus, search, page, limit, dispatch]);
+
+  const handleTabClick = (s) => {
+    setPage(1);
+    if (s === 'All') {
+      setSearchParams({});
+    } else {
+      setSearchParams({ status: s });
+    }
+  };
 
   const handleStatusUpdate = (id, status) => dispatch(updateOrderStatus({ id, status }));
 
@@ -38,21 +77,28 @@ const OrdersAdminPage = () => {
         {STATUS_TABS.map(s => (
           <button
             key={s}
-            onClick={() => setActiveStatus(s)}
+            onClick={() => handleTabClick(s)}
             role="tab" aria-selected={activeStatus === s}
             id={`orders-tab-${s}`}
-            className={`flex-shrink-0 px-4 py-2 text-xs font-medium rounded-lg transition-all ${activeStatus === s ? 'bg-brand-gold text-white' : 'bg-white text-brand-grey hover:bg-brand-light'}`}
+            className={`flex-shrink-0 px-4 py-2 text-xs font-medium rounded-lg transition-all ${
+              activeStatus === s ? 'bg-brand-gold text-white shadow-xs font-semibold' : 'bg-white text-brand-grey hover:bg-brand-light'
+            }`}
           >
-            {s.replace(/_/g, ' ')}
+            {STATUS_LABELS[s] || s}
           </button>
         ))}
       </div>
 
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-        <div className="px-5 py-3 border-b border-brand-light flex items-center justify-between">
-          <p className="text-sm text-brand-grey">{total} total orders</p>
-          <button className="text-xs text-brand-gold hover:underline focus-visible:outline-brand-gold" id="export-orders">Export CSV</button>
-        </div>
+        <PaginationTop
+          search={search}
+          onSearchChange={(s) => { setSearch(s); setPage(1); }}
+          searchPlaceholder="Search order #..."
+          currentPage={page}
+          totalItems={total || 0}
+          limit={limit}
+          onLimitChange={(l) => { setLimit(l); setPage(1); }}
+        />
         <div className="overflow-x-auto">
           <table className="w-full text-sm" aria-label="Orders table">
             <thead>
@@ -90,8 +136,8 @@ const OrdersAdminPage = () => {
                       id={`status-${order.id}`}
                       aria-label="Order status"
                     >
-                      {['PENDING','CONFIRMED','PROCESSING','SHIPPED','OUT_FOR_DELIVERY','DELIVERED','CANCELLED'].map(s => (
-                        <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>
+                      {['PENDING','CONFIRMED','PROCESSING','SHIPPED','OUT_FOR_DELIVERY','DELIVERED','CANCELLED','RTO','RETURNED'].map(s => (
+                        <option key={s} value={s}>{STATUS_LABELS[s] || s}</option>
                       ))}
                     </select>
                   </td>
@@ -111,9 +157,15 @@ const OrdersAdminPage = () => {
             </tbody>
           </table>
           {!loading && filtered.length === 0 && (
-            <div className="py-12 text-center text-brand-grey">No orders for this status.</div>
+            <div className="py-12 text-center text-brand-grey">No orders found for this status.</div>
           )}
         </div>
+        <PaginationBottom
+          currentPage={page}
+          totalPages={totalPages || 1}
+          totalItems={total || 0}
+          onPageChange={(p) => setPage(p)}
+        />
       </div>
 
       {/* Reusable Admin Order Details Modal */}
@@ -129,3 +181,4 @@ const OrdersAdminPage = () => {
 };
 
 export default OrdersAdminPage;
+

@@ -2,9 +2,9 @@ import { useState, useEffect, useRef } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Check, MapPin, CreditCard, Package, ChevronRight, Eye, EyeOff, Tag } from 'lucide-react';
+import { Check, MapPin, CreditCard, Package, ChevronRight, Eye, EyeOff, Tag, Sparkles } from 'lucide-react';
 import { placeOrder } from '../redux/slices/ordersSlice';
-import { clearLocal, syncCart, clearBuyNowItem } from '../redux/slices/cartSlice';
+import { clearLocal, syncCart, clearBuyNowItem, fetchCart } from '../redux/slices/cartSlice';
 import { loginCustomer, registerCustomer, fetchProfile } from '../redux/slices/authSlice';
 import { setCurrency } from '../redux/slices/currencySlice';
 import api from '../services/api';
@@ -252,12 +252,11 @@ const CheckoutPage = () => {
     }
   }, [billingAddress.country, address.country, deliverySameAsBilling, currencyCode, dispatch]);
 
-  // Guard: don't let an empty cart (e.g. from a page reload wiping in-memory
-  // guest state) sit on checkout and silently reach handlePlaceOrder.
+  // Guard: don't let an empty cart sit on checkout (unless order was just completed and navigating to confirmation)
   useEffect(() => {
     if (items.length === 0 && !orderCompletedRef.current) {
       toast.error('Your cart is empty. Add something before checking out.');
-      navigate('/cart');
+      navigate('/cart', { replace: true });
     }
   }, [items, navigate]);
 
@@ -286,10 +285,11 @@ const CheckoutPage = () => {
     fetchCoupons();
   }, []);
 
+  const [userDiscountChoice, setUserDiscountChoice] = useState(null); // 'COUPON' | 'LOYALTY' | null
+
   const getCouponDiscount = (coupon, totalVal) => {
     if (!coupon) return 0;
     if (totalVal < Number(coupon.minOrderValue || 0)) return 0;
-    if (coupon.usageLimit && coupon.usageCount >= coupon.usageLimit) return 0;
     const now = new Date();
     if (coupon.validFrom && new Date(coupon.validFrom) > now) return 0;
     if (coupon.validUntil && new Date(coupon.validUntil) < now) return 0;
@@ -305,7 +305,38 @@ const CheckoutPage = () => {
     return 0;
   };
 
-  const couponDiscount = appliedCoupon ? getCouponDiscount(appliedCoupon, subtotal) : 0;
+  // ── AUTO-APPLY BEST DISCOUNT ENGINE [NEW - PREMIUM] ──
+  // Calculate potential savings for both discount options
+  const potentialLoyaltyDisc = (customer && customer.loyaltyPoints > 0)
+    ? Math.min(customer.loyaltyPoints * loyaltySettings.redeemRate, loyaltySettings.maxRedeemAmount, subtotal)
+    : 0;
+
+  const rawCouponDisc = appliedCoupon ? getCouponDiscount(appliedCoupon, subtotal) : 0;
+
+  // Resolve active discount type based on best discount algorithm or user choice
+  let activeDiscountType = null; // 'COUPON' | 'LOYALTY' | null
+  let couponDiscount = 0;
+  let loyaltyDiscountVal = 0;
+
+  if (userDiscountChoice === 'COUPON' && appliedCoupon && rawCouponDisc > 0) {
+    activeDiscountType = 'COUPON';
+    couponDiscount = rawCouponDisc;
+  } else if (userDiscountChoice === 'LOYALTY' && potentialLoyaltyDisc > 0) {
+    activeDiscountType = 'LOYALTY';
+    loyaltyDiscountVal = potentialLoyaltyDisc;
+  } else {
+    // Auto-select whichever yields HIGHER savings
+    if (rawCouponDisc > potentialLoyaltyDisc && rawCouponDisc > 0) {
+      activeDiscountType = 'COUPON';
+      couponDiscount = rawCouponDisc;
+    } else if (potentialLoyaltyDisc > 0) {
+      activeDiscountType = 'LOYALTY';
+      loyaltyDiscountVal = potentialLoyaltyDisc;
+    }
+  }
+
+  // Synchronize redeemPoints boolean for placeOrder payload
+  const effectiveRedeemPoints = activeDiscountType === 'LOYALTY';
 
   const handleApplyCheckoutCoupon = async (overrideCode = null) => {
     const code = (typeof overrideCode === 'string' ? overrideCode : couponCodeInput).trim().toUpperCase();
@@ -316,7 +347,9 @@ const CheckoutPage = () => {
       if (res.data?.success && res.data?.valid) {
         setAppliedCoupon(res.data.coupon);
         localStorage.setItem('bb_applied_coupon', JSON.stringify(res.data.coupon));
-        toast.success(`Coupon ${res.data.coupon.code} applied!`);
+        setUserDiscountChoice('COUPON');
+        setRedeemPoints(false);
+        toast.success(`Coupon ${res.data.coupon.code} applied! (Loyalty points unapplied as only 1 discount is allowed)`);
         setCouponCodeInput('');
       } else {
         toast.error(res.data?.message || 'Invalid coupon code');
@@ -331,22 +364,30 @@ const CheckoutPage = () => {
   const handleRemoveCheckoutCoupon = () => {
     setAppliedCoupon(null);
     localStorage.removeItem('bb_applied_coupon');
+    setUserDiscountChoice(null);
     toast.success('Coupon removed.');
+  };
+
+  const handleToggleLoyaltyPoints = (checked) => {
+    if (checked) {
+      setRedeemPoints(true);
+      setAppliedCoupon(null);
+      localStorage.removeItem('bb_applied_coupon');
+      setUserDiscountChoice('LOYALTY');
+      toast.success(`Loyalty points applied! (Coupon unapplied as only 1 discount is allowed)`);
+    } else {
+      setRedeemPoints(false);
+      setUserDiscountChoice(null);
+    }
   };
 
   const isGiftWrap = Boolean(location.state?.giftWrap);
   const giftWrapPrice = isGiftWrap ? Number(location.state?.giftWrapPrice || 99) : 0;
   const shipping = subtotal >= 1499 ? 0 : 99;
-  const taxableSubtotal = Math.max(0, subtotal - couponDiscount);
+  const taxableSubtotal = Math.max(0, subtotal - (couponDiscount + loyaltyDiscountVal));
   const tax = taxableSubtotal * 0.05;
 
-  let loyaltyDiscountVal = 0;
-  if (redeemPoints && customer && customer.loyaltyPoints > 0) {
-    const possibleDiscount = customer.loyaltyPoints * loyaltySettings.redeemRate;
-    loyaltyDiscountVal = Math.min(possibleDiscount, loyaltySettings.maxRedeemAmount, taxableSubtotal);
-  }
-
-  const total = taxableSubtotal - loyaltyDiscountVal + shipping + tax + giftWrapPrice;
+  const total = taxableSubtotal + shipping + tax + giftWrapPrice;
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -447,19 +488,17 @@ const CheckoutPage = () => {
         shippingAddress: deliverySameAsBilling ? billingAddress : address,
         billingAddress: billingAddress,
         paymentMethod, referralCode,
-        couponCode: appliedCoupon ? appliedCoupon.code : undefined,
-        redeemPoints,
+        couponCode: effectiveRedeemPoints ? undefined : (appliedCoupon ? appliedCoupon.code : undefined),
+        redeemPoints: effectiveRedeemPoints,
       })).unwrap();
 
       const finishOrderClear = () => {
         orderCompletedRef.current = true;
         localStorage.removeItem('bb_referral');
         localStorage.removeItem('bb_applied_coupon');
-        if (isBuyNowMode) {
-          dispatch(clearBuyNowItem());
-        } else {
-          dispatch(clearLocal());
-        }
+        dispatch(clearBuyNowItem());
+        dispatch(clearLocal());
+        dispatch(fetchCart());
         dispatch(fetchProfile());
       };
 
@@ -468,7 +507,7 @@ const CheckoutPage = () => {
       if (isCod) {
         finishOrderClear();
         if (customer) toast.success('Reward points added for this order!');
-        navigate(`/order-confirmation?gateway=cod&orderId=${order.id}&status=success`);
+        navigate(`/order-confirmation?gateway=cod&orderId=${order.id}&status=success`, { replace: true });
         return;
       }
 
@@ -513,7 +552,7 @@ const CheckoutPage = () => {
               if (verifyRes.data?.success) {
                 finishOrderClear();
                 if (customer) toast.success('Reward points added for this order!');
-                navigate(`/order-confirmation?gateway=razorpay&orderId=${order.id}&status=success`);
+                navigate(`/order-confirmation?gateway=razorpay&orderId=${order.id}&status=success`, { replace: true });
               } else {
                 toast.error(verifyRes.data?.message || 'Payment verification failed. Please contact support.');
               }
@@ -1170,10 +1209,12 @@ const CheckoutPage = () => {
               </div>
             </div>
 
+
+
             {/* Loyalty Points Section */}
             {isAuthenticated && customer && customer.loyaltyPoints > 0 && (
               <div className="mt-4 pt-4 border-t border-neutral-100">
-                <div className="bg-amber-50/60 border border-amber-200/70 rounded-md p-3">
+                <div className={`border rounded-md p-3 transition-all ${activeDiscountType === 'LOYALTY' ? 'bg-amber-50/80 border-amber-300' : 'bg-neutral-50/50 border-neutral-200 opacity-75'}`}>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <span className="text-amber-700 font-semibold text-xs flex items-center gap-1">👑 Loyalty Points</span>
@@ -1182,19 +1223,19 @@ const CheckoutPage = () => {
                     <label className="flex items-center gap-1.5 cursor-pointer">
                       <input
                         type="checkbox"
-                        checked={redeemPoints}
-                        onChange={(e) => setRedeemPoints(e.target.checked)}
+                        checked={activeDiscountType === 'LOYALTY'}
+                        onChange={(e) => handleToggleLoyaltyPoints(e.target.checked)}
                         className="w-4 h-4 accent-brand-gold rounded border-brand-light cursor-pointer"
                         id="checkout-auto-loyalty"
                       />
-                      <span className="text-xs text-neutral-700 font-medium">{redeemPoints ? 'Applied' : 'Apply'}</span>
+                      <span className="text-xs text-neutral-700 font-medium">{activeDiscountType === 'LOYALTY' ? 'Applied' : 'Apply'}</span>
                     </label>
                   </div>
                   <p className="text-[11px] text-neutral-600 mt-1.5">
-                    {redeemPoints ? (
+                    {activeDiscountType === 'LOYALTY' ? (
                       <span className="text-green-700 font-medium">✓ Auto-applied discount: -{fmt(loyaltyDiscountVal)}</span>
                     ) : (
-                      <span className="text-neutral-500">Check to redeem points for discount</span>
+                      <span className="text-neutral-500">Check to apply loyalty points (will un-apply coupon)</span>
                     )}
                   </p>
                 </div>
@@ -1234,6 +1275,7 @@ const CheckoutPage = () => {
                         <p className="text-[10px] text-brand-grey mt-1.5 leading-relaxed">
                           Min Order: ₹{coupon.minOrderValue || 0}
                           {coupon.maxDiscount ? ` · Max Disc: ₹${coupon.maxDiscount}` : ''}
+                          {` · ${coupon.usageLimit ? `Limit: ${coupon.usageLimit}/person` : 'Unlimited'}`}
                         </p>
                       </div>
                     );

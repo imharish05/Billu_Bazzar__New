@@ -17,6 +17,7 @@ import { restrictToVerticalAxis } from '@dnd-kit/modifiers';
 import AdminLayout from '../components/AdminLayout';
 import Switch from '../components/Switch';
 import SortableRow from '../components/SortableRow';
+import { PaginationTop, PaginationBottom } from '../components/Pagination';
 import api from '../services/api';
 import toast from 'react-hot-toast';
 
@@ -25,6 +26,12 @@ const SubSubCategoriesAdminPage = () => {
   const [subCategories, setSubCategories] = useState([]);
   const [subSubCategories, setSubSubCategories] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
 
@@ -44,15 +51,18 @@ const SubSubCategoriesAdminPage = () => {
       setParentCategories(catRes.data.categories || []);
       const subRes = await api.get('/subcategories?all=true');
       setSubCategories(subRes.data.subCategories || []);
-      const subSubRes = await api.get('/subsubcategories?all=true');
+      const query = `/subsubcategories?all=true&page=${page}&limit=${limit}${search ? `&search=${encodeURIComponent(search)}` : ''}`;
+      const subSubRes = await api.get(query);
       setSubSubCategories(subSubRes.data.subSubCategories || []);
+      setTotal(subSubRes.data.total || 0);
+      setTotalPages(subSubRes.data.totalPages || 1);
     } catch (err) {
       console.error(err);
       toast.error('Failed to load sub-sub-categories data.');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [page, limit, search]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -198,6 +208,15 @@ const SubSubCategoriesAdminPage = () => {
       )}
 
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+        <PaginationTop
+          search={search}
+          onSearchChange={(s) => { setSearch(s); setPage(1); }}
+          searchPlaceholder="Search sub-subcategories..."
+          currentPage={page}
+          totalItems={total}
+          limit={limit}
+          onLimitChange={(l) => { setLimit(l); setPage(1); }}
+        />
         {loading ? (
           <div className="p-6 space-y-3">
             {[...Array(5)].map((_, i) => <div key={i} className="skeleton h-12 w-full rounded-lg" />)}
@@ -271,6 +290,12 @@ const SubSubCategoriesAdminPage = () => {
             </table>
           </div>
         )}
+        <PaginationBottom
+          currentPage={page}
+          totalPages={totalPages}
+          totalItems={total}
+          onPageChange={(p) => setPage(p)}
+        />
       </div>
 
       {/* ── Modal ── */}

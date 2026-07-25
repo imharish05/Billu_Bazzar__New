@@ -82,9 +82,35 @@ const getTree = async (req, res) => {
 
 const getAll = async (req, res) => {
   try {
-    const { all } = req.query;
+    const { all, page, limit, search } = req.query;
+    const { Op } = require('sequelize');
     const where = {};
     if (!all) where.isActive = true;
+    if (search) where.name = { [Op.like]: `%${search}%` };
+
+    if (page !== undefined || limit !== undefined) {
+      where.parentId = null;
+      const p = Math.max(1, parseInt(page || 1, 10));
+      const l = Math.max(1, parseInt(limit || 10, 10));
+
+      const { count, rows } = await Category.findAndCountAll({
+        where,
+        attributes: { exclude: ['attributes', 'description'] },
+        order: [['sortOrder', 'ASC']],
+        limit: l,
+        offset: (p - 1) * l
+      });
+
+      return res.json({
+        success: true,
+        categories: rows,
+        total: count,
+        page: p,
+        limit: l,
+        totalPages: Math.ceil(count / l)
+      });
+    }
+
     const categories = await Category.findAll({
       where,
       attributes: { exclude: ['attributes', 'description'] },

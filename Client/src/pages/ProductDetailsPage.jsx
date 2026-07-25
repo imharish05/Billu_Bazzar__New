@@ -17,6 +17,32 @@ import toast from 'react-hot-toast';
 
 import { fetchProductReviews, createReview, updateReview, deleteReview } from '../redux/slices/reviewsSlice';
 
+/** Map common color names → CSS color / gradient values for swatch circles */
+const COLOR_MAP = {
+  red: '#e53e3e', crimson: '#dc143c', maroon: '#800000', pink: '#f687b3', rose: '#f43f5e', magenta: '#d53f8c', hotpink: '#ff69b4', blush: '#ffb6c1',
+  blue: '#3b82f6', navy: '#1e3a8a', cobalt: '#0047ab', royal: '#4169e1', sky: '#38bdf8', cyan: '#06b6d4', teal: '#0d9488', aqua: '#00ffff',
+  green: '#22c55e', olive: '#6b8e23', mint: '#3eb489', emerald: '#10b981', forest: '#228b22', lime: '#84cc16', sage: '#9dc183',
+  yellow: '#f59e0b', gold: '#b8860b', amber: '#f59e0b', lemon: '#fff44f', mustard: '#ffdb58',
+  orange: '#f97316', coral: '#ff6b6b', salmon: '#fa8072', peach: '#ffcba4',
+  purple: '#9333ea', lavender: '#c4b5fd', violet: '#7c3aed', indigo: '#6366f1', mauve: '#9f8fba', plum: '#8b008b', lilac: '#c8a2c8', burgundy: '#800020',
+  brown: '#92400e', tan: '#d2b48c', beige: '#f5f5dc', caramel: '#c68642', chocolate: '#7b3f00', coffee: '#6f4e37',
+  black: '#111111', charcoal: '#374151', grey: '#9ca3af', gray: '#9ca3af', silver: '#c0c0c0', ash: '#b2beb5',
+  white: '#f9fafb', cream: '#fffdd0', ivory: '#fffff0', off: '#faf9f6',
+  multicolor: 'linear-gradient(135deg,#e53e3e 0%,#f59e0b 25%,#22c55e 50%,#3b82f6 75%,#9333ea 100%)',
+  multi: 'linear-gradient(135deg,#e53e3e 0%,#f59e0b 25%,#22c55e 50%,#3b82f6 75%,#9333ea 100%)',
+  printed: 'linear-gradient(135deg,#f687b3 0%,#f59e0b 33%,#38bdf8 66%,#22c55e 100%)',
+};
+
+/** Resolve a color name / value to a CSS background string */
+const resolveColor = (name = '') => {
+  const lower = name.toLowerCase().trim();
+  if (COLOR_MAP[lower]) return COLOR_MAP[lower];
+  for (const [key, val] of Object.entries(COLOR_MAP)) {
+    if (lower.includes(key)) return val;
+  }
+  return lower; // fallback — may be a valid CSS color
+};
+
 const ProductDetailsPage = () => {
   const { slug } = useParams();
   const dispatch = useDispatch();
@@ -534,21 +560,27 @@ const ProductDetailsPage = () => {
               </div>
             </div>
 
-            {/* Interactive media bar */}
-            <div className="flex gap-2 mt-3 w-full">
-              <button
-                onClick={() => setViewMode(viewMode === 'spin' ? 'standard' : 'spin')}
-                className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 border text-xs font-medium transition-all ${viewMode === 'spin' ? 'bg-brand-text text-white border-brand-text' : 'border-brand-light text-brand-text hover:border-brand-text'}`}
-              >
-                <RotateCcw size={14} /> 360° Spin
-              </button>
-              <button
-                onClick={() => setVideoOpen(true)}
-                className="flex-1 flex items-center justify-center gap-2 py-2 px-3 border border-brand-light text-brand-text hover:border-brand-text text-xs font-medium transition-all"
-              >
-                <Play size={14} /> Watch Showcase
-              </button>
-            </div>
+            {/* Interactive media bar — only show buttons when media exists */}
+            {((product?.spin_images?.length >= 2) || (product?.spinImageCount >= 2 && product?.spinImagePath) || product?.videoUrl || product?.hasVideo) && (
+              <div className="flex gap-2 mt-3 w-full">
+                {((product?.spin_images?.length >= 2) || (product?.spinImageCount >= 2 && product?.spinImagePath)) && (
+                  <button
+                    onClick={() => setViewMode(viewMode === 'spin' ? 'standard' : 'spin')}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 border text-xs font-medium transition-all ${viewMode === 'spin' ? 'bg-brand-text text-white border-brand-text' : 'border-brand-light text-brand-text hover:border-brand-text'}`}
+                  >
+                    <RotateCcw size={14} /> 360° Spin
+                  </button>
+                )}
+                {(product?.videoUrl || product?.hasVideo) && (
+                  <button
+                    onClick={() => setVideoOpen(true)}
+                    className="flex-1 flex items-center justify-center gap-2 py-2 px-3 border border-brand-light text-brand-text hover:border-brand-text text-xs font-medium transition-all"
+                  >
+                    <Play size={14} /> Watch Showcase
+                  </button>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Details */}
@@ -603,42 +635,158 @@ const ProductDetailsPage = () => {
             {product.variants && product.variants.length > 0 && variantAttributeKeys.map(key => {
               const currentVal = selectedAttributes[key];
               const values = variantAttributeValues[key] || [];
+              const isColorKey = key.toLowerCase() === 'color' || key.toLowerCase() === 'colour';
+
               return (
-                <div key={key} className="space-y-2">
-                  <p className="font-medium text-sm">
-                    Select {key} {currentVal && <span className="text-brand-gold">— {currentVal}</span>}
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {values.map(val => {
-                      const testCombo = { ...selectedAttributes, [key]: val };
-                      const matchingVariant = parsedVariants.find(v => {
-                        return variantAttributeKeys.every(k => v.attributes[k] === testCombo[k]);
-                      });
-                      const isExists = !!matchingVariant;
-                      const isOutOfStock = matchingVariant ? (parseInt(matchingVariant.stock, 10) <= 0) : true;
-                      const isSelected = currentVal === val;
+                <div key={key} className="space-y-3">
+                  {isColorKey ? (
+                    /* ── Color Swatch Selector ── */
+                    <>
+                      <div className="flex items-center justify-between">
+                        <p className="font-semibold text-sm text-brand-text">
+                          Colour
+                          {currentVal && (
+                            <span className="ml-2 font-normal text-brand-gold capitalize">— {currentVal}</span>
+                          )}
+                        </p>
+                        {values.length > 3 && (
+                          <span className="text-[11px] text-brand-grey bg-neutral-100 border border-neutral-200 px-2 py-0.5 rounded-full font-medium">
+                            {values.length} colours available
+                          </span>
+                        )}
+                      </div>
 
-                      let btnStyle = "border-brand-light text-brand-text hover:border-brand-grey";
-                      if (isSelected) {
-                        btnStyle = "border-brand-text bg-brand-text text-white font-semibold";
-                      } else if (!isExists || isOutOfStock) {
-                        btnStyle = "border-dashed border-neutral-300 bg-neutral-100 text-neutral-400 opacity-60 line-through cursor-not-allowed";
-                      }
+                      <div className="flex flex-wrap gap-3">
+                        {values.map(val => {
+                          const isExists = parsedVariants.some(v => v.attributes[key] === val);
+                          const testCombo = { ...selectedAttributes, [key]: val };
+                          const fullMatchVariant = parsedVariants.find(v =>
+                            variantAttributeKeys.every(k => v.attributes[k] === testCombo[k])
+                          );
+                          const isOutOfStock = fullMatchVariant ? (parseInt(fullMatchVariant.stock, 10) <= 0) : false;
+                          const isSelected = currentVal === val;
+                          const cssColor = resolveColor(val);
+                          const isGradient = cssColor.includes('gradient');
 
-                      return (
-                        <button
-                          key={val}
-                          type="button"
-                          disabled={!isExists || isOutOfStock}
-                          onClick={() => setSelectedAttributes(prev => ({ ...prev, [key]: val }))}
-                          className={`px-4 h-11 border text-sm font-medium transition-all focus-visible:outline-brand-gold relative ${btnStyle}`}
-                          title={!isExists ? 'Combination unavailable' : (isOutOfStock ? 'Out of stock' : `${key}: ${val}`)}
-                        >
-                          {val}
-                        </button>
-                      );
-                    })}
-                  </div>
+                          return (
+                            <button
+                              key={val}
+                              type="button"
+                              disabled={!isExists || isOutOfStock}
+                              onClick={() => {
+                                const newAttrs = { ...selectedAttributes, [key]: val };
+                                const snapVariant = parsedVariants.find(v => v.attributes[key] === val);
+                                if (snapVariant) {
+                                  variantAttributeKeys.forEach(k => {
+                                    if (k !== key) newAttrs[k] = snapVariant.attributes[k];
+                                  });
+                                }
+                                setSelectedAttributes(newAttrs);
+                              }}
+                              title={!isExists ? 'Combination unavailable' : (isOutOfStock ? `${val} — Out of stock` : val)}
+                              className="relative group focus-visible:outline-none"
+                              aria-label={`Select colour ${val}`}
+                              id={`color-swatch-${val.replace(/\s+/g, '-').toLowerCase()}`}
+                            >
+                              {/* Selection ring */}
+                              <span
+                                className={`absolute inset-0 -m-1 rounded-full border-2 transition-all duration-200 ${
+                                  isSelected
+                                    ? 'border-brand-text scale-100 opacity-100'
+                                    : 'border-transparent scale-95 opacity-0 group-hover:opacity-60 group-hover:border-brand-grey group-hover:scale-100'
+                                }`}
+                              />
+                              {/* Circle swatch */}
+                              <span
+                                className={`block w-9 h-9 rounded-full shadow-md transition-transform duration-200 ${
+                                  isSelected ? 'scale-95' : 'group-hover:scale-90'
+                                } ${
+                                  !isExists || isOutOfStock ? 'opacity-40' : ''
+                                }`}
+                                style={isGradient ? { background: cssColor } : { backgroundColor: cssColor }}
+                              >
+                                {/* Out-of-stock diagonal line */}
+                                {isOutOfStock && (
+                                  <span className="absolute inset-0 rounded-full overflow-hidden">
+                                    <span
+                                      className="absolute inset-0"
+                                      style={{
+                                        background: 'repeating-linear-gradient(135deg,transparent,transparent 4px,rgba(255,255,255,0.55) 4px,rgba(255,255,255,0.55) 5px)'
+                                      }}
+                                    />
+                                  </span>
+                                )}
+                                {/* Checkmark for selected */}
+                                {isSelected && (
+                                  <span className="absolute inset-0 flex items-center justify-center">
+                                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                                      <path d="M2.5 7L5.5 10L11.5 4" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                    </svg>
+                                  </span>
+                                )}
+                              </span>
+                              {/* Color name label */}
+                              <span className={`absolute -bottom-5 left-1/2 -translate-x-1/2 whitespace-nowrap text-[10px] font-medium transition-opacity duration-200 ${
+                                isSelected ? 'opacity-100 text-brand-text' : 'opacity-0 group-hover:opacity-70 text-brand-grey'
+                              }`}>
+                                {val}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* Spacer for label below swatches */}
+                      <div className="h-4" />
+                    </>
+                  ) : (
+                    /* ── Non-color Variant Selector (text pills) ── */
+                    <>
+                      <p className="font-semibold text-sm text-brand-text">
+                        Select {key} {currentVal && <span className="text-brand-gold font-normal">— {currentVal}</span>}
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {values.map(val => {
+                          const isExists = parsedVariants.some(v => v.attributes[key] === val);
+                          const testCombo = { ...selectedAttributes, [key]: val };
+                          const fullMatchVariant = parsedVariants.find(v =>
+                            variantAttributeKeys.every(k => v.attributes[k] === testCombo[k])
+                          );
+                          const isOutOfStock = fullMatchVariant ? (parseInt(fullMatchVariant.stock, 10) <= 0) : false;
+                          const isSelected = currentVal === val;
+
+                          let btnStyle = "border-brand-light text-brand-text hover:border-brand-grey";
+                          if (isSelected) {
+                            btnStyle = "border-brand-text bg-brand-text text-white font-semibold";
+                          } else if (!isExists || isOutOfStock) {
+                            btnStyle = "border-dashed border-neutral-300 bg-neutral-100 text-neutral-400 opacity-60 line-through cursor-not-allowed";
+                          }
+
+                          return (
+                            <button
+                              key={val}
+                              type="button"
+                              disabled={!isExists || isOutOfStock}
+                              onClick={() => {
+                                const newAttrs = { ...selectedAttributes, [key]: val };
+                                const snapVariant = parsedVariants.find(v => v.attributes[key] === val);
+                                if (snapVariant) {
+                                  variantAttributeKeys.forEach(k => {
+                                    if (k !== key) newAttrs[k] = snapVariant.attributes[k];
+                                  });
+                                }
+                                setSelectedAttributes(newAttrs);
+                              }}
+                              className={`px-4 h-11 border text-sm font-medium transition-all focus-visible:outline-brand-gold relative ${btnStyle}`}
+                              title={!isExists ? 'Combination unavailable' : (isOutOfStock ? 'Out of stock' : `${key}: ${val}`)}
+                            >
+                              {val}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
                 </div>
               );
             })}

@@ -1,5 +1,6 @@
 'use strict';
 const { sequelize, Order, OrderItem, Product, ProductVariant, Customer, Coupon, Affiliate, Cart, CartItem, InventoryMovementLog, Warehouse, WarehouseStock, SiteSetting, LoyaltyLedger } = require('../models');
+const { Op } = require('sequelize');
 const { v4: uuidv4 } = require('uuid');
 
 // Helper to push order details to Shiprocket shipping API
@@ -19,7 +20,7 @@ const pushToShiprocket = async (orderId) => {
 
 const getAll = async (req, res) => {
   try {
-    const { page = 1, limit = 20, status, customerId } = req.query;
+    const { page = 1, limit = 20, status, customerId, search } = req.query;
     const { Op } = require('sequelize');
     const where = {};
 
@@ -33,6 +34,12 @@ const getAll = async (req, res) => {
     }
 
     if (customerId) where.customerId = customerId;
+    if (search) {
+      where[Op.or] = [
+        { orderNumber: { [Op.like]: `%${search}%` } },
+        { id: { [Op.like]: `%${search}%` } }
+      ];
+    }
 
     const { count, rows } = await Order.findAndCountAll({
       where, limit: parseInt(limit), offset: (parseInt(page) - 1) * parseInt(limit),
@@ -42,7 +49,9 @@ const getAll = async (req, res) => {
         { model: OrderItem, as: 'items' },
       ],
     });
-    res.json({ success: true, orders: rows, total: count });
+    const p = Math.max(1, parseInt(page, 10));
+    const l = Math.max(1, parseInt(limit, 10));
+    res.json({ success: true, orders: rows, total: count, page: p, limit: l, totalPages: Math.ceil(count / l) });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -256,19 +265,19 @@ const placeOrder = async (req, res) => {
 
     if (couponCode) {
       const coupon = await Coupon.findOne({ where: { code: String(couponCode).trim().toUpperCase(), isActive: true }, transaction });
-      if (coupon && Number(subtotal) >= Number(coupon.minOrderValue || 0) && Number(coupon.usageCount) < Number(coupon.usageLimit)) {
-        // Check per-user redemption
-        const customerId = req.user?.id || req.user?.customerId || null;
-        let alreadyUsed = false;
-        if (customerId) {
+      if (coupon && Number(subtotal) >= Number(coupon.minOrderValue || 0)) {
+        // Check per-person redemption limit
+        const customerId = req.customer?.id || req.user?.id || req.user?.customerId || null;
+        let limitExceeded = false;
+        if (coupon.usageLimit !== null && coupon.usageLimit !== undefined && Number(coupon.usageLimit) > 0 && customerId) {
           const priorUsageCount = await Order.count({
             where: { customerId, couponId: coupon.id, status: { [Op.ne]: 'CANCELLED' } },
             transaction
           });
-          if (priorUsageCount > 0) alreadyUsed = true;
+          if (priorUsageCount >= Number(coupon.usageLimit)) limitExceeded = true;
         }
 
-        if (!alreadyUsed) {
+        if (!limitExceeded) {
           couponId = coupon.id;
           if (coupon.type === 'PERCENT') {
             discountAmount = Math.min((subtotal * Number(coupon.value)) / 100, Number(coupon.maxDiscount || Infinity));
@@ -294,7 +303,7 @@ const placeOrder = async (req, res) => {
     const shippingAmount = subtotal > 1499 ? 0 : 99;
     const taxAmount = subtotal * 0.05;
 
-    // --- Loyalty Points Calculation ---
+    // --- Loyalty Points & Mutual Exclusivity (Best Single Discount) ---
     let loyaltyDiscount = 0;
     let earnedPoints = 0;
     let loyaltySettings = { earnRate: 20, redeemRate: 0.2, maxRedeemAmount: 500 };
@@ -307,13 +316,35 @@ const placeOrder = async (req, res) => {
     if (req.customer && req.customer.id) {
       const user = await Customer.findByPk(req.customer.id, { transaction });
       if (user) {
+        let potentialLoyalty = 0;
         if (redeemPoints && user.loyaltyPoints > 0) {
-          const possibleDiscount = user.loyaltyPoints * Number(loyaltySettings.redeemRate);
-          loyaltyDiscount = Math.min(possibleDiscount, Number(loyaltySettings.maxRedeemAmount), subtotal - discountAmount);
-          if (loyaltyDiscount < 0) loyaltyDiscount = 0;
+          potentialLoyalty = Math.min(
+            user.loyaltyPoints * Number(loyaltySettings.redeemRate),
+            Number(loyaltySettings.maxRedeemAmount),
+            subtotal
+          );
+        }
+
+        // ── Mutual Exclusivity: Compare Coupon vs Loyalty Points ──
+        if (discountAmount > 0 && discountAmount >= potentialLoyalty) {
+          // Coupon discount is better or equal -> Keep coupon, set loyalty discount to 0
+          loyaltyDiscount = 0;
+        } else if (potentialLoyalty > 0) {
+          // Loyalty discount is strictly better -> Use loyalty points, unapply coupon
+          loyaltyDiscount = potentialLoyalty;
+          if (discountAmount > 0) {
+            discountAmount = 0;
+            if (couponId) {
+              const cp = await Coupon.findByPk(couponId, { transaction });
+              if (cp && cp.usageCount > 0) {
+                await cp.decrement('usageCount', { transaction });
+              }
+              couponId = null;
+            }
+          }
         }
         
-        // Earn points based on subtotal (or totalAmount after discount)
+        // Earn points based on net paid amount
         const amountForEarn = subtotal - discountAmount - loyaltyDiscount;
         if (amountForEarn > 0) {
            earnedPoints = Math.floor(amountForEarn / Number(loyaltySettings.earnRate));
@@ -622,4 +653,47 @@ const getDashboardStats = async (req, res) => {
   }
 };
 
-module.exports = { getAll, getOne, getMyOrders, getMyOrderById, cancelMyOrder, placeOrder, updateStatus, getDashboardStats };
+const getStatusCounts = async (req, res) => {
+  try {
+    const orderCounts = await Order.findAll({
+      attributes: ['status', [sequelize.fn('COUNT', sequelize.col('id')), 'count']],
+      group: ['status'],
+      raw: true
+    });
+
+    const counts = {
+      ABANDONED: 0,
+      PENDING: 0,
+      CONFIRMED: 0,
+      PROCESSING: 0,
+      SHIPPED: 0,
+      OUT_FOR_DELIVERY: 0,
+      DELIVERED: 0,
+      CANCELLED: 0,
+      RTO: 0,
+      RETURNED: 0
+    };
+
+    orderCounts.forEach(row => {
+      if (Object.prototype.hasOwnProperty.call(counts, row.status)) {
+        counts[row.status] = parseInt(row.count, 10);
+      }
+    });
+
+    try {
+      const abandonedCount = await Cart.count({
+        include: [{ model: CartItem, as: 'items', required: true }]
+      });
+      counts.ABANDONED = abandonedCount;
+    } catch {
+      counts.ABANDONED = 0;
+    }
+
+    res.json({ success: true, counts });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+module.exports = { getAll, getOne, getMyOrders, getMyOrderById, cancelMyOrder, placeOrder, updateStatus, getDashboardStats, getStatusCounts };
+

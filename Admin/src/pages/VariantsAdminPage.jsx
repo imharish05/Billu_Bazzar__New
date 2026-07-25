@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Search, Edit2, Trash2, X, Upload, ChevronDown, Check, ChevronLeft, ChevronRight, Camera } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, X, Upload, ChevronLeft, ChevronRight, Camera, Copy } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
 import currencyJs from 'currency.js';
 import toast from 'react-hot-toast';
@@ -8,99 +8,192 @@ import api from '../services/api';
 
 const fmt = (v) => currencyJs(v, { symbol: '₹', precision: 0 }).format();
 
-// ── Custom Searchable Combobox for Variant Option Attribute Values ─────────────
-const VariantAttributeSelect = ({ label, value, onChange, suggestions = [] }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const containerRef = useRef(null);
+/** Map color names to CSS color values for visual swatch rendering in Admin */
+const COLOR_MAP = {
+  red: '#e53e3e', crimson: '#dc143c', maroon: '#800000', pink: '#f687b3', rose: '#f43f5e', magenta: '#d53f8c', hotpink: '#ff69b4', blush: '#ffb6c1',
+  blue: '#3b82f6', navy: '#1e3a8a', cobalt: '#0047ab', royal: '#4169e1', sky: '#38bdf8', cyan: '#06b6d4', teal: '#0d9488', aqua: '#00ffff',
+  green: '#22c55e', olive: '#6b8e23', mint: '#3eb489', emerald: '#10b981', forest: '#228b22', lime: '#84cc16', sage: '#9dc183',
+  yellow: '#f59e0b', gold: '#b8860b', amber: '#f59e0b', lemon: '#fff44f', mustard: '#ffdb58',
+  orange: '#f97316', coral: '#ff6b6b', salmon: '#fa8072', peach: '#ffcba4',
+  purple: '#9333ea', lavender: '#c4b5fd', violet: '#7c3aed', indigo: '#6366f1', mauve: '#9f8fba', plum: '#8b008b', lilac: '#c8a2c8', burgundy: '#800020',
+  brown: '#92400e', tan: '#d2b48c', beige: '#f5f5dc', caramel: '#c68642', chocolate: '#7b3f00', coffee: '#6f4e37',
+  black: '#111111', charcoal: '#374151', grey: '#9ca3af', gray: '#9ca3af', silver: '#c0c0c0', ash: '#b2beb5',
+  white: '#ffffff', cream: '#fffdd0', ivory: '#fffff0', off: '#faf9f6',
+  multicolor: 'linear-gradient(135deg,#e53e3e 0%,#f59e0b 25%,#22c55e 50%,#3b82f6 75%,#9333ea 100%)',
+  multi: 'linear-gradient(135deg,#e53e3e 0%,#f59e0b 25%,#22c55e 50%,#3b82f6 75%,#9333ea 100%)',
+};
 
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (containerRef.current && !containerRef.current.contains(e.target)) {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+const resolveColor = (name = '') => {
+  if (!name) return '#cccccc';
+  const lower = String(name).toLowerCase().trim();
+  if (COLOR_MAP[lower]) return COLOR_MAP[lower];
+  for (const [key, val] of Object.entries(COLOR_MAP)) {
+    if (lower.includes(key)) return val;
+  }
+  return lower; // allows hex codes like #FF0000 or valid CSS colors directly
+};
 
-  const filtered = suggestions.filter(s =>
-    s.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+// Preset suggestion chips per option name (mirrors ProductsAdminPage)
+const VARIANT_PRESET_VALUES = {
+  Size: ['FREE SIZE', 'XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL'],
+  Color: ['Red', 'Blue', 'Black', 'Green', 'Maroon', 'Pink', 'Gold', 'Purple', 'Navy', 'Yellow', 'White', 'Orange', 'Teal', 'Grey', 'Emerald', 'Burgundy', 'Beige', 'Lavender', 'Peach', 'Olive'],
+  Material: ['Silk', 'Cotton', 'Denim', 'Leather', 'Wool', 'Linen', 'Velvet'],
+  Fabric: ['Georgette', 'Chiffon', 'Organza', 'Satin', 'Crepe', 'Rayon'],
+  Style: ['Casual', 'Ethnic', 'Party', 'Formal', 'Boho'],
+  'Metal Purity': ['24K Gold', '22K Gold', '18K Gold', '925 Silver', 'Platinum'],
+};
 
-  const handleSelect = (val) => {
-    onChange(val);
-    setIsOpen(false);
-    setSearchTerm('');
+/**
+ * VariantAttributeChips
+ * Replica of Product CRUD Section 5 chip UI with Color Swatches & Color Picker support:
+ * - Dashed green "+ Add {label}" button to open inline custom input
+ * - Color Picker (input type="color") when label is Color
+ * - Preset chips with visual color swatches
+ * - Custom typed value chip with color swatch dot
+ */
+const VariantAttributeChips = ({ label, value, onChange, suggestions = [] }) => {
+  const [showInput, setShowInput] = useState(false);
+  const [customInput, setCustomInput] = useState('');
+  const [colorPickerHex, setColorPickerHex] = useState('#e53e3e');
+  const isColor = label.toLowerCase() === 'color';
+
+  // Resolve presets — case-insensitive + handle plural labels (e.g. "Sizes" → "Size")
+  const presets = useMemo(() => {
+    const normalize = (s) => s.toLowerCase().replace(/s$/, ''); // strip trailing 's' for plural match
+    const labelNorm = normalize(label);
+    const matchedKey = Object.keys(VARIANT_PRESET_VALUES).find(
+      k => normalize(k) === labelNorm
+    );
+    const globalPresets = matchedKey ? VARIANT_PRESET_VALUES[matchedKey] : [];
+    return [...new Set([...globalPresets, ...suggestions.filter(s => !globalPresets.includes(s))])];
+  }, [label, suggestions]);
+
+  const toggleValue = (v) => {
+    // clicking the same value deselects it; clicking another selects it
+    onChange(value === v ? '' : v);
+    setShowInput(false);
+    setCustomInput('');
   };
 
   return (
-    <div className="relative w-full" ref={containerRef}>
-      <label className="block text-xs font-semibold text-neutral-700 mb-1 capitalize">{label} *</label>
-      <div
-        onClick={() => setIsOpen(prev => !prev)}
-        className="w-full border border-neutral-300 px-3 py-2 text-xs rounded-md bg-white flex items-center justify-between cursor-pointer hover:border-brand-gold focus:border-brand-gold transition-colors font-medium text-neutral-800 shadow-sm"
-      >
-        <span className={value ? 'text-neutral-900 font-bold' : 'text-neutral-400'}>
-          {value || `Select ${label}...`}
-        </span>
-        <ChevronDown size={14} className={`text-neutral-500 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+    <div className="bg-white p-4 sm:p-5 rounded-2xl border border-neutral-200 shadow-sm space-y-3 hover:border-neutral-300 transition-all">
+      {/* Header row */}
+      <div className="flex items-center gap-2 border-b border-neutral-100 pb-2.5">
+        {isColor
+          ? <span className="text-amber-600 font-bold text-sm">🎨</span>
+          : <span className="text-neutral-500 font-bold text-sm">📐</span>}
+        <span className="text-xs font-bold text-neutral-800 capitalize">{label}</span>
+        <span className="text-red-500 font-bold text-xs">*</span>
       </div>
 
-      {isOpen && (
-        <div className="absolute left-0 top-full mt-1.5 w-full min-w-[200px] bg-white border border-neutral-200 shadow-2xl rounded-xl z-50 p-2.5 space-y-2 animate-in fade-in duration-150">
-          <input
-            type="text"
-            autoFocus
-            placeholder={`Search or type ${label}...`}
-            value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
-            onKeyDown={e => {
-              if (e.key === 'Enter' && searchTerm.trim()) {
-                e.preventDefault();
-                handleSelect(searchTerm.trim());
-              }
-            }}
-            className="w-full border border-neutral-300 px-3 py-1.5 text-xs rounded-md focus:outline-none focus:border-brand-gold bg-neutral-50 font-medium text-neutral-800"
-          />
-
-          <div className="max-h-40 overflow-y-auto space-y-1 py-0.5 custom-scrollbar">
-            {filtered.length > 0 ? (
-              filtered.map(s => {
-                const isSelected = value && value.trim().toLowerCase() === s.trim().toLowerCase();
-                return (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => handleSelect(s)}
-                    className={`w-full text-left px-3 py-1.5 text-xs rounded-md flex items-center justify-between transition-colors ${
-                      isSelected ? 'bg-amber-100 text-amber-900 font-bold' : 'hover:bg-neutral-100 text-neutral-800 font-medium'
-                    }`}
-                  >
-                    <span>{s}</span>
-                    {isSelected && <Check size={14} className="text-amber-800" />}
-                  </button>
-                );
-              })
-            ) : (
-              <p className="text-[11px] text-neutral-400 p-2 italic text-center">No predefined values</p>
+      {/* Chips row */}
+      <div className="flex flex-wrap items-center gap-2 pt-1">
+        {/* + Add custom (dashed green) */}
+        {showInput ? (
+          <div className="flex items-center gap-1.5 bg-white border-2 border-emerald-500 rounded-full px-3 py-1 shadow-sm">
+            {isColor && (
+              <input
+                type="color"
+                value={colorPickerHex}
+                onChange={e => {
+                  setColorPickerHex(e.target.value);
+                  setCustomInput(e.target.value);
+                }}
+                className="w-5 h-5 rounded-full cursor-pointer border border-neutral-300 p-0 overflow-hidden flex-shrink-0"
+                title="Pick hex color"
+              />
             )}
-
-            {searchTerm.trim() && !suggestions.some(s => s.toLowerCase() === searchTerm.trim().toLowerCase()) && (
-              <button
-                type="button"
-                onClick={() => handleSelect(searchTerm.trim())}
-                className="w-full text-left px-3 py-1.5 text-xs rounded-md bg-amber-50 hover:bg-amber-100 text-amber-900 font-semibold flex items-center gap-1.5 mt-1 border border-amber-200"
-              >
-                <Plus size={12} /> Add "{searchTerm.trim()}"
-              </button>
-            )}
+            <input
+              type="text"
+              autoFocus
+              placeholder={isColor ? 'Type color name or #hex...' : `Type custom ${label}...`}
+              value={customInput}
+              onChange={e => setCustomInput(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  if (customInput.trim()) {
+                    onChange(customInput.trim());
+                    setCustomInput('');
+                    setShowInput(false);
+                  }
+                }
+                if (e.key === 'Escape') { setShowInput(false); setCustomInput(''); }
+              }}
+              className="text-xs font-medium focus:outline-none bg-transparent w-36 text-neutral-800"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                if (customInput.trim()) { onChange(customInput.trim()); setCustomInput(''); }
+                setShowInput(false);
+              }}
+              className="text-emerald-700 text-xs font-bold hover:text-emerald-900"
+            >
+              Set
+            </button>
           </div>
-        </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setShowInput(true)}
+            className="border-2 border-dashed border-emerald-500 text-emerald-600 bg-emerald-50/40 hover:bg-emerald-50 text-xs font-bold px-3 py-1.5 rounded-full transition-colors flex items-center gap-1 cursor-pointer"
+          >
+            <Plus size={14} /> Add {label}
+          </button>
+        )}
+
+        {/* Preset chips */}
+        {presets.map(chip => {
+          const isSelected = value === chip;
+          return (
+            <button
+              key={chip}
+              type="button"
+              onClick={() => toggleValue(chip)}
+              className={`text-xs font-medium px-3.5 py-1.5 rounded-full border transition-all cursor-pointer flex items-center gap-1.5 ${
+                isSelected
+                  ? 'border-2 border-emerald-500 bg-emerald-50 text-emerald-950 font-bold shadow-sm'
+                  : 'border-neutral-200 bg-white hover:bg-neutral-100 text-neutral-700'
+              }`}
+            >
+              {isColor && (
+                <span
+                  className="w-3.5 h-3.5 rounded-full border border-neutral-300 shadow-sm flex-shrink-0 inline-block"
+                  style={{ background: resolveColor(chip) }}
+                />
+              )}
+              <span>{chip}</span>
+            </button>
+          );
+        })}
+
+        {/* Custom typed chip — shows if value not in presets */}
+        {value && !presets.includes(value) && (
+          <button
+            type="button"
+            onClick={() => onChange('')}
+            className="text-xs font-bold px-3 py-1.5 rounded-full border-2 border-emerald-500 bg-emerald-50 text-emerald-950 flex items-center gap-1.5 shadow-sm"
+          >
+            {isColor && (
+              <span
+                className="w-3.5 h-3.5 rounded-full border border-neutral-300 shadow-sm flex-shrink-0 inline-block"
+                style={{ background: resolveColor(value) }}
+              />
+            )}
+            <span>{value}</span>
+            <X size={12} className="text-emerald-700 hover:text-red-600 ml-0.5" />
+          </button>
+        )}
+      </div>
+
+      {!value && (
+        <p className="text-[11px] text-red-400 italic">Select or type a value above</p>
       )}
     </div>
   );
 };
+
 
 const VariantModal = ({ variant, onClose, onSave, products, warehouses }) => {
   const isEdit = !!variant;
@@ -175,7 +268,7 @@ const VariantModal = ({ variant, onClose, onSave, products, warehouses }) => {
     return Array.from(valuesSet);
   };
 
-  // Sync attributes with selected product's option keys
+  // Sync attributes with selected product's option keys & auto-generate suggested SKU
   useEffect(() => {
     if (!isEdit && selectedProductId) {
       const nextAttrs = {};
@@ -183,8 +276,21 @@ const VariantModal = ({ variant, onClose, onSave, products, warehouses }) => {
         nextAttrs[k] = '';
       });
       setAttributes(nextAttrs);
+      if (selectedProduct?.sku) {
+        setSku(`${selectedProduct.sku}-VAR-${Date.now().toString().slice(-4)}`);
+      }
     }
-  }, [selectedProductId, isEdit, optionKeys]);
+  }, [selectedProductId, isEdit, optionKeys, selectedProduct]);
+
+  useEffect(() => {
+    if (!isEdit && selectedProduct && attributes) {
+      const attrValues = Object.values(attributes).filter(Boolean).join('-').toUpperCase().replace(/\s+/g, '');
+      if (attrValues) {
+        const baseSku = selectedProduct.sku || `PROD-${selectedProductId}`;
+        setSku(`${baseSku}-${attrValues}`);
+      }
+    }
+  }, [attributes, selectedProduct, isEdit, selectedProductId]);
 
   const handleAttributeChange = (key, val) => {
     setAttributes(prev => ({
@@ -248,14 +354,25 @@ const VariantModal = ({ variant, onClose, onSave, products, warehouses }) => {
 
       if (isConflict) {
         const comboStr = Object.entries(attributes).map(([k, v]) => `${k}: ${v}`).join(', ');
-        toast.error(`Variant combination '${comboStr}' already exists for this product!`);
+        toast.error(`Same variant already present! (${comboStr})`);
         return;
       }
     }
 
+    let finalSku = sku ? sku.trim() : '';
+    if (!finalSku && selectedProduct) {
+      const attrValues = Object.values(attributes).filter(Boolean).join('-').toUpperCase().replace(/\s+/g, '');
+      const baseSku = selectedProduct.sku || `PROD-${selectedProductId}`;
+      finalSku = attrValues ? `${baseSku}-${attrValues}` : `${baseSku}-VAR-${Date.now().toString().slice(-4)}`;
+    }
+    if (!finalSku) {
+      toast.error('SKU Code is required');
+      return;
+    }
+
     const fd = new FormData();
     fd.append('productId', selectedProductId);
-    fd.append('sku', sku);
+    fd.append('sku', finalSku);
     fd.append('price', price);
     fd.append('mrp', mrp);
     fd.append('stock', stock);
@@ -313,23 +430,52 @@ const VariantModal = ({ variant, onClose, onSave, products, warehouses }) => {
 
             {/* Dynamic Attributes / Option Types inputs */}
             {selectedProductId && (
-              <div className="border border-brand-light p-4 bg-neutral-50/50 rounded-lg space-y-3">
-                <h3 className="text-xs font-bold text-neutral-800 uppercase tracking-wider">Configure Product Option Attributes</h3>
+              <div className="border border-brand-light p-4 bg-neutral-50/50 rounded-lg space-y-4">
+                {/* Section header with Copy icon */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-xs font-bold text-brand-gold uppercase tracking-wider">Configure Product Option Attributes</h3>
+                    <p className="text-[11px] text-neutral-500 mt-0.5">Select pre-determined options or type custom specs.</p>
+                  </div>
+                  {/* Copy icon — always visible if product has at least 1 existing variant */}
+                  {selectedProduct?.variants?.length > 0 && (() => {
+                    // find the first existing variant (exclude current edit variant)
+                    const sourceVariant = isEdit
+                      ? (selectedProduct.variants.find(v => Number(v.id) !== Number(variant?.id)) || selectedProduct.variants[0])
+                      : selectedProduct.variants[0];
+                    if (!sourceVariant?.attributes) return null;
+                    return (
+                      <button
+                        type="button"
+                        title="Copy values from first existing variant"
+                        onClick={() => {
+                          const copied = {};
+                          optionKeys.forEach(k => { copied[k] = sourceVariant.attributes[k] || ''; });
+                          setAttributes(copied);
+                          toast.success('Variant values copied!');
+                        }}
+                        className="flex items-center gap-1.5 text-xs font-semibold text-neutral-600 hover:text-brand-gold border border-neutral-200 hover:border-brand-gold px-2.5 py-1.5 rounded-lg transition-colors bg-white shadow-sm"
+                      >
+                        <Copy size={13} /> Copy Existing
+                      </button>
+                    );
+                  })()}
+                </div>
+
                 {optionKeys.length === 0 ? (
                   <p className="text-xs text-brand-grey italic">
                     This product does not have custom option types defined in Section 4.
                   </p>
                 ) : (
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-3">
                     {optionKeys.map(key => {
-                      const suggestions = getExistingValues(key);
                       return (
-                        <VariantAttributeSelect
+                        <VariantAttributeChips
                           key={key}
                           label={key}
                           value={attributes[key] || ''}
                           onChange={(val) => handleAttributeChange(key, val)}
-                          suggestions={suggestions}
+                          suggestions={[]}
                         />
                       );
                     })}
@@ -340,15 +486,17 @@ const VariantModal = ({ variant, onClose, onSave, products, warehouses }) => {
 
             {/* Core Fields Grid */}
             <div className="grid grid-cols-2 gap-4">
+              {/* SKU Code Input */}
               <div>
-                <label className="block text-xs font-semibold text-brand-grey mb-1.5" htmlFor="var-sku">SKU Code</label>
+                <label className="block text-xs font-semibold text-brand-grey mb-1.5" htmlFor="var-sku">SKU Code *</label>
                 <input
                   id="var-sku"
                   type="text"
-                  placeholder="Auto SKU if blank"
+                  required
                   value={sku}
                   onChange={e => setSku(e.target.value)}
-                  className="w-full border border-brand-light px-3 py-2 text-sm focus:outline-none focus:border-brand-gold rounded-md font-mono"
+                  placeholder="e.g. VAR-SKU-001"
+                  className="w-full border border-brand-light px-3 py-2 text-sm focus:outline-none focus:border-brand-gold rounded-md font-mono uppercase"
                 />
               </div>
 

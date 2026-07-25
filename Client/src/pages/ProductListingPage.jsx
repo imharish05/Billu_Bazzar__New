@@ -350,34 +350,7 @@ const ProductListingPage = () => {
 
             {/* Collection Filter section removed (placed in top bar dropdown) */}
 
-            {/* Brands Filter */}
-            <div className="pt-6 border-t border-brand-light">
-              <p className="font-playfair text-sm font-bold uppercase tracking-wider text-brand-text mb-4">Brands</p>
-              <div className="space-y-2.5">
-                <label className="flex items-center gap-2.5 text-xs text-brand-grey cursor-pointer hover:text-brand-text select-none">
-                  <input
-                    type="radio"
-                    name="brandDesktop"
-                    checked={!filters.vendorId}
-                    onChange={() => handleFilter('vendorId', '')}
-                    className="w-3.5 h-3.5 accent-brand-gold cursor-pointer"
-                  />
-                  All Brands
-                </label>
-                {dummyBrands.map(brand => (
-                  <label key={brand.id} className="flex items-center gap-2.5 text-xs text-brand-grey cursor-pointer hover:text-brand-text select-none">
-                    <input
-                      type="radio"
-                      name="brandDesktop"
-                      checked={filters.vendorId === String(brand.id)}
-                      onChange={() => handleFilter('vendorId', String(brand.id))}
-                      className="w-3.5 h-3.5 accent-brand-gold cursor-pointer"
-                    />
-                    {brand.name}
-                  </label>
-                ))}
-              </div>
-            </div>
+            {/* Collection Filter section removed (placed in top bar dropdown) */}
           </aside>
 
           {/* Product Listing Area */}
@@ -477,35 +450,6 @@ const ProductListingPage = () => {
                 </div>
 
                 {/* Collection Filter section removed (placed in top bar dropdown) */}
-
-                {/* Brand / Vendor */}
-                <div>
-                  <p className="font-medium text-sm mb-3">Brands</p>
-                  <div className="space-y-2">
-                    <label className="flex items-center gap-2 text-sm text-brand-grey cursor-pointer hover:text-brand-text">
-                      <input
-                        type="radio"
-                        name="brand"
-                        checked={!filters.vendorId}
-                        onChange={() => handleFilter('vendorId', '')}
-                        className="accent-brand-gold"
-                      />
-                      All Brands
-                    </label>
-                    {dummyBrands.map(brand => (
-                      <label key={brand.id} className="flex items-center gap-2 text-sm text-brand-grey cursor-pointer hover:text-brand-text">
-                        <input
-                          type="radio"
-                          name="brand"
-                          checked={filters.vendorId === String(brand.id)}
-                          onChange={() => handleFilter('vendorId', String(brand.id))}
-                          className="accent-brand-gold"
-                        />
-                        {brand.name}
-                      </label>
-                    ))}
-                  </div>
-                </div>
               </div>
             </motion.div>
 

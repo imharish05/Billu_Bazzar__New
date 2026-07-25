@@ -17,12 +17,19 @@ import { restrictToVerticalAxis } from '@dnd-kit/modifiers';
 import AdminLayout from '../components/AdminLayout';
 import Switch from '../components/Switch';
 import SortableRow from '../components/SortableRow';
+import { PaginationTop, PaginationBottom } from '../components/Pagination';
 import api from '../services/api';
 import toast from 'react-hot-toast';
 
 const CategoriesAdminPage = () => {
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   
@@ -42,15 +49,17 @@ const CategoriesAdminPage = () => {
   const loadCategories = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await api.get('/categories?all=true');
-      const parents = (res.data.categories || []).filter(c => !c.parentId);
-      setCategories(parents);
+      const query = `/categories?all=true&page=${page}&limit=${limit}${search ? `&search=${encodeURIComponent(search)}` : ''}`;
+      const res = await api.get(query);
+      setCategories(res.data.categories || []);
+      setTotal(res.data.total || 0);
+      setTotalPages(res.data.totalPages || 1);
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [page, limit, search]);
 
   useEffect(() => { loadCategories(); }, [loadCategories]);
 
@@ -194,6 +203,15 @@ const CategoriesAdminPage = () => {
       </div>
 
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+        <PaginationTop
+          search={search}
+          onSearchChange={(s) => { setSearch(s); setPage(1); }}
+          searchPlaceholder="Search categories..."
+          currentPage={page}
+          totalItems={total}
+          limit={limit}
+          onLimitChange={(l) => { setLimit(l); setPage(1); }}
+        />
         {loading ? (
           <div className="p-6 space-y-3">
             {[...Array(6)].map((_, i) => <div key={i} className="skeleton h-12 w-full rounded-lg" />)}
@@ -276,6 +294,12 @@ const CategoriesAdminPage = () => {
             </table>
           </div>
         )}
+        <PaginationBottom
+          currentPage={page}
+          totalPages={totalPages}
+          totalItems={total}
+          onPageChange={(p) => setPage(p)}
+        />
       </div>
 
       <AnimatePresence>

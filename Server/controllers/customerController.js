@@ -15,7 +15,9 @@ const getAll = async (req, res) => {
       attributes: { exclude: ['password'] },
       include: [{ model: Order, as: 'orders', attributes: ['id'] }]
     });
-    res.json({ success: true, customers: rows, total: count });
+    const p = Math.max(1, parseInt(page, 10));
+    const l = Math.max(1, parseInt(limit, 10));
+    res.json({ success: true, customers: rows, total: count, page: p, limit: l, totalPages: Math.ceil(count / l) });
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 };
 

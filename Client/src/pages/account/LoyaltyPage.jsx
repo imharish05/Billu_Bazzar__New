@@ -32,12 +32,29 @@ const LoyaltyPage = () => {
         ]);
         
         if (settingsRes.data?.success && settingsRes.data?.data) {
-          if (settingsRes.data.data.earnRules?.length > 0) {
-            setEarnRules(settingsRes.data.data.earnRules);
+          const d = settingsRes.data.data;
+          if (d.redeemRate) {
+            setRedeemRate(d.redeemRate);
           }
-          if (settingsRes.data.data.redeemRate) {
-            setRedeemRate(settingsRes.data.data.redeemRate);
+
+          const dynamicRules = [];
+          if (d.earnRate) {
+            dynamicRules.push({ action: `Shopping (Every ₹${d.earnRate} spent)`, points: '+1 point' });
           }
+          if (d.signupPointsEnabled !== false && Number(d.signupPoints || 0) > 0) {
+            dynamicRules.push({ action: 'Create an Account / Registration', points: `+${d.signupPoints} points` });
+          }
+          if (d.reviewPointsEnabled !== false && Number(d.reviewPoints || 0) > 0) {
+            dynamicRules.push({ action: 'Write a Product Review', points: `+${d.reviewPoints} points` });
+          }
+
+          if (d.earnRules && d.earnRules.length > 0) {
+            d.earnRules.forEach(r => {
+              if (r.action && r.points) dynamicRules.push(r);
+            });
+          }
+
+          setEarnRules(dynamicRules);
         }
 
         if (ledgerRes.data?.success) {

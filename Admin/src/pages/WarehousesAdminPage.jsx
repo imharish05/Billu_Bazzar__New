@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, Search, Edit2, ArrowRightLeft, ShieldAlert, CheckCircle2, ChevronRight, X, Sliders, Trash2 } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import { Plus, Search, Edit2, ShieldAlert, CheckCircle2, ChevronRight, X, Trash2 } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
 import Switch from '../components/Switch';
 import api from '../services/api';
@@ -8,11 +9,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 const EMPTY_WAREHOUSE_FORM = {
   name: '', code: '', contactName: '', contactPhone: '',
-  city: '', state: '', pincode: '', address: {},
+  streetAddress: '', city: '', state: '', pincode: '', country: 'India',
   isFulfillment: false, isActive: true
 };
 
 const WarehousesAdminPage = () => {
+  const [searchParams] = useSearchParams();
   const [warehouses, setWarehouses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
@@ -33,18 +35,6 @@ const WarehousesAdminPage = () => {
   const [adjustQty, setAdjustQty] = useState('');
   const [adjustAlertLevel, setAdjustAlertLevel] = useState('');
   const [adjusting, setAdjusting] = useState(false);
-
-  // Stock Transfer state
-  const [transferModalOpen, setTransferModalOpen] = useState(false);
-  const [transferForm, setTransferForm] = useState({
-    fromWarehouseId: '',
-    toWarehouseId: '',
-    productId: '',
-    variantId: '',
-    quantity: ''
-  });
-  const [transferring, setTransferring] = useState(false);
-  const [allProductsList, setAllProductsList] = useState([]);
 
   // Load Warehouses
   const loadWarehouses = useCallback(async () => {
@@ -76,22 +66,25 @@ const WarehousesAdminPage = () => {
     }
   }, []);
 
-  // Load all products (for transfer dropdown selection)
-  const loadProducts = useCallback(async () => {
-    try {
-      const res = await api.get('/products?limit=1000');
-      if (res.data.success) {
-        setAllProductsList(res.data.products || []);
-      }
-    } catch (err) {
-      console.error('Failed to load products list', err);
-    }
-  }, []);
-
   useEffect(() => {
     loadWarehouses();
-    loadProducts();
-  }, [loadWarehouses, loadProducts]);
+  }, [loadWarehouses]);
+
+  // Read URL search params for deep linking from notification bell
+  useEffect(() => {
+    const whId = searchParams.get('warehouseId');
+    const lowStock = searchParams.get('lowStock');
+    if (lowStock === 'true') {
+      setOnlyLowStock(true);
+    }
+    if (whId && warehouses.length > 0) {
+      const targetWh = warehouses.find(w => w.id === parseInt(whId, 10));
+      if (targetWh) {
+        setSelectedWarehouse(targetWh);
+        loadWarehouseStock(targetWh.id);
+      }
+    }
+  }, [searchParams, warehouses, loadWarehouseStock]);
 
   // Handle warehouse inventory click
   const handleSelectWarehouse = (wh) => {
@@ -103,15 +96,17 @@ const WarehousesAdminPage = () => {
   const openWarehouseModal = (wh = null) => {
     if (wh) {
       setEditingWarehouse(wh);
+      const parsedAddress = wh.address || {};
       setWarehouseForm({
-        name: wh.name,
+        name: wh.name || '',
         code: wh.code || '',
         contactName: wh.contactName || '',
         contactPhone: wh.contactPhone || '',
+        streetAddress: parsedAddress.streetAddress || parsedAddress.street || '',
         city: wh.city || '',
         state: wh.state || '',
         pincode: wh.pincode || '',
-        address: wh.address || {},
+        country: parsedAddress.country || wh.country || 'India',
         isFulfillment: !!wh.isFulfillment,
         isActive: !!wh.isActive
       });
@@ -126,13 +121,29 @@ const WarehousesAdminPage = () => {
   const handleSaveWarehouse = async (e) => {
     e.preventDefault();
     try {
+      const payload = {
+        name: warehouseForm.name,
+        code: warehouseForm.code,
+        contactName: warehouseForm.contactName,
+        contactPhone: warehouseForm.contactPhone,
+        city: warehouseForm.city,
+        state: warehouseForm.state,
+        pincode: warehouseForm.pincode,
+        address: {
+          streetAddress: warehouseForm.streetAddress,
+          country: warehouseForm.country
+        },
+        isFulfillment: warehouseForm.isFulfillment,
+        isActive: warehouseForm.isActive
+      };
+
       if (editingWarehouse) {
-        const res = await api.put(`/warehouses/${editingWarehouse.id}`, warehouseForm);
+        const res = await api.put(`/warehouses/${editingWarehouse.id}`, payload);
         if (res.data.success) {
           toast.success('Warehouse updated successfully');
         }
       } else {
-        const res = await api.post('/warehouses', warehouseForm);
+        const res = await api.post('/warehouses', payload);
         if (res.data.success) {
           toast.success('Warehouse created successfully');
         }
@@ -159,9 +170,7 @@ const WarehousesAdminPage = () => {
     }
   };
 
-
-
-  // Delete/Deactivate warehouse direct from card
+  // Delete warehouse direct from card
   const handleDeleteWarehouseDirect = (wh) => {
     toast((t) => (
       <div className="flex flex-col gap-2 p-1 text-xs">
@@ -191,7 +200,7 @@ const WarehousesAdminPage = () => {
   // Open adjust stock modal
   const openAdjustStockModal = (stockItem) => {
     setSelectedStockItem(stockItem);
-    setAdjustAlertLevel(stockItem.reorderLevel || '10');
+    setAdjustAlertLevel(stockItem.reorderLevel !== undefined ? stockItem.reorderLevel : '10');
     setAdjustQty('');
     setAdjustMode('add');
     setAdjustModalOpen(true);
@@ -236,51 +245,6 @@ const WarehousesAdminPage = () => {
     }
   };
 
-  // Open transfer stock modal
-  const openTransferModal = (stockItem = null) => {
-    setTransferForm({
-      fromWarehouseId: selectedWarehouse ? selectedWarehouse.id : '',
-      toWarehouseId: '',
-      productId: stockItem ? stockItem.productId : '',
-      variantId: stockItem ? (stockItem.variantId || '') : '',
-      quantity: ''
-    });
-    setSelectedStockItem(stockItem);
-    setTransferModalOpen(true);
-  };
-
-  // Save stock transfer
-  const handleTransferSubmit = async (e) => {
-    e.preventDefault();
-    if (!transferForm.fromWarehouseId || !transferForm.toWarehouseId || !transferForm.productId || !transferForm.quantity) {
-      toast.error('Please fill in all required fields');
-      return;
-    }
-    setTransferring(true);
-
-    try {
-      const res = await api.post('/warehouses/transfer', {
-        fromWarehouseId: parseInt(transferForm.fromWarehouseId, 10),
-        toWarehouseId: parseInt(transferForm.toWarehouseId, 10),
-        productId: parseInt(transferForm.productId, 10),
-        variantId: transferForm.variantId ? parseInt(transferForm.variantId, 10) : null,
-        quantity: parseInt(transferForm.quantity, 10)
-      });
-
-      if (res.data.success) {
-        toast.success('Stock transferred successfully');
-        setTransferModalOpen(false);
-        if (selectedWarehouse) {
-          loadWarehouseStock(selectedWarehouse.id);
-        }
-      }
-    } catch (err) {
-      toast.error(err.response?.data?.message || err.message || 'Failed to transfer stock');
-    } finally {
-      setTransferring(false);
-    }
-  };
-
   // Helper to format attributes JSON
   const renderAttributes = (attributes) => {
     if (!attributes) return '';
@@ -302,11 +266,11 @@ const WarehousesAdminPage = () => {
 
   return (
     <AdminLayout title="Multi-Warehouse & Fulfillment Inventory">
-      {/* Overview Cards */}
+      {/* Overview Cards Header */}
       <div className="flex justify-between items-center mb-6">
         <div>
           <h2 className="text-lg font-semibold text-neutral-900">Warehouses Configuration</h2>
-          <p className="text-xs text-brand-grey">Setup procurement hubs and shipping centers</p>
+          <p className="text-xs text-brand-grey">Setup active warehouses and designate the single mandatory fulfillment hub</p>
         </div>
         <button
           onClick={() => openWarehouseModal()}
@@ -340,7 +304,7 @@ const WarehousesAdminPage = () => {
                       {w.isActive ? 'Active' : 'Inactive'}
                     </span>
                     {w.isFulfillment && (
-                      <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 bg-brand-gold/10 text-brand-gold">
+                      <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 bg-brand-gold/10 text-brand-gold border border-brand-gold/20">
                         Fulfillment Hub
                       </span>
                     )}
@@ -348,8 +312,9 @@ const WarehousesAdminPage = () => {
                 </div>
 
                 <div className="space-y-1 text-xs text-brand-grey mb-4">
-                  <p>📍 {w.city}, {w.state} {w.pincode}</p>
-                  <p>📞 {w.contactName} ({w.contactPhone})</p>
+                  {w.address?.streetAddress && <p>🏠 {w.address.streetAddress}</p>}
+                  <p>📍 {w.city}, {w.state} {w.pincode} {w.address?.country ? `(${w.address.country})` : ''}</p>
+                  <p>📞 {w.contactName || 'N/A'} ({w.contactPhone || 'N/A'})</p>
                 </div>
 
                 <div className="pt-4 border-t border-brand-light flex items-center justify-between">
@@ -396,7 +361,7 @@ const WarehousesAdminPage = () => {
               <h3 className="text-base font-semibold text-neutral-950 flex items-center gap-2">
                 📦 Stock Inventory: <span className="text-brand-gold">{selectedWarehouse.name}</span>
               </h3>
-              <p className="text-xs text-brand-grey mt-0.5">Manage quantities, custom reorder levels, and transfers</p>
+              <p className="text-xs text-brand-grey mt-0.5">Manage stock quantities and set custom reorder alert levels</p>
             </div>
             
             <div className="flex flex-wrap items-center gap-3">
@@ -422,14 +387,6 @@ const WarehousesAdminPage = () => {
                 />
                 Low Stock Only
               </label>
-
-              {/* Actions */}
-              <button
-                onClick={() => openTransferModal()}
-                className="px-3 py-1.5 bg-brand-gold text-white hover:bg-[#a8712a] text-xs font-semibold uppercase tracking-wider transition-all flex items-center gap-1.5 rounded-none"
-              >
-                <ArrowRightLeft size={13} /> Stock Transfer
-              </button>
             </div>
           </div>
 
@@ -482,20 +439,12 @@ const WarehousesAdminPage = () => {
                           )}
                         </td>
                         <td className="px-4 py-3 text-right whitespace-nowrap">
-                          <div className="inline-flex gap-2">
-                            <button
-                              onClick={() => openAdjustStockModal(item)}
-                              className="px-2 py-1 border border-neutral-300 text-neutral-700 hover:bg-neutral-50 font-semibold uppercase tracking-wider text-[10px]"
-                            >
-                              Adjust Qty
-                            </button>
-                            <button
-                              onClick={() => openTransferModal(item)}
-                              className="px-2 py-1 bg-neutral-900 text-white hover:bg-neutral-800 font-semibold uppercase tracking-wider text-[10px] flex items-center gap-1"
-                            >
-                              Ship / Transfer
-                            </button>
-                          </div>
+                          <button
+                            onClick={() => openAdjustStockModal(item)}
+                            className="px-3 py-1 bg-neutral-950 text-white hover:bg-neutral-800 font-semibold uppercase tracking-wider text-[10px] transition-colors"
+                          >
+                            Adjust Qty / Alert Level
+                          </button>
                         </td>
                       </tr>
                     );
@@ -521,10 +470,10 @@ const WarehousesAdminPage = () => {
               initial={{ opacity: 0, scale: 0.96 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.96 }}
-              className="bg-white border border-neutral-200 w-full max-w-lg shadow-xl overflow-hidden"
+              className="bg-white border border-neutral-200 w-full max-w-xl shadow-xl overflow-hidden"
             >
               <div className="flex items-center justify-between px-6 py-4 border-b border-brand-light bg-neutral-50">
-                <h3 className="font-playfair text-base font-semibold">{editingWarehouse ? 'Edit Warehouse Parameters' : 'Register New Warehouse'}</h3>
+                <h3 className="font-playfair text-base font-semibold">{editingWarehouse ? 'Edit Warehouse Details' : 'Register New Warehouse'}</h3>
                 <button onClick={() => setModalOpen(false)} className="text-brand-grey hover:text-brand-gold transition-colors"><X size={18} /></button>
               </div>
               <form onSubmit={handleSaveWarehouse} className="p-6 space-y-4">
@@ -537,18 +486,18 @@ const WarehousesAdminPage = () => {
                       value={warehouseForm.name}
                       onChange={e => setWarehouseForm(f => ({ ...f, name: e.target.value }))}
                       className="w-full border border-brand-light px-3 py-2 text-xs focus:outline-none focus:border-brand-gold rounded-none"
-                      placeholder="e.g. Mumbai Fulfillment Center"
+                      placeholder="e.g. Central Fulfillment Hub"
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] uppercase tracking-wider font-semibold text-brand-grey mb-1">Unique Code *</label>
+                    <label className="block text-[11px] uppercase tracking-wider font-semibold text-brand-grey mb-1">Unique Code / Unicode *</label>
                     <input
                       type="text"
                       required
                       value={warehouseForm.code}
                       onChange={e => setWarehouseForm(f => ({ ...f, code: e.target.value.toUpperCase().trim() }))}
                       className="w-full border border-brand-light px-3 py-2 text-xs focus:outline-none focus:border-brand-gold rounded-none font-mono"
-                      placeholder="e.g. IND-FULFILL"
+                      placeholder="e.g. WH-FULFILL-01"
                     />
                   </div>
                 </div>
@@ -561,7 +510,7 @@ const WarehousesAdminPage = () => {
                       value={warehouseForm.contactName}
                       onChange={e => setWarehouseForm(f => ({ ...f, contactName: e.target.value }))}
                       className="w-full border border-brand-light px-3 py-2 text-xs focus:outline-none focus:border-brand-gold rounded-none"
-                      placeholder="e.g. Vikram Sharma"
+                      placeholder="e.g. Manager Name"
                     />
                   </div>
                   <div>
@@ -576,6 +525,18 @@ const WarehousesAdminPage = () => {
                   </div>
                 </div>
 
+                {/* Street Address */}
+                <div>
+                  <label className="block text-[11px] uppercase tracking-wider font-semibold text-brand-grey mb-1">Street Address</label>
+                  <input
+                    type="text"
+                    value={warehouseForm.streetAddress}
+                    onChange={e => setWarehouseForm(f => ({ ...f, streetAddress: e.target.value }))}
+                    className="w-full border border-brand-light px-3 py-2 text-xs focus:outline-none focus:border-brand-gold rounded-none"
+                    placeholder="e.g. Plot No. 42, Industrial Area, Sector 5"
+                  />
+                </div>
+
                 <div className="grid sm:grid-cols-3 gap-3">
                   <div>
                     <label className="block text-[11px] uppercase tracking-wider font-semibold text-brand-grey mb-1">City</label>
@@ -584,6 +545,7 @@ const WarehousesAdminPage = () => {
                       value={warehouseForm.city}
                       onChange={e => setWarehouseForm(f => ({ ...f, city: e.target.value }))}
                       className="w-full border border-brand-light px-3 py-2 text-xs focus:outline-none focus:border-brand-gold rounded-none"
+                      placeholder="e.g. Mumbai"
                     />
                   </div>
                   <div>
@@ -593,6 +555,7 @@ const WarehousesAdminPage = () => {
                       value={warehouseForm.state}
                       onChange={e => setWarehouseForm(f => ({ ...f, state: e.target.value }))}
                       className="w-full border border-brand-light px-3 py-2 text-xs focus:outline-none focus:border-brand-gold rounded-none"
+                      placeholder="e.g. Maharashtra"
                     />
                   </div>
                   <div>
@@ -602,8 +565,20 @@ const WarehousesAdminPage = () => {
                       value={warehouseForm.pincode}
                       onChange={e => setWarehouseForm(f => ({ ...f, pincode: e.target.value }))}
                       className="w-full border border-brand-light px-3 py-2 text-xs focus:outline-none focus:border-brand-gold rounded-none font-mono"
+                      placeholder="e.g. 400001"
                     />
                   </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] uppercase tracking-wider font-semibold text-brand-grey mb-1">Country</label>
+                  <input
+                    type="text"
+                    value={warehouseForm.country}
+                    onChange={e => setWarehouseForm(f => ({ ...f, country: e.target.value }))}
+                    className="w-full border border-brand-light px-3 py-2 text-xs focus:outline-none focus:border-brand-gold rounded-none"
+                    placeholder="e.g. India"
+                  />
                 </div>
 
                 <div className="flex flex-col gap-3 pt-2">
@@ -614,7 +589,7 @@ const WarehousesAdminPage = () => {
                       onChange={e => setWarehouseForm(f => ({ ...f, isFulfillment: e.target.checked }))}
                       className="rounded border-neutral-350 text-brand-gold focus:ring-brand-gold accent-brand-gold"
                     />
-                    Mark as direct Fulfillment Warehouse (customer orders will ship from here)
+                    Mark as single Fulfillment Warehouse (stock will be automatically deducted from here upon order placement)
                   </label>
 
                   <div className="flex items-center justify-between bg-neutral-50 p-3 border border-brand-light">
@@ -690,7 +665,7 @@ const WarehousesAdminPage = () => {
                           : 'border-neutral-200 text-brand-grey hover:bg-neutral-50'
                       }`}
                     >
-                      {mode === 'add' ? '＋ Receive / Add' : mode === 'reduce' ? '－ Ship / Deduct' : '⚙️ Reorder level'}
+                      {mode === 'add' ? '＋ Receive / Add' : mode === 'reduce' ? '－ Deduct' : '⚙️ Reorder level'}
                     </button>
                   ))}
                 </div>
@@ -725,7 +700,7 @@ const WarehousesAdminPage = () => {
                     className="w-full border border-brand-light px-3 py-2 text-xs focus:outline-none focus:border-brand-gold rounded-none"
                     placeholder="e.g. 10"
                   />
-                  <p className="text-[10px] text-brand-grey mt-1">Triggers low stock warnings in admin panel when inventory falls below this limit.</p>
+                  <p className="text-[10px] text-brand-grey mt-1">Triggers low stock warnings in admin notification bell when inventory falls below this limit.</p>
                 </div>
 
                 <div className="flex justify-end gap-3 pt-4 border-t border-brand-light">
@@ -742,141 +717,6 @@ const WarehousesAdminPage = () => {
                     className="px-4 py-2 bg-neutral-950 text-white hover:bg-neutral-800 text-xs font-semibold uppercase tracking-wider transition-all disabled:opacity-50"
                   >
                     {adjusting ? 'Updating Stock...' : 'Apply Stock Update'}
-                  </button>
-                </div>
-              </form>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Stock Transfer Modal */}
-      <AnimatePresence>
-        {transferModalOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
-            onClick={e => e.target === e.currentTarget && setTransferModalOpen(false)}
-          >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.96 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.96 }}
-              className="bg-white border border-neutral-200 w-full max-w-lg shadow-xl overflow-hidden"
-            >
-              <div className="flex items-center justify-between px-6 py-4 border-b border-brand-light bg-neutral-50">
-                <h3 className="font-playfair text-base font-semibold flex items-center gap-2">
-                  <ArrowRightLeft size={16} /> Inter-Warehouse Stock Transfer
-                </h3>
-                <button onClick={() => setTransferModalOpen(false)} className="text-brand-grey hover:text-brand-gold transition-colors"><X size={18} /></button>
-              </div>
-              <form onSubmit={handleTransferSubmit} className="p-6 space-y-4">
-                <div className="grid sm:grid-cols-2 gap-4">
-                  {/* From Warehouse */}
-                  <div>
-                    <label className="block text-[11px] uppercase tracking-wider font-semibold text-brand-grey mb-1">Source Warehouse (From) *</label>
-                    <select
-                      required
-                      value={transferForm.fromWarehouseId}
-                      onChange={e => setTransferForm(f => ({ ...f, fromWarehouseId: e.target.value }))}
-                      className="w-full border border-brand-light bg-white px-3 py-2 text-xs focus:outline-none focus:border-brand-gold rounded-none"
-                    >
-                      <option value="">Select Source Warehouse</option>
-                      {warehouses.map(w => (
-                        <option key={w.id} value={w.id}>{w.name} ({w.code})</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* To Warehouse */}
-                  <div>
-                    <label className="block text-[11px] uppercase tracking-wider font-semibold text-brand-grey mb-1">Target Warehouse (To) *</label>
-                    <select
-                      required
-                      value={transferForm.toWarehouseId}
-                      onChange={e => setTransferForm(f => ({ ...f, toWarehouseId: e.target.value }))}
-                      className="w-full border border-brand-light bg-white px-3 py-2 text-xs focus:outline-none focus:border-brand-gold rounded-none"
-                    >
-                      <option value="">Select Target Warehouse</option>
-                      {warehouses
-                        .filter(w => String(w.id) !== String(transferForm.fromWarehouseId))
-                        .map(w => (
-                          <option key={w.id} value={w.id}>{w.name} ({w.code})</option>
-                        ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid sm:grid-cols-2 gap-4">
-                  {/* Product */}
-                  <div>
-                    <label className="block text-[11px] uppercase tracking-wider font-semibold text-brand-grey mb-1">Select Product *</label>
-                    <select
-                      required
-                      value={transferForm.productId}
-                      onChange={e => {
-                        const prodId = e.target.value;
-                        setTransferForm(f => ({ ...f, productId: prodId, variantId: '' }));
-                      }}
-                      className="w-full border border-brand-light bg-white px-3 py-2 text-xs focus:outline-none focus:border-brand-gold rounded-none"
-                    >
-                      <option value="">Choose Product</option>
-                      {allProductsList.map(p => (
-                        <option key={p.id} value={p.id}>{p.name}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Variant */}
-                  <div>
-                    <label className="block text-[11px] uppercase tracking-wider font-semibold text-brand-grey mb-1">Select Variant (Optional)</label>
-                    <select
-                      value={transferForm.variantId}
-                      onChange={e => setTransferForm(f => ({ ...f, variantId: e.target.value }))}
-                      disabled={!transferForm.productId}
-                      className="w-full border border-brand-light bg-white px-3 py-2 text-xs focus:outline-none focus:border-brand-gold rounded-none disabled:bg-neutral-50"
-                    >
-                      <option value="">Select Variant (or Default Product)</option>
-                      {allProductsList
-                        .find(p => String(p.id) === String(transferForm.productId))
-                        ?.variants?.map(v => (
-                          <option key={v.id} value={v.id}>{v.sku} ({renderAttributes(v.attributes)})</option>
-                        ))}
-                    </select>
-                  </div>
-                </div>
-
-                {/* Transfer Quantity */}
-                <div>
-                  <label className="block text-[11px] uppercase tracking-wider font-semibold text-brand-grey mb-1">Transfer Quantity *</label>
-                  <input
-                    type="number"
-                    required
-                    min="1"
-                    value={transferForm.quantity}
-                    onChange={e => setTransferForm(f => ({ ...f, quantity: e.target.value }))}
-                    className="w-full border border-brand-light px-3 py-2 text-xs focus:outline-none focus:border-brand-gold rounded-none"
-                    placeholder="Number of units to transfer"
-                  />
-                  <p className="text-[10px] text-brand-grey mt-1">Transfers the selected quantity, creating an audit log and deducting stock at source and incrementing at target.</p>
-                </div>
-
-                <div className="flex justify-end gap-3 pt-4 border-t border-brand-light">
-                  <button
-                    type="button"
-                    onClick={() => setTransferModalOpen(false)}
-                    className="px-4 py-2 border border-neutral-300 text-neutral-700 hover:bg-neutral-50 text-xs font-semibold uppercase tracking-wider transition-all"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={transferring}
-                    className="px-4 py-2 bg-brand-gold text-white hover:bg-[#a8712a] text-xs font-semibold uppercase tracking-wider transition-all disabled:opacity-50"
-                  >
-                    {transferring ? 'Executing Transfer...' : 'Complete Stock Transfer'}
                   </button>
                 </div>
               </form>

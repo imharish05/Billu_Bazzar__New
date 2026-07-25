@@ -19,6 +19,10 @@ const LoyaltyAdminPage = () => {
     redeemRate: 0.2,
     maxRedeemAmount: 500,
     expiryMonths: 2,
+    signupPointsEnabled: true,
+    signupPoints: 50,
+    reviewPointsEnabled: true,
+    reviewPoints: 20,
     earnRules: []
   });
 
@@ -36,7 +40,14 @@ const LoyaltyAdminPage = () => {
         setLedger(ledgerRes.data.ledger);
       }
       if (settingsRes.data.success && settingsRes.data.data) {
-        setSettings(settingsRes.data.data);
+        setSettings(prev => ({
+          ...prev,
+          ...settingsRes.data.data,
+          signupPointsEnabled: settingsRes.data.data.signupPointsEnabled ?? true,
+          signupPoints: settingsRes.data.data.signupPoints ?? 50,
+          reviewPointsEnabled: settingsRes.data.data.reviewPointsEnabled ?? true,
+          reviewPoints: settingsRes.data.data.reviewPoints ?? 20,
+        }));
       }
     } catch (err) {
       console.error(err);
@@ -190,7 +201,66 @@ const LoyaltyAdminPage = () => {
               </div>
               
               <div className="border-t border-brand-light pt-6">
-                <h3 className="font-medium mb-4">"How to Earn More" Instructions</h3>
+                <h3 className="font-semibold text-sm text-brand-text mb-3">Automatic Action Rewards (Dynamic Points & Toggles)</h3>
+                
+                <div className="space-y-4 bg-brand-light/20 p-4 rounded-lg border border-brand-light">
+                  {/* Signup Bonus */}
+                  <div className="flex items-center justify-between gap-4">
+                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={settings.signupPointsEnabled}
+                        onChange={e => setSettings({ ...settings, signupPointsEnabled: e.target.checked })}
+                        className="w-4 h-4 accent-brand-gold rounded cursor-pointer"
+                        id="chk-signup-points"
+                      />
+                      <span className="text-sm font-medium text-brand-text">New Registration / Signup Bonus</span>
+                    </label>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="number"
+                        min="0"
+                        value={settings.signupPoints}
+                        onChange={e => setSettings({ ...settings, signupPoints: Number(e.target.value) })}
+                        disabled={!settings.signupPointsEnabled}
+                        className="w-24 border border-brand-light rounded p-1.5 text-sm focus:border-brand-gold outline-none disabled:bg-neutral-100 disabled:text-neutral-400 font-semibold text-right"
+                        id="input-signup-points"
+                      />
+                      <span className="text-xs text-brand-grey">pts</span>
+                    </div>
+                  </div>
+
+                  {/* Review Bonus */}
+                  <div className="flex items-center justify-between gap-4">
+                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={settings.reviewPointsEnabled}
+                        onChange={e => setSettings({ ...settings, reviewPointsEnabled: e.target.checked })}
+                        className="w-4 h-4 accent-brand-gold rounded cursor-pointer"
+                        id="chk-review-points"
+                      />
+                      <span className="text-sm font-medium text-brand-text">Product Review Reward</span>
+                    </label>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="number"
+                        min="0"
+                        value={settings.reviewPoints}
+                        onChange={e => setSettings({ ...settings, reviewPoints: Number(e.target.value) })}
+                        disabled={!settings.reviewPointsEnabled}
+                        className="w-24 border border-brand-light rounded p-1.5 text-sm focus:border-brand-gold outline-none disabled:bg-neutral-100 disabled:text-neutral-400 font-semibold text-right"
+                        id="input-review-points"
+                      />
+                      <span className="text-xs text-brand-grey">pts</span>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+
+              <div className="border-t border-brand-light pt-6">
+                <h3 className="font-medium mb-4">"How to Earn More" Custom Display Rules</h3>
                 {settings.earnRules && settings.earnRules.map((rule, idx) => (
                   <div key={idx} className="flex gap-2 mb-3">
                     <input type="text" placeholder="Action (e.g. Write a review)" value={rule.action} onChange={e => handleRuleChange(idx, 'action', e.target.value)} className="flex-1 border border-brand-light rounded p-2 focus:border-brand-gold outline-none" required />

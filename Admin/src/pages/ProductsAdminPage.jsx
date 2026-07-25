@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Search, Edit2, Trash2, X, Upload, ChevronLeft, ChevronRight, ChevronDown, Check, Eye, Play, Pause, RotateCw, Sparkles, Box, ShieldCheck, Tag, Camera } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
 import Switch from '../components/Switch';
+import { PaginationTop, PaginationBottom } from '../components/Pagination';
 import { fetchAdminProducts, createProduct, updateProduct, deleteProduct } from '../redux/slices/productsSlice';
 import currencyJs from 'currency.js';
 import toast from 'react-hot-toast';
@@ -11,11 +12,36 @@ import api from '../services/api';
 
 const fmt = (v) => currencyJs(v, { symbol: '₹', precision: 0 }).format();
 
+/** Map color names to CSS color values for visual swatch rendering in Admin */
+const COLOR_MAP = {
+  red: '#e53e3e', crimson: '#dc143c', maroon: '#800000', pink: '#f687b3', rose: '#f43f5e', magenta: '#d53f8c', hotpink: '#ff69b4', blush: '#ffb6c1',
+  blue: '#3b82f6', navy: '#1e3a8a', cobalt: '#0047ab', royal: '#4169e1', sky: '#38bdf8', cyan: '#06b6d4', teal: '#0d9488', aqua: '#00ffff',
+  green: '#22c55e', olive: '#6b8e23', mint: '#3eb489', emerald: '#10b981', forest: '#228b22', lime: '#84cc16', sage: '#9dc183',
+  yellow: '#f59e0b', gold: '#b8860b', amber: '#f59e0b', lemon: '#fff44f', mustard: '#ffdb58',
+  orange: '#f97316', coral: '#ff6b6b', salmon: '#fa8072', peach: '#ffcba4',
+  purple: '#9333ea', lavender: '#c4b5fd', violet: '#7c3aed', indigo: '#6366f1', mauve: '#9f8fba', plum: '#8b008b', lilac: '#c8a2c8', burgundy: '#800020',
+  brown: '#92400e', tan: '#d2b48c', beige: '#f5f5dc', caramel: '#c68642', chocolate: '#7b3f00', coffee: '#6f4e37',
+  black: '#111111', charcoal: '#374151', grey: '#9ca3af', gray: '#9ca3af', silver: '#c0c0c0', ash: '#b2beb5',
+  white: '#ffffff', cream: '#fffdd0', ivory: '#fffff0', off: '#faf9f6',
+  multicolor: 'linear-gradient(135deg,#e53e3e 0%,#f59e0b 25%,#22c55e 50%,#3b82f6 75%,#9333ea 100%)',
+  multi: 'linear-gradient(135deg,#e53e3e 0%,#f59e0b 25%,#22c55e 50%,#3b82f6 75%,#9333ea 100%)',
+};
+
+const resolveColor = (name = '') => {
+  if (!name) return '#cccccc';
+  const lower = String(name).toLowerCase().trim();
+  if (COLOR_MAP[lower]) return COLOR_MAP[lower];
+  for (const [key, val] of Object.entries(COLOR_MAP)) {
+    if (lower.includes(key)) return val;
+  }
+  return lower;
+};
+
 const PRESET_OPTION_NAMES = ['Size', 'Color', 'Material', 'Fabric', 'Style', 'Metal Purity', 'Pattern', 'Weight'];
 
 const PRESET_VALUES_BY_OPTION = {
   Size: ['FREE SIZE', 'XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL'],
-  Color: ['Red', 'Blue', 'Green', 'Black', 'White', 'Gold', 'Silver', 'Maroon', 'Navy', 'Pink'],
+  Color: ['Red', 'Blue', 'Black', 'Green', 'Maroon', 'Pink', 'Gold', 'Purple', 'Navy', 'Yellow', 'White', 'Orange', 'Teal', 'Grey', 'Emerald', 'Burgundy', 'Beige', 'Lavender', 'Peach', 'Olive'],
   Material: ['Silk', 'Cotton', 'Denim', 'Leather', 'Wool', 'Linen', 'Velvet'],
   Fabric: ['Georgette', 'Chiffon', 'Organza', 'Satin', 'Crepe', 'Rayon'],
   Style: ['Casual', 'Ethnic', 'Party', 'Formal', 'Boho'],
@@ -48,8 +74,8 @@ const OptionTypeSelect = ({ value, onChange, usedOptions = [] }) => {
 
   const handleSelect = (selectedName) => {
     const isUsedByOther = usedOptions.some(
-      u => u.trim().toLowerCase() === selectedName.trim().toLowerCase() &&
-           u.trim().toLowerCase() !== (value || '').trim().toLowerCase()
+      u => String(u || '').trim().toLowerCase() === String(selectedName || '').trim().toLowerCase() &&
+           String(u || '').trim().toLowerCase() !== String(value || '').trim().toLowerCase()
     );
     if (isUsedByOther) {
       toast.error(`Option type '${selectedName}' is already added!`);
@@ -95,10 +121,10 @@ const OptionTypeSelect = ({ value, onChange, usedOptions = [] }) => {
           {/* Options List */}
           <div className="max-h-48 overflow-y-auto space-y-1 custom-scrollbar py-0.5">
             {filteredPresets.map((name) => {
-              const isSelected = value && value.trim().toLowerCase() === name.trim().toLowerCase();
+              const isSelected = value && String(value || '').trim().toLowerCase() === name.trim().toLowerCase();
               const isUsedByOther = usedOptions.some(
-                u => u.trim().toLowerCase() === name.trim().toLowerCase() &&
-                     u.trim().toLowerCase() !== (value || '').trim().toLowerCase()
+                u => String(u || '').trim().toLowerCase() === name.trim().toLowerCase() &&
+                     String(u || '').trim().toLowerCase() !== String(value || '').trim().toLowerCase()
               );
 
               return (
@@ -485,12 +511,29 @@ const ProductModal = ({ product, onClose, onSave }) => {
   const [optionRows, setOptionRows] = useState(() => {
     if (product && product.attributes && Object.keys(product.attributes).length > 0) {
       const attrs = typeof product.attributes === 'string' ? JSON.parse(product.attributes) : product.attributes;
-      return Object.entries(attrs).map(([k, v], i) => ({
-        id: Date.now() + i,
-        optionName: k,
-        optionValue: v,
-        colorHex: k.toLowerCase() === 'color' && v.startsWith('#') ? v : '#8B0000',
-      }));
+      if (Array.isArray(attrs)) {
+        return attrs.map((item, i) => {
+          const k = String(item?.key || item?.name || item?.optionName || `Option ${i + 1}`);
+          const v = item?.values || item?.value || item?.optionValue || '';
+          const valStr = Array.isArray(v) ? v.join(', ') : (v !== null && v !== undefined ? String(v) : '');
+          return {
+            id: Date.now() + i,
+            optionName: k,
+            optionValue: valStr,
+            colorHex: k.toLowerCase() === 'color' && valStr.startsWith('#') ? valStr : '#8B0000',
+          };
+        });
+      }
+      return Object.entries(attrs).map(([k, v], i) => {
+        const keyStr = String(k || '');
+        const valStr = Array.isArray(v) ? v.join(', ') : (v !== null && v !== undefined ? String(v) : '');
+        return {
+          id: Date.now() + i,
+          optionName: keyStr,
+          optionValue: valStr,
+          colorHex: keyStr.toLowerCase() === 'color' && valStr.startsWith('#') ? valStr : '#8B0000',
+        };
+      });
     }
     return [{ id: Date.now(), optionName: 'Size', optionValue: '', colorHex: '#8B0000' }];
   });
@@ -514,7 +557,11 @@ const ProductModal = ({ product, onClose, onSave }) => {
 
   // Real-time auto-sync variant combinations from Section 4 optionRows
   useEffect(() => {
-    const validRows = optionRows.filter(r => r.optionName.trim() !== '' && r.optionValue.trim() !== '');
+    const validRows = optionRows.filter(r => {
+      const name = String(r.optionName || '');
+      const val = Array.isArray(r.optionValue) ? r.optionValue.join(', ') : String(r.optionValue || '');
+      return name.trim() !== '' && val.trim() !== '';
+    });
     if (validRows.length === 0) {
       setProductVariants([]);
       return;
@@ -522,8 +569,9 @@ const ProductModal = ({ product, onClose, onSave }) => {
 
     const optionMap = [];
     validRows.forEach(r => {
-      const name = r.optionName.trim();
-      const vals = r.optionValue.split(',').map(v => v.trim()).filter(Boolean);
+      const name = String(r.optionName || '').trim();
+      const valStr = Array.isArray(r.optionValue) ? r.optionValue.join(', ') : String(r.optionValue || '');
+      const vals = valStr.split(',').map(v => v.trim()).filter(Boolean);
       if (vals.length > 0) {
         optionMap.push({ name, vals });
       }
@@ -706,6 +754,18 @@ const ProductModal = ({ product, onClose, onSave }) => {
   }, []);
 
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
+
+  const handleNameChange = (nameVal) => {
+    setForm(p => {
+      const isSkuAuto = !p.sku || p.sku.startsWith('SKU-') || p.sku.startsWith('PROD-');
+      let newSku = p.sku;
+      if (isSkuAuto) {
+        const cleanCode = nameVal.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
+        newSku = cleanCode ? `SKU-${cleanCode}` : '';
+      }
+      return { ...p, name: nameVal, sku: newSku };
+    });
+  };
 
   // Filtered Subcategories & SubSubcategories
   const filteredSubCategories = subCategories.filter(
@@ -948,7 +1008,12 @@ const ProductModal = ({ product, onClose, onSave }) => {
       toast.error('Product Name is required');
       return;
     }
-    if (!form.sku || form.sku.trim() === '') {
+    let finalProductSku = form.sku ? form.sku.trim() : '';
+    if (!finalProductSku && form.name) {
+      const cleanCode = form.name.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
+      finalProductSku = cleanCode ? `SKU-${cleanCode}` : `PROD-${Date.now()}`;
+    }
+    if (!finalProductSku) {
       toast.error('SKU is required');
       return;
     }
@@ -957,7 +1022,11 @@ const ProductModal = ({ product, onClose, onSave }) => {
       return;
     }
 
-    const validOptions = optionRows.filter(r => r.optionName.trim() !== '' && r.optionValue.trim() !== '');
+    const validOptions = optionRows.filter(r => {
+      const name = String(r.optionName || '');
+      const val = Array.isArray(r.optionValue) ? r.optionValue.join(', ') : String(r.optionValue || '');
+      return name.trim() !== '' && val.trim() !== '';
+    });
     if (validOptions.length === 0) {
       toast.error('At least 1 variant option is required before publishing');
       return;
@@ -1018,7 +1087,7 @@ const ProductModal = ({ product, onClose, onSave }) => {
 
     const fd = new FormData();
     fd.append('productName', form.name.trim());
-    fd.append('sku', form.sku.trim());
+    fd.append('sku', finalProductSku);
     fd.append('slug', generatedSlug);
     fd.append('price', form.price === '' ? '0' : String(form.price));
     fd.append('comparePrice', form.comparePrice === '' ? '' : String(form.comparePrice));
@@ -1108,7 +1177,9 @@ const ProductModal = ({ product, onClose, onSave }) => {
     ],
     spin_images: combinedSpinPreviews,
     attributes: optionRows.reduce((acc, r) => {
-      if (r.optionName && r.optionValue) acc[r.optionName] = r.optionValue;
+      const name = String(r.optionName || '').trim();
+      const val = Array.isArray(r.optionValue) ? r.optionValue.join(', ') : String(r.optionValue || '');
+      if (name && val) acc[name] = val;
       return acc;
     }, {}),
     category: categories.find(c => String(c.id) === String(form.categoryId)),
@@ -1161,10 +1232,23 @@ const ProductModal = ({ product, onClose, onSave }) => {
                 <input
                   type="text"
                   value={form.name}
-                  onChange={e => set('name', e.target.value)}
+                  onChange={e => handleNameChange(e.target.value)}
                   required
                   placeholder="e.g. Emerald Silk Kaftan"
                   className="w-full border border-brand-light px-3 py-2 text-sm focus:outline-none focus:border-brand-gold rounded-sm bg-white"
+                />
+              </div>
+
+              {/* Product SKU */}
+              <div>
+                <label className="block text-xs font-semibold text-neutral-700 mb-1">Product SKU *</label>
+                <input
+                  type="text"
+                  value={form.sku}
+                  onChange={e => set('sku', e.target.value)}
+                  required
+                  placeholder="e.g. SKU-EMERALD"
+                  className="w-full border border-brand-light px-3 py-2 text-sm focus:outline-none focus:border-brand-gold rounded-sm bg-white font-mono uppercase"
                 />
               </div>
 
@@ -1496,9 +1580,12 @@ const ProductModal = ({ product, onClose, onSave }) => {
 
             <div className="space-y-4">
               {optionRows.map((row) => {
-                const isColor = row.optionName.toLowerCase() === 'color';
-                const selectedValue = (row.optionValue || '').trim();
-                const presets = PRESET_VALUES_BY_OPTION[row.optionName] || PRESET_VALUES_BY_OPTION['Size'];
+                const optName = String(row.optionName || '');
+                const isColor = optName.toLowerCase() === 'color';
+                const selectedValue = Array.isArray(row.optionValue)
+                  ? row.optionValue.join(', ').trim()
+                  : String(row.optionValue || '').trim();
+                const presets = PRESET_VALUES_BY_OPTION[optName] || PRESET_VALUES_BY_OPTION['Size'];
 
                 const toggleValue = (valToToggle) => {
                   const nextValue = selectedValue === valToToggle ? '' : valToToggle;
@@ -1594,13 +1681,19 @@ const ProductModal = ({ product, onClose, onSave }) => {
                             key={val}
                             type="button"
                             onClick={() => toggleValue(val)}
-                            className={`text-xs font-medium px-3.5 py-1.5 rounded-full border transition-all cursor-pointer ${
+                            className={`text-xs font-medium px-3.5 py-1.5 rounded-full border transition-all cursor-pointer flex items-center gap-1.5 ${
                               isSelected
                                 ? 'border-2 border-emerald-500 bg-emerald-50 text-emerald-950 font-bold shadow-sm'
                                 : 'border-neutral-200 bg-white hover:bg-neutral-100 text-neutral-700'
                             }`}
                           >
-                            {val}
+                            {isColor && (
+                              <span
+                                className="w-3.5 h-3.5 rounded-full border border-neutral-300 shadow-sm flex-shrink-0 inline-block"
+                                style={{ background: resolveColor(val) }}
+                              />
+                            )}
+                            <span>{val}</span>
                           </button>
                         );
                       })}
@@ -1610,10 +1703,16 @@ const ProductModal = ({ product, onClose, onSave }) => {
                         <button
                           type="button"
                           onClick={() => toggleValue(selectedValue)}
-                          className="text-xs font-bold px-3 py-1.5 rounded-full border-2 border-emerald-500 bg-emerald-50 text-emerald-950 flex items-center gap-1 shadow-sm"
+                          className="text-xs font-bold px-3 py-1.5 rounded-full border-2 border-emerald-500 bg-emerald-50 text-emerald-950 flex items-center gap-1.5 shadow-sm"
                         >
+                          {isColor && (
+                            <span
+                              className="w-3.5 h-3.5 rounded-full border border-neutral-300 shadow-sm flex-shrink-0 inline-block"
+                              style={{ background: resolveColor(selectedValue) }}
+                            />
+                          )}
                           <span>{selectedValue}</span>
-                          <X size={12} className="text-emerald-700 hover:text-red-600" />
+                          <X size={12} className="text-emerald-700 hover:text-red-600 ml-0.5" />
                         </button>
                       )}
                     </div>
@@ -2021,15 +2120,17 @@ const ProductModal = ({ product, onClose, onSave }) => {
 // ── Main Products Admin Page ────────────────────────────────────────────────
 const ProductsAdminPage = () => {
   const dispatch = useDispatch();
-  const { items, loading, total } = useSelector(s => s.products);
+  const { items, loading, total, totalPages, page: serverPage, limit: serverLimit } = useSelector(s => s.products);
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [previewProduct, setPreviewProduct] = useState(null);
 
   useEffect(() => {
-    dispatch(fetchAdminProducts({ search: search || undefined }));
-  }, [search, dispatch]);
+    dispatch(fetchAdminProducts({ search: search || undefined, page, limit }));
+  }, [search, page, limit, dispatch]);
 
   const handleSave = async (form) => {
     try {
@@ -2090,28 +2191,22 @@ const ProductsAdminPage = () => {
 
   return (
     <AdminLayout title="Products">
-      <div className="mb-6 flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-brand-grey" />
-          <input
-            type="search"
-            placeholder="Search products..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2.5 border border-brand-light text-sm focus:outline-none focus:border-brand-gold"
-            id="products-search"
-            aria-label="Search products"
-          />
-        </div>
+      <div className="mb-6 flex justify-end">
         <button onClick={() => { setEditing(null); setModalOpen(true); }} className="btn-primary flex items-center gap-2 whitespace-nowrap" id="add-product-btn">
           <Plus size={16} /> Add Product
         </button>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-        <div className="px-5 py-3 border-b border-brand-light flex items-center justify-between">
-          <p className="text-sm text-brand-grey">{total} products</p>
-        </div>
+        <PaginationTop
+          search={search}
+          onSearchChange={(s) => { setSearch(s); setPage(1); }}
+          searchPlaceholder="Search products..."
+          currentPage={page}
+          totalItems={total || 0}
+          limit={limit}
+          onLimitChange={(l) => { setLimit(l); setPage(1); }}
+        />
         <div className="overflow-x-auto">
           <table className="w-full text-sm" aria-label="Products table">
             <thead>
@@ -2175,6 +2270,12 @@ const ProductsAdminPage = () => {
             </tbody>
           </table>
         </div>
+        <PaginationBottom
+          currentPage={page}
+          totalPages={totalPages || 1}
+          totalItems={total || 0}
+          onPageChange={(p) => setPage(p)}
+        />
       </div>
 
       <AnimatePresence>

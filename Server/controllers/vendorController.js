@@ -15,17 +15,58 @@ const handleDBError = (err, res, type = 'item') => {
   return res.status(500).json({ success: false, message: err.message });
 };
 
+const parseVendorAddress = (v) => {
+  const plain = v.get({ plain: true });
+  if (typeof plain.address === 'string') {
+    try { plain.address = JSON.parse(plain.address); } catch (e) { plain.address = {}; }
+  }
+  return plain;
+};
+
 const getAll = async (req, res) => {
   try {
-    const { all } = req.query;
+    const { all, page, limit, search } = req.query;
+    const { Op } = require('sequelize');
     const where = {};
     if (!all) where.isActive = true;
+    if (search) {
+      where[Op.or] = [
+        { name: { [Op.like]: `%${search}%` } },
+        { email: { [Op.like]: `%${search}%` } },
+        { gstin: { [Op.like]: `%${search}%` } }
+      ];
+    }
 
-    const vendors = await Vendor.findAll({
+    if (page !== undefined || limit !== undefined) {
+      const p = Math.max(1, parseInt(page || 1, 10));
+      const l = Math.max(1, parseInt(limit || 10, 10));
+
+      const { count, rows: rawVendors } = await Vendor.findAndCountAll({
+        where,
+        order: [['createdAt', 'DESC']],
+        include: [{ model: Product, as: 'products', attributes: ['id', 'name', 'slug', 'stock'] }],
+        limit: l,
+        offset: (p - 1) * l
+      });
+
+      const vendors = rawVendors.map(parseVendorAddress);
+      return res.json({
+        success: true,
+        vendors,
+        total: count,
+        page: p,
+        limit: l,
+        totalPages: Math.ceil(count / l)
+      });
+    }
+
+    const rawVendors = await Vendor.findAll({
       where,
       order: [['createdAt', 'DESC']],
       include: [{ model: Product, as: 'products', attributes: ['id', 'name', 'slug', 'stock'] }],
     });
+
+    const vendors = rawVendors.map(parseVendorAddress);
     res.json({ success: true, vendors });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -34,10 +75,12 @@ const getAll = async (req, res) => {
 
 const getOne = async (req, res) => {
   try {
-    const vendor = await Vendor.findByPk(req.params.id, {
+    const rawVendor = await Vendor.findByPk(req.params.id, {
       include: [{ model: Product, as: 'products', attributes: ['id', 'name', 'slug', 'price', 'stock'] }],
     });
-    if (!vendor) return res.status(404).json({ success: false, message: 'Vendor not found' });
+    if (!rawVendor) return res.status(404).json({ success: false, message: 'Vendor not found' });
+    
+    const vendor = parseVendorAddress(rawVendor);
     res.json({ success: true, vendor });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });

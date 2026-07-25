@@ -21,6 +21,7 @@ const Order = sequelize.define('Order', {
       'OUT_FOR_DELIVERY', 
       'DELIVERED', 
       'CANCELLED', 
+      'RTO',
       'RETURNED', 
       'REFUNDED',
       'EXPIRED'

@@ -4,7 +4,7 @@ import AdminLayout from '../components/AdminLayout';
 import api from '../services/api';
 import toast from 'react-hot-toast';
 
-const TABS = ['General', 'Security & OTP', 'Shipping', 'Payments', 'Users'];
+const TABS = ['General', 'Inventory Alerts', 'Security & OTP', 'Shipping', 'Payments', 'Users'];
 
 const SettingsAdminPage = () => {
   const [tab, setTab] = useState('General');
@@ -12,33 +12,66 @@ const SettingsAdminPage = () => {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // OTP Verification Thresholds (Admin Configurable)
+  // OTP Verification Thresholds
   const [otpSettings, setOtpSettings] = useState({
     inrThreshold: 20000,
     aedThreshold: 800,
     requireCodOtp: true,
   });
 
-  // Fetch OTP settings on mount
+  // Global Inventory Low-Stock Alert Threshold
+  const [inventorySettings, setInventorySettings] = useState({
+    globalLowStockThreshold: 10,
+  });
+
+  // Fetch settings on mount
   useEffect(() => {
-    fetchOtpSettings();
+    fetchSettings();
   }, []);
 
-  const fetchOtpSettings = async () => {
+  const fetchSettings = async () => {
     setLoading(true);
     try {
-      const res = await api.get('/settings/otp_threshold');
-      if (res.data?.success && res.data?.data) {
+      const [otpRes, invRes] = await Promise.all([
+        api.get('/settings/otp_threshold'),
+        api.get('/settings/inventory')
+      ]);
+
+      if (otpRes.data?.success && otpRes.data?.data) {
         setOtpSettings({
-          inrThreshold: res.data.data.inrThreshold ?? 20000,
-          aedThreshold: res.data.data.aedThreshold ?? 800,
-          requireCodOtp: res.data.data.requireCodOtp ?? true,
+          inrThreshold: otpRes.data.data.inrThreshold ?? 20000,
+          aedThreshold: otpRes.data.data.aedThreshold ?? 800,
+          requireCodOtp: otpRes.data.data.requireCodOtp ?? true,
+        });
+      }
+
+      if (invRes.data?.success && invRes.data?.data) {
+        setInventorySettings({
+          globalLowStockThreshold: invRes.data.data.globalLowStockThreshold ?? 10,
         });
       }
     } catch (err) {
-      console.warn('Failed to load OTP settings, using defaults:', err.message);
+      console.warn('Failed to load settings, using defaults:', err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSaveInventorySettings = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      const payload = {
+        globalLowStockThreshold: Number(inventorySettings.globalLowStockThreshold) || 10,
+      };
+      await api.post('/settings/inventory', { data: payload });
+      toast.success('Global Inventory low-stock threshold updated!');
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to update inventory settings');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -102,7 +135,40 @@ const SettingsAdminPage = () => {
       </div>
 
       <div className="bg-white rounded-xl shadow-sm p-6 max-w-2xl border border-neutral-100">
-        {tab === 'Security & OTP' ? (
+        {tab === 'Inventory Alerts' ? (
+          <form onSubmit={handleSaveInventorySettings} className="space-y-6">
+            <div className="flex items-center gap-2 pb-3 border-b border-neutral-100">
+              <Save className="text-brand-gold" size={20} />
+              <div>
+                <h2 className="text-base font-semibold text-neutral-900">Global Inventory Stock Alert Threshold</h2>
+                <p className="text-xs text-neutral-500">Global default limit to trigger low stock warnings in the top notification bell across all warehouses.</p>
+              </div>
+            </div>
+            {loading ? (
+              <div className="py-8 text-center text-xs text-neutral-400 flex items-center justify-center gap-2">
+                <RefreshCw size={16} className="animate-spin text-brand-gold" /> Loading inventory settings…
+              </div>
+            ) : (
+              <>
+                <Field
+                  label="Global Low Stock Threshold (units)"
+                  id="inv-global-threshold"
+                  type="number"
+                  value={inventorySettings.globalLowStockThreshold}
+                  onChange={e => setInventorySettings(s => ({ ...s, globalLowStockThreshold: e.target.value }))}
+                  helpText="When stock in the fulfillment hub or any warehouse falls to or below this unit limit, an alert triggers in the header notification bell."
+                />
+                <div className="pt-4 border-t border-brand-light flex items-center gap-3">
+                  <button type="submit" disabled={saving} className="btn-primary flex items-center gap-2 text-sm px-5 py-2.5" id="settings-save-inv">
+                    {saving ? <RefreshCw size={15} className="animate-spin" /> : <Save size={15} />}
+                    {saving ? 'Saving...' : 'Save Inventory Threshold'}
+                  </button>
+                  {saved && <span className="text-green-600 text-sm font-semibold">✓ Threshold updated!</span>}
+                </div>
+              </>
+            )}
+          </form>
+        ) : tab === 'Security & OTP' ? (
           <form onSubmit={handleSaveOtpSettings} className="space-y-6">
             <div className="flex items-center gap-2 pb-3 border-b border-neutral-100">
               <ShieldCheck className="text-brand-gold" size={20} />

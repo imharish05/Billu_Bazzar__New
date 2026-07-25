@@ -7,6 +7,7 @@ import ScrollToTop from './components/ScrollToTop';
 import Navbar from './components/Navbar';
 import CartDrawer from './components/CartDrawer';
 import QuickViewModal from './components/QuickViewModal';
+import RegisterPopup from './components/RegisterPopup';
 import HomePage from './pages/HomePage';
 import ProductListingPage from './pages/ProductListingPage';
 import ProductDetailsPage from './pages/ProductDetailsPage';
@@ -102,6 +103,7 @@ const App = () => {
       <Navbar />
       <CartDrawer />
       <QuickViewModal />
+      <RegisterPopup />
       <Toaster
         position="top-right"
         toastOptions={{

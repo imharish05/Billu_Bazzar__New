@@ -29,6 +29,10 @@ const processProductData = (req) => {
     data.name = data.productName.trim();
   }
 
+  if (data.sku !== undefined) {
+    data.sku = (typeof data.sku === 'string' && data.sku.trim() !== '') ? data.sku.trim() : null;
+  }
+
   // Helper to safely parse JSON strings
   const parseJsonField = (field) => {
     if (typeof field === 'string') {

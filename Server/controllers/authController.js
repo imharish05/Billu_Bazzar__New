@@ -1,7 +1,7 @@
 'use strict';
 const bcrypt = require('bcryptjs');
 const { signAccessToken, signRefreshToken, verifyAccessToken, verifyRefreshToken } = require('../config/jwt');
-const { Customer, AdminUser, Role } = require('../models');
+const { Customer, AdminUser, Role, SiteSetting, LoyaltyLedger } = require('../models');
 const { v4: uuidv4 } = require('uuid');
 
 // ── Phone Number Validation Helper ───────────────────────────────────────────
@@ -174,13 +174,35 @@ const register = async (req, res) => {
     const exists = await Customer.findOne({ where: { email } });
     if (exists) return res.status(409).json({ success: false, message: 'Email already registered' });
 
+    // Fetch site loyalty settings for signup bonus points
+    const siteSetting = await SiteSetting.findOne({ where: { key: 'loyalty' } });
+    let loyaltySettings = { signupPointsEnabled: true, signupPoints: 50 };
+    if (siteSetting && siteSetting.value) {
+      try { loyaltySettings = { ...loyaltySettings, ...JSON.parse(siteSetting.value) }; } catch (e) {}
+    }
+
+    let initialPoints = 0;
+    if (loyaltySettings.signupPointsEnabled !== false && Number(loyaltySettings.signupPoints || 0) > 0) {
+      initialPoints = Number(loyaltySettings.signupPoints);
+    }
+
     const hashed = await bcrypt.hash(password, 12);
     const referralCode = uuidv4().slice(0, 8).toUpperCase();
-    const customer = await Customer.create({ name, email, password: hashed, phone, referralCode });
+    const customer = await Customer.create({ name, email, password: hashed, phone, referralCode, loyaltyPoints: initialPoints });
+
+    if (initialPoints > 0) {
+      await LoyaltyLedger.create({
+        customerId: customer.id,
+        type: 'BONUS',
+        points: initialPoints,
+        balance: initialPoints,
+        description: 'Welcome Registration Bonus Points'
+      });
+    }
 
     const token = signAccessToken({ id: customer.id });
     const refreshToken = signRefreshToken({ id: customer.id });
-    res.status(201).json({ success: true, token, refreshToken });
+    res.status(201).json({ success: true, token, refreshToken, bonusPointsEarned: initialPoints });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

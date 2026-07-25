@@ -57,12 +57,19 @@ const defaultLoyaltySettings = {
   redeemRate: 0.2,
   maxRedeemAmount: 500,
   expiryMonths: 2,
+  signupPointsEnabled: true,
+  signupPoints: 50,
+  reviewPointsEnabled: true,
+  reviewPoints: 20,
   earnRules: [
     { id: '1', action: 'Every ₹100 spent', points: '+5 points' },
-    { id: '2', action: 'Write a review', points: '+50 points' },
-    { id: '3', action: 'Refer a friend', points: '+200 points' },
-    { id: '4', action: 'Birthday bonus', points: '+500 points' }
+    { id: '2', action: 'New Account Registration', points: '+50 points' },
+    { id: '3', action: 'Write a product review', points: '+20 points' }
   ]
+};
+
+const defaultInventorySettings = {
+  globalLowStockThreshold: 10,
 };
 
 const getSetting = async (req, res) => {
@@ -79,9 +86,16 @@ const getSetting = async (req, res) => {
       if (key === 'loyalty') {
         return res.json({ success: true, key, data: defaultLoyaltySettings });
       }
+      if (key === 'inventory') {
+        return res.json({ success: true, key, data: defaultInventorySettings });
+      }
       return res.json({ success: true, key, data: {} });
     }
-    return res.json({ success: true, key, data: JSON.parse(setting.value) });
+    const parsed = JSON.parse(setting.value);
+    if (key === 'loyalty') {
+      return res.json({ success: true, key, data: { ...defaultLoyaltySettings, ...parsed } });
+    }
+    return res.json({ success: true, key, data: parsed });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ success: false, message: 'Server error' });
@@ -122,4 +136,9 @@ const updateSetting = async (req, res) => {
   }
 };
 
-module.exports = { getSetting, updateSetting };
+const subscribeNewsletter = async (req, res) => {
+  // Newsletter subscription removed — endpoint kept for backward compat
+  return res.json({ success: true, message: 'Thank you!', pointsAwarded: 0 });
+};
+
+module.exports = { getSetting, updateSetting, subscribeNewsletter };

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Star, CheckCircle, XCircle, Trash2, Search, RefreshCw, MessageSquare, ShieldCheck, Filter } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
+import { PaginationTop, PaginationBottom } from '../components/Pagination';
 import api from '../services/api';
 import toast from 'react-hot-toast';
 
@@ -11,6 +12,10 @@ const ReviewsAdminPage = () => {
   const [statusFilter, setStatusFilter] = useState('all'); // 'all', 'approved', 'pending'
   const [searchQuery, setSearchQuery] = useState('');
   const [updatingId, setUpdatingId] = useState(null);
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
 
   const fetchReviews = async () => {
     setLoading(true);
@@ -19,10 +24,14 @@ const ReviewsAdminPage = () => {
         params: {
           status: statusFilter,
           search: searchQuery,
+          page,
+          limit,
         },
       });
       if (res.data?.success) {
         setReviews(res.data.reviews || []);
+        setTotal(res.data.total || res.data.count || 0);
+        setTotalPages(res.data.totalPages || 1);
       }
     } catch (err) {
       toast.error('Failed to load reviews.');
@@ -33,7 +42,7 @@ const ReviewsAdminPage = () => {
 
   useEffect(() => {
     fetchReviews();
-  }, [statusFilter]);
+  }, [statusFilter, page, limit]);
 
   const handleSearchSubmit = (e) => {
     e.preventDefault();
@@ -158,6 +167,15 @@ const ReviewsAdminPage = () => {
 
         {/* Reviews Table */}
         <div className="bg-white rounded-lg border border-neutral-200/80 shadow-sm overflow-hidden">
+          <PaginationTop
+            search={searchQuery}
+            onSearchChange={(s) => { setSearchQuery(s); setPage(1); }}
+            searchPlaceholder="Search product, customer, title..."
+            currentPage={page}
+            totalItems={total}
+            limit={limit}
+            onLimitChange={(l) => { setLimit(l); setPage(1); }}
+          />
           {loading ? (
             <div className="p-12 text-center">
               <RefreshCw size={24} className="animate-spin text-brand-gold mx-auto mb-2" />
@@ -276,6 +294,12 @@ const ReviewsAdminPage = () => {
               </table>
             </div>
           )}
+          <PaginationBottom
+            currentPage={page}
+            totalPages={totalPages}
+            totalItems={total}
+            onPageChange={(p) => setPage(p)}
+          />
         </div>
       </motion.div>
     </AdminLayout>

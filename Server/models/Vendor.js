@@ -5,6 +5,7 @@ const sequelize = require('../config/db');
 const Vendor = sequelize.define('Vendor', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   name: { type: DataTypes.STRING(150), allowNull: false },
+  contactPerson: { type: DataTypes.STRING(150) },
   email: { type: DataTypes.STRING(180), allowNull: false, unique: true },
   phone: { type: DataTypes.STRING(20) },
   address: { type: DataTypes.JSON, defaultValue: {} },
