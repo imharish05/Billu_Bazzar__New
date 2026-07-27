@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Mail, Search, Trash2, CheckCircle2, Clock, AlertCircle, RefreshCw,
-  Eye, X, MessageSquare, Send, User, Phone, Tag, Calendar, ExternalLink
+  Mail, Search, Trash2, RefreshCw,
+  Eye, X, ExternalLink
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import AdminLayout from '../components/AdminLayout';
@@ -12,15 +12,9 @@ import api from '../services/api';
 const ContactEnquiriesAdminPage = () => {
   const [enquiries, setEnquiries] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState({
-    totalEnquiries: 0,
-    pendingCount: 0,
-    inProgressCount: 0,
-    resolvedCount: 0,
-  });
+  const [totalEnquiries, setTotalEnquiries] = useState(0);
 
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('ALL');
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(15);
   const [total, setTotal] = useState(0);
@@ -28,12 +22,9 @@ const ContactEnquiriesAdminPage = () => {
 
   const [selectedIds, setSelectedIds] = useState([]);
 
-  // Detail / Reply Modal
+  // Detail Modal
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedEnquiry, setSelectedEnquiry] = useState(null);
-  const [modalStatus, setModalStatus] = useState('PENDING');
-  const [adminNotes, setAdminNotes] = useState('');
-  const [updating, setUpdating] = useState(false);
 
   const loadData = async () => {
     try {
@@ -42,7 +33,6 @@ const ContactEnquiriesAdminPage = () => {
         page,
         limit,
         search: search.trim(),
-        status: statusFilter,
       });
 
       const res = await api.get(`/contact-enquiries?${params.toString()}`);
@@ -50,9 +40,7 @@ const ContactEnquiriesAdminPage = () => {
         setEnquiries(res.data.enquiries || []);
         setTotal(res.data.total || 0);
         setTotalPages(res.data.totalPages || 1);
-        if (res.data.stats) {
-          setStats(res.data.stats);
-        }
+        setTotalEnquiries(res.data.stats?.totalEnquiries || res.data.total || 0);
       }
     } catch (err) {
       console.error('Failed to load contact enquiries:', err);
@@ -64,7 +52,7 @@ const ContactEnquiriesAdminPage = () => {
 
   useEffect(() => {
     loadData();
-  }, [page, limit, search, statusFilter]);
+  }, [page, limit, search]);
 
   const handleSelectAll = (e) => {
     if (e.target.checked) {
@@ -82,33 +70,7 @@ const ContactEnquiriesAdminPage = () => {
 
   const openDetailModal = (enquiry) => {
     setSelectedEnquiry(enquiry);
-    setModalStatus(enquiry.status || 'PENDING');
-    setAdminNotes(enquiry.adminNotes || '');
     setModalOpen(true);
-  };
-
-  const handleUpdateStatusNotes = async (e) => {
-    e.preventDefault();
-    if (!selectedEnquiry) return;
-
-    try {
-      setUpdating(true);
-      const res = await api.put(`/contact-enquiries/${selectedEnquiry.id}`, {
-        status: modalStatus,
-        adminNotes: adminNotes,
-      });
-
-      if (res.data.success) {
-        toast.success('Enquiry updated successfully!');
-        setModalOpen(false);
-        loadData();
-      }
-    } catch (err) {
-      console.error('Failed to update enquiry:', err);
-      toast.error(err.response?.data?.message || 'Failed to update enquiry');
-    } finally {
-      setUpdating(false);
-    }
   };
 
   const executeDelete = async (id) => {
@@ -185,19 +147,6 @@ const ContactEnquiriesAdminPage = () => {
     ), { duration: 5000, position: 'top-center' });
   };
 
-  const getStatusBadge = (status) => {
-    switch (status) {
-      case 'PENDING':
-        return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200"><Clock className="w-3.5 h-3.5" /> Pending</span>;
-      case 'IN_PROGRESS':
-        return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200"><RefreshCw className="w-3.5 h-3.5" /> In Progress</span>;
-      case 'RESOLVED':
-        return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200"><CheckCircle2 className="w-3.5 h-3.5" /> Resolved</span>;
-      default:
-        return <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-neutral-100 text-neutral-700">{status}</span>;
-    }
-  };
-
   return (
     <AdminLayout title="Contact Enquiries">
       <div className="p-6 space-y-6 max-w-7xl mx-auto">
@@ -207,10 +156,10 @@ const ContactEnquiriesAdminPage = () => {
           <div>
             <h1 className="text-2xl font-bold text-neutral-900 tracking-tight flex items-center gap-2.5">
               <Mail className="w-7 h-7 text-amber-600" />
-              Contact & Concierge Enquiries
+              Contact Enquiries
             </h1>
             <p className="text-sm text-neutral-500 mt-1">
-              View and manage customer messages submitted through your website contact form.
+              View customer messages submitted through your website contact form.
             </p>
           </div>
 
@@ -223,52 +172,22 @@ const ContactEnquiriesAdminPage = () => {
           </button>
         </div>
 
-        {/* Stats Cards */}
+        {/* Stats Card */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-white p-5 rounded-2xl border border-neutral-200/80 shadow-sm flex items-center justify-between">
+          <div className="bg-white p-5 rounded-2xl border border-neutral-200/80 shadow-sm flex items-center justify-between col-span-1">
             <div>
-              <p className="text-xs font-medium text-neutral-500 uppercase tracking-wider">Total Messages</p>
-              <p className="text-2xl font-bold text-neutral-900 mt-1">{stats.totalEnquiries}</p>
+              <p className="text-xs font-medium text-neutral-500 uppercase tracking-wider">Total Enquiries Received</p>
+              <p className="text-2xl font-bold text-neutral-900 mt-1">{totalEnquiries}</p>
             </div>
             <div className="w-12 h-12 bg-amber-50 rounded-xl flex items-center justify-center text-amber-600">
               <Mail className="w-6 h-6" />
-            </div>
-          </div>
-
-          <div className="bg-white p-5 rounded-2xl border border-neutral-200/80 shadow-sm flex items-center justify-between">
-            <div>
-              <p className="text-xs font-medium text-neutral-500 uppercase tracking-wider">Pending Response</p>
-              <p className="text-2xl font-bold text-amber-600 mt-1">{stats.pendingCount}</p>
-            </div>
-            <div className="w-12 h-12 bg-amber-100/60 rounded-xl flex items-center justify-center text-amber-700">
-              <Clock className="w-6 h-6" />
-            </div>
-          </div>
-
-          <div className="bg-white p-5 rounded-2xl border border-neutral-200/80 shadow-sm flex items-center justify-between">
-            <div>
-              <p className="text-xs font-medium text-neutral-500 uppercase tracking-wider">In Progress</p>
-              <p className="text-2xl font-bold text-blue-600 mt-1">{stats.inProgressCount}</p>
-            </div>
-            <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600">
-              <RefreshCw className="w-6 h-6" />
-            </div>
-          </div>
-
-          <div className="bg-white p-5 rounded-2xl border border-neutral-200/80 shadow-sm flex items-center justify-between">
-            <div>
-              <p className="text-xs font-medium text-neutral-500 uppercase tracking-wider">Resolved</p>
-              <p className="text-2xl font-bold text-emerald-600 mt-1">{stats.resolvedCount}</p>
-            </div>
-            <div className="w-12 h-12 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-600">
-              <CheckCircle2 className="w-6 h-6" />
             </div>
           </div>
         </div>
 
         {/* Filter & Search Bar */}
         <div className="bg-white p-4 rounded-2xl border border-neutral-200/80 shadow-sm flex flex-col md:flex-row gap-4 items-center justify-between">
-          <div className="relative w-full md:w-80">
+          <div className="relative w-full md:w-96">
             <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400" />
             <input
               type="text"
@@ -282,22 +201,8 @@ const ContactEnquiriesAdminPage = () => {
             />
           </div>
 
-          <div className="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end">
-            <select
-              value={statusFilter}
-              onChange={(e) => {
-                setStatusFilter(e.target.value);
-                setPage(1);
-              }}
-              className="px-3.5 py-2 bg-neutral-50 border border-neutral-200 rounded-xl text-xs font-medium text-neutral-700 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
-            >
-              <option value="ALL">All Statuses</option>
-              <option value="PENDING">Pending Only</option>
-              <option value="IN_PROGRESS">In Progress</option>
-              <option value="RESOLVED">Resolved Only</option>
-            </select>
-
-            {selectedIds.length > 0 && (
+          {selectedIds.length > 0 && (
+            <div className="flex items-center gap-3 w-full md:w-auto justify-end">
               <button
                 onClick={handleBulkDelete}
                 className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-xl text-xs font-semibold transition-all"
@@ -305,8 +210,8 @@ const ContactEnquiriesAdminPage = () => {
                 <Trash2 className="w-3.5 h-3.5" />
                 Delete Selected ({selectedIds.length})
               </button>
-            )}
-          </div>
+            </div>
+          )}
         </div>
 
         {/* Data Table */}
@@ -336,14 +241,13 @@ const ContactEnquiriesAdminPage = () => {
                   <th className="p-4">Email / Phone</th>
                   <th className="p-4">Subject</th>
                   <th className="p-4">Message Snippet</th>
-                  <th className="p-4 text-center">Status</th>
                   <th className="p-4 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-100 text-sm">
                 {loading ? (
                   <tr>
-                    <td colSpan="8" className="p-8 text-center text-neutral-400">
+                    <td colSpan="7" className="p-8 text-center text-neutral-400">
                       <div className="flex flex-col items-center justify-center gap-2">
                         <RefreshCw className="w-6 h-6 animate-spin text-amber-600" />
                         <span>Loading contact enquiries...</span>
@@ -352,7 +256,7 @@ const ContactEnquiriesAdminPage = () => {
                   </tr>
                 ) : enquiries.length === 0 ? (
                   <tr>
-                    <td colSpan="8" className="p-8 text-center text-neutral-500">
+                    <td colSpan="7" className="p-8 text-center text-neutral-500">
                       <div className="flex flex-col items-center justify-center gap-2">
                         <Mail className="w-8 h-8 text-neutral-300" />
                         <span className="font-semibold text-neutral-700">No contact enquiries found</span>
@@ -397,15 +301,12 @@ const ContactEnquiriesAdminPage = () => {
                       <td className="p-4 text-xs text-neutral-600 max-w-xs truncate">
                         {item.message}
                       </td>
-                      <td className="p-4 text-center">
-                        {getStatusBadge(item.status)}
-                      </td>
                       <td className="p-4 text-right">
                         <div className="flex items-center justify-end gap-2">
                           <button
                             onClick={() => openDetailModal(item)}
                             className="p-1.5 text-neutral-500 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
-                            title="View Details & Reply"
+                            title="View Details"
                           >
                             <Eye className="w-4 h-4" />
                           </button>
@@ -432,7 +333,7 @@ const ContactEnquiriesAdminPage = () => {
           />
         </div>
 
-        {/* View Details & Reply Modal */}
+        {/* View Details Modal */}
         <AnimatePresence>
           {modalOpen && selectedEnquiry && (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
@@ -505,67 +406,16 @@ const ContactEnquiriesAdminPage = () => {
                     </div>
                   </div>
 
-                  {/* Status & Admin Notes Update Form */}
-                  <form onSubmit={handleUpdateStatusNotes} className="space-y-4 pt-2 border-t border-neutral-100">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
-                      <div>
-                        <label className="block text-xs font-semibold text-neutral-700 uppercase tracking-wider mb-1">
-                          Inquiry Status
-                        </label>
-                        <select
-                          value={modalStatus}
-                          onChange={(e) => setModalStatus(e.target.value)}
-                          className="w-full px-3 py-2 bg-white border border-neutral-300 rounded-xl text-xs font-semibold text-neutral-800 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
-                        >
-                          <option value="PENDING">🟡 PENDING (Needs Action)</option>
-                          <option value="IN_PROGRESS">🔵 IN PROGRESS (Handling)</option>
-                          <option value="RESOLVED">🟢 RESOLVED (Closed)</option>
-                        </select>
-                      </div>
-
-                      <div className="flex items-end justify-end pt-4 sm:pt-0">
-                        <a
-                          href={`mailto:${selectedEnquiry.email}?subject=Re: ${encodeURIComponent(selectedEnquiry.subject || 'Billu Bazaar Inquiry')}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold rounded-xl transition-all shadow-sm"
-                        >
-                          <Send className="w-3.5 h-3.5" />
-                          Reply via Email
-                        </a>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-neutral-700 uppercase tracking-wider mb-1">
-                        Internal Admin Notes (Optional)
-                      </label>
-                      <textarea
-                        rows={3}
-                        placeholder="Add notes about actions taken or customer conversation history..."
-                        value={adminNotes}
-                        onChange={(e) => setAdminNotes(e.target.value)}
-                        className="w-full px-3 py-2 border border-neutral-300 rounded-xl text-xs text-neutral-800 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
-                      />
-                    </div>
-
-                    <div className="flex items-center justify-end gap-3 pt-3 border-t border-neutral-100">
-                      <button
-                        type="button"
-                        onClick={() => setModalOpen(false)}
-                        className="px-4 py-2 border border-neutral-300 text-neutral-700 text-xs font-semibold rounded-xl hover:bg-neutral-50"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        type="submit"
-                        disabled={updating}
-                        className="px-5 py-2 bg-neutral-900 hover:bg-neutral-800 text-white text-xs font-semibold rounded-xl disabled:opacity-50"
-                      >
-                        {updating ? 'Saving...' : 'Save Changes'}
-                      </button>
-                    </div>
-                  </form>
+                  {/* Footer Close Button */}
+                  <div className="flex items-center justify-end pt-3 border-t border-neutral-100">
+                    <button
+                      type="button"
+                      onClick={() => setModalOpen(false)}
+                      className="px-5 py-2 bg-neutral-900 hover:bg-neutral-800 text-white text-xs font-semibold rounded-xl transition-colors"
+                    >
+                      Close
+                    </button>
+                  </div>
                 </div>
               </motion.div>
             </div>
