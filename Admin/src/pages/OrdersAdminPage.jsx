@@ -10,7 +10,7 @@ import currencyJs from 'currency.js';
 
 const fmt = (v) => currencyJs(v, { symbol: '₹', precision: 0 }).format();
 
-const STATUS_TABS = ['All', 'PENDING', 'CONFIRMED', 'PROCESSING', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED', 'RTO', 'RETURNED'];
+const STATUS_TABS = ['All', 'PENDING', 'CONFIRMED', 'PROCESSING', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED', 'RETURNED'];
 const STATUS_LABELS = {
   All: 'All',
   PENDING: 'New Orders',
@@ -20,7 +20,6 @@ const STATUS_LABELS = {
   OUT_FOR_DELIVERY: 'Out for Delivery',
   DELIVERED: 'Delivered',
   CANCELLED: 'Cancelled',
-  RTO: 'RTO',
   RETURNED: 'Returned',
 };
 const STATUS_COLORS = {
@@ -31,7 +30,6 @@ const STATUS_COLORS = {
   OUT_FOR_DELIVERY: 'bg-sky-50 text-sky-800 font-medium',
   DELIVERED: 'bg-emerald-50 text-emerald-800 font-medium',
   CANCELLED: 'bg-rose-50 text-rose-800 font-medium',
-  RTO: 'bg-slate-100 text-slate-800 font-medium',
   RETURNED: 'bg-pink-50 text-pink-800 font-medium',
 };
 const PAY_COLORS = { PAID: 'bg-green-50 text-green-700', UNPAID: 'bg-yellow-50 text-yellow-700', REFUNDED: 'bg-gray-100 text-gray-500' };
@@ -136,7 +134,7 @@ const OrdersAdminPage = () => {
                       id={`status-${order.id}`}
                       aria-label="Order status"
                     >
-                      {['PENDING','CONFIRMED','PROCESSING','SHIPPED','OUT_FOR_DELIVERY','DELIVERED','CANCELLED','RTO','RETURNED'].map(s => (
+                      {['PENDING','CONFIRMED','PROCESSING','SHIPPED','OUT_FOR_DELIVERY','DELIVERED','CANCELLED','RETURNED'].map(s => (
                         <option key={s} value={s}>{STATUS_LABELS[s] || s}</option>
                       ))}
                     </select>

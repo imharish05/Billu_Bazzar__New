@@ -67,22 +67,54 @@ const ReviewsAdminPage = () => {
     }
   };
 
-  const handleDeleteReview = async (reviewId) => {
-    if (!window.confirm('Are you sure you want to delete this review permanently?')) return;
-    setUpdatingId(reviewId);
-    try {
-      const res = await api.delete(`/reviews/${reviewId}`);
-      if (res.data?.success) {
-        toast.success('Review deleted successfully.');
-        fetchReviews();
-      } else {
-        toast.error(res.data?.message || 'Failed to delete review');
-      }
-    } catch (err) {
-      toast.error('Failed to delete review');
-    } finally {
-      setUpdatingId(null);
-    }
+  const handleDeleteReview = (reviewId) => {
+    toast((t) => (
+      <div className="flex flex-col items-center text-center gap-2 p-1 min-w-[260px]">
+        <p className="text-sm font-bold text-neutral-800">Delete this review?</p>
+        <p className="text-xs text-neutral-500 max-w-xs">This action cannot be undone.</p>
+        <div className="flex justify-center items-center gap-3 mt-2 w-full">
+          <button
+            onClick={async () => {
+              toast.dismiss(t.id);
+              setUpdatingId(reviewId);
+              try {
+                const res = await api.delete(`/reviews/${reviewId}`);
+                if (res.data?.success) {
+                  toast.success('Review deleted successfully.');
+                  fetchReviews();
+                } else {
+                  toast.error(res.data?.message || 'Failed to delete review');
+                }
+              } catch (err) {
+                toast.error('Failed to delete review');
+              } finally {
+                setUpdatingId(null);
+              }
+            }}
+            className="px-3.5 py-1.5 text-xs bg-red-600 text-white rounded font-medium hover:bg-red-700 shadow-sm transition-colors"
+          >
+            Yes, Delete
+          </button>
+          <button
+            onClick={() => toast.dismiss(t.id)}
+            className="px-3.5 py-1.5 text-xs border border-neutral-300 rounded text-neutral-700 hover:bg-neutral-100 transition-colors"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    ), {
+      duration: 6000,
+      position: 'top-center',
+      style: {
+        borderRadius: '12px',
+        background: '#ffffff',
+        color: '#1a1a1a',
+        border: '1px solid #E5E7EB',
+        boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.12), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
+        padding: '14px 18px',
+      },
+    });
   };
 
   const totalReviews = reviews.length;

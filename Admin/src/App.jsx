@@ -22,6 +22,7 @@ import SettingsAdminPage from './pages/SettingsAdminPage';
 import SiteSettingsAdminPage from './pages/SiteSettingsAdminPage';
 import SliderMessagesAdminPage from './pages/SliderMessagesAdminPage';
 import ReviewsAdminPage from './pages/ReviewsAdminPage';
+import StockAlertsAdminPage from './pages/StockAlertsAdminPage';
 import NotFoundAdminPage from './pages/NotFoundAdminPage';
 
 /* Protected route — redirect to /login if no admin token */
@@ -41,6 +42,7 @@ const App = () => (
       <Route path="/dashboard"   element={<Protected><DashboardPage /></Protected>} />
       <Route path="/products"    element={<Protected><ProductsAdminPage /></Protected>} />
       <Route path="/reviews"     element={<Protected><ReviewsAdminPage /></Protected>} />
+      <Route path="/stock-alerts" element={<Protected><StockAlertsAdminPage /></Protected>} />
       <Route path="/variants"    element={<Protected><VariantsAdminPage /></Protected>} />
       <Route path="/categories"  element={<Protected><CategoriesAdminPage /></Protected>} />
       <Route path="/sub-categories" element={<Protected><SubCategoriesAdminPage /></Protected>} />

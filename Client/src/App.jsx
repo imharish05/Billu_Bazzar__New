@@ -1,8 +1,8 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useDispatch } from 'react-redux';
 import { Routes, Route, useLocation, Navigate } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
-import { Toaster } from 'react-hot-toast';
+import { Toaster, toast } from 'react-hot-toast';
 import ScrollToTop from './components/ScrollToTop';
 import Navbar from './components/Navbar';
 import CartDrawer from './components/CartDrawer';
@@ -80,19 +80,41 @@ const App = () => {
     }
   }, [dispatch]);
 
+  const trackedRef = useRef(null);
+
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const refCode = params.get('referral') || params.get('ref');
     if (refCode) {
       const sanitized = refCode.trim();
-      localStorage.setItem('bb_referral', sanitized);
-      // Track click on the backend
+      const sessionKey = `bb_tracked_ref_${sanitized}`;
+
+      // Deduplicate to prevent double tracking on React StrictMode or double renders
+      if (sessionStorage.getItem(sessionKey) || trackedRef.current === sanitized) {
+        return;
+      }
+
+      trackedRef.current = sanitized;
+      sessionStorage.setItem(sessionKey, 'true');
+
+      // Track click on the backend before storing
       api.get(`/affiliates/track?ref=${encodeURIComponent(sanitized)}`)
         .then(res => {
-          console.log('[Referral] Tracked click successfully:', res.data);
+          if (res.data?.success) {
+            localStorage.setItem('bb_referral', sanitized);
+            console.log('[Referral] Tracked click successfully:', res.data);
+          }
         })
         .catch(err => {
-          console.warn('[Referral] Failed to track click:', err.response?.data?.message || err.message);
+          localStorage.removeItem('bb_referral');
+          sessionStorage.removeItem(sessionKey);
+          trackedRef.current = null;
+          const isDisabled = err.response?.data?.disabled;
+          const msg = err.response?.data?.message || 'This affiliate referral link is no longer active.';
+          if (isDisabled) {
+            toast.error(msg, { id: 'affiliate-inactive-toast' });
+          }
+          console.warn('[Referral] Link inactive or invalid:', msg);
         });
     }
   }, [location.search]);

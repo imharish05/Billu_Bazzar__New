@@ -170,12 +170,10 @@ const OrderDetailPage = () => {
       if (done) {
         if (step.key === 'PENDING') {
           date = order.createdAt;
+        } else if (step.key === order.status) {
+          date = order.updatedAt || order.createdAt;
         } else if (step.key === 'DELIVERED' && order.deliveredAt) {
           date = order.deliveredAt;
-        } else {
-          const simDate = new Date(baseDate);
-          simDate.setDate(baseDate.getDate() + idx + 1);
-          date = simDate.toISOString();
         }
       }
 
@@ -282,36 +280,6 @@ const OrderDetailPage = () => {
         </button>
       </div>
 
-      {/* Shipment / Tracking details if shipped */}
-      {(order.trackingNumber || order.shiprocketOrderId || ['SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED'].includes(order.status)) && (
-        <div className="bg-white shadow-sm p-6 mb-5 border border-neutral-100 rounded-lg">
-          <div className="flex items-start gap-3">
-            <Truck size={20} className="text-brand-gold mt-0.5 flex-shrink-0" />
-            <div>
-              <p className="text-sm font-semibold mb-1 text-neutral-900">Shipment & Delivery Information</p>
-              <p className="text-xs text-brand-grey">
-                Courier Partner: <span className="font-medium text-neutral-800">Shiprocket Logistics</span>
-              </p>
-              {order.trackingNumber && (
-                <p className="text-xs text-brand-grey mt-0.5">
-                  Tracking Number (AWB): <span className="font-mono font-medium text-brand-gold">{order.trackingNumber}</span>
-                </p>
-              )}
-              {order.trackingUrl && (
-                <a
-                  href={order.trackingUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-3 inline-flex text-xs underline font-semibold text-brand-gold hover:text-neutral-900 transition-colors"
-                >
-                  Track Shipment Live &rarr;
-                </a>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Tracking timeline */}
       <div className="bg-white shadow-sm p-6 mb-5 border border-neutral-100 rounded-lg">
         <h2 className="font-semibold text-sm mb-5 text-neutral-950">Order Tracking</h2>
@@ -413,6 +381,14 @@ const OrderDetailPage = () => {
                   <span className="text-sm font-bold text-brand-gold">
                     {formatPrice(item.totalPrice || (item.quantity * (item.unitPrice || item.price)), currency)}
                   </span>
+                  {order.status === 'DELIVERED' && (
+                    <button
+                      onClick={() => handleOpenReviewModal(item)}
+                      className="px-3 py-1 bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200 text-xs font-semibold rounded-lg transition-colors flex items-center gap-1 cursor-pointer mt-1"
+                    >
+                      <Star size={12} /> Write Review
+                    </button>
+                  )}
                 </div>
               </div>
             );
@@ -427,7 +403,7 @@ const OrderDetailPage = () => {
           </div>
           {discountAmount > 0 && (
             <div className="flex justify-between text-green-600 font-medium">
-              <span>Coupon Discount</span>
+              <span>Discount (Coupon / Loyalty)</span>
               <span>-{formatPrice(discountAmount, currency)}</span>
             </div>
           )}

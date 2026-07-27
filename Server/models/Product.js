@@ -108,17 +108,6 @@ const Product = sequelize.define('Product', {
   isBestSeller: { type: DataTypes.BOOLEAN, defaultValue: false },
   rating: { type: DataTypes.DECIMAL(3, 2), defaultValue: 0.00 },
   reviewCount: { type: DataTypes.INTEGER, defaultValue: 0 },
-  weight: { type: DataTypes.DECIMAL(8, 2) },
-  dimensions: {
-    type: DataTypes.JSON,
-    get() {
-      const rawValue = this.getDataValue('dimensions');
-      if (typeof rawValue === 'string') {
-        try { return JSON.parse(rawValue); } catch (e) { return null; }
-      }
-      return rawValue || null;
-    }
-  },
   isActive: { type: DataTypes.BOOLEAN, defaultValue: true },
   seoDescription: { type: DataTypes.STRING(300) },
   discountPercent: {

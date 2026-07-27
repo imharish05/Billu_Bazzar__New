@@ -38,6 +38,24 @@ const start = async () => {
       console.log('⚠️ Pre-sync Wishlists alter note:', alterErr.message);
     }
 
+    // Run safe database alters for Affiliates table BEFORE syncing models
+    try {
+      const queryInterface = sequelize.getQueryInterface();
+      const affTableDesc = await queryInterface.describeTable('Affiliates').catch(() => null);
+      if (affTableDesc) {
+        if (!affTableDesc.socialMedia) {
+          await sequelize.query("ALTER TABLE Affiliates ADD COLUMN socialMedia JSON NULL");
+          console.log('✅ Affiliates table socialMedia column added');
+        }
+        if (!affTableDesc.documentProof) {
+          await sequelize.query("ALTER TABLE Affiliates ADD COLUMN documentProof VARCHAR(500) NULL");
+          console.log('✅ Affiliates table documentProof column added');
+        }
+      }
+    } catch (alterErr) {
+      console.log('⚠️ Pre-sync Affiliates alter note:', alterErr.message);
+    }
+
     // Run safe database alters for Vendors table BEFORE syncing models
     try {
       const queryInterface = sequelize.getQueryInterface();
@@ -48,6 +66,24 @@ const start = async () => {
       }
     } catch (alterErr) {
       console.log('⚠️ Pre-sync Vendors alter note:', alterErr.message);
+    }
+
+    // Run safe database alters for StockAlerts table BEFORE syncing models
+    try {
+      const queryInterface = sequelize.getQueryInterface();
+      const stockAlertTableDesc = await queryInterface.describeTable('StockAlerts').catch(() => null);
+      if (stockAlertTableDesc) {
+        if (!stockAlertTableDesc.variantId) {
+          await sequelize.query("ALTER TABLE StockAlerts ADD COLUMN variantId INT NULL AFTER productId");
+          console.log('✅ StockAlerts table variantId column added');
+        }
+        if (!stockAlertTableDesc.selectedVariant) {
+          await sequelize.query("ALTER TABLE StockAlerts ADD COLUMN selectedVariant JSON NULL AFTER variantId");
+          console.log('✅ StockAlerts table selectedVariant column added');
+        }
+      }
+    } catch (alterErr) {
+      console.log('⚠️ Pre-sync StockAlerts alter note:', alterErr.message);
     }
 
     // 2. Sync all models (safe — doesn't drop data)
@@ -63,10 +99,11 @@ const start = async () => {
       console.log('⚠️ Manual alter note (already altered or table not synced yet):', alterErr.message);
     }
 
-    // Run manual database alters for Orders table to support new OOS & Razorpay status flows
+    // Run manual database alters for Orders table to support status flows & clean legacy RTO records
     try {
+      await sequelize.query("UPDATE Orders SET status = 'CANCELLED' WHERE status = 'RTO'");
       await sequelize.query("ALTER TABLE Orders MODIFY COLUMN status ENUM('PENDING_PAYMENT', 'PAID', 'PAYMENT_RECEIVED_STOCK_FAILED', 'PENDING', 'CONFIRMED', 'PROCESSING', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED', 'RETURNED', 'REFUNDED', 'EXPIRED') DEFAULT 'PENDING_PAYMENT'");
-      console.log('✅ Orders table status column definition updated');
+      console.log('✅ Orders table status column definition updated & RTO records cleaned');
     } catch (alterErr) {
       console.log('⚠️ Manual alter note (status already updated):', alterErr.message);
     }
@@ -161,12 +198,13 @@ const start = async () => {
       console.log('⚠️ Manual alter note (Products lowStockThreshold/gstRate columns already exist):', alterErr.message);
     }
 
-    // Run manual database alters for Warehouses to support isFulfillment
+    // Run manual database alters for Warehouses to support isFulfillment and isProcurement
     try {
       await sequelize.query("ALTER TABLE Warehouses ADD COLUMN isFulfillment BOOLEAN NOT NULL DEFAULT FALSE");
-      console.log('✅ Warehouses table isFulfillment column added');
+      await sequelize.query("ALTER TABLE Warehouses ADD COLUMN isProcurement BOOLEAN NOT NULL DEFAULT FALSE");
+      console.log('✅ Warehouses table isFulfillment and isProcurement columns added');
     } catch (alterErr) {
-      console.log('⚠️ Manual alter note (Warehouses isFulfillment already exists):', alterErr.message);
+      console.log('⚠️ Manual alter note (Warehouses isFulfillment/isProcurement already exists):', alterErr.message);
     }
 
     // Run manual database alters for WarehouseStocks to support variantId

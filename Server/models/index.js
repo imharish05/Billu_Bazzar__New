@@ -140,6 +140,8 @@ Review.belongsTo(Order,     { foreignKey: 'orderId', as: 'order' });
 // Stock alerts queue Notify-Me emails when a SKU is restocked.
 Product.hasMany(StockAlert,    { foreignKey: 'productId', as: 'stockAlerts' });
 StockAlert.belongsTo(Product,  { foreignKey: 'productId', as: 'product' });
+ProductVariant.hasMany(StockAlert, { foreignKey: 'variantId', as: 'stockAlerts' });
+StockAlert.belongsTo(ProductVariant, { foreignKey: 'variantId', as: 'variant' });
 Customer.hasMany(StockAlert,   { foreignKey: 'customerId', as: 'stockAlerts' });
 StockAlert.belongsTo(Customer, { foreignKey: 'customerId', as: 'customer' });
 

@@ -18,8 +18,8 @@ const COLOR_MAP = {
   orange: '#f97316', coral: '#ff6b6b', salmon: '#fa8072',
   purple: '#9333ea', lavender: '#c4b5fd', violet: '#7c3aed', indigo: '#6366f1', mauve: '#9f8fba', plum: '#8b008b', lilac: '#c8a2c8',
   brown: '#92400e', tan: '#d2b48c', beige: '#f5f5dc', caramel: '#c68642',
-  black: '#111111', charcoal: '#374151', grey: '#9ca3af', gray: '#9ca3af', silver: '#c0c0c0',
-  white: '#f9fafb', cream: '#fffdd0', ivory: '#fffff0', off: '#faf9f6',
+  black: '#111111', charcoal: '#374151', grey: '#9ca3af', gray: '#9ca3af', silver: '#c0c0c0', steel: '#4682b4', neutral: '#d1d5db',
+  white: '#f9fafb', cream: '#fffdd0', ivory: '#fffff0', off: '#faf9f6', clear: 'linear-gradient(135deg,#e2e8f0,#cbd5e1)', 'pastel blue': '#90caf9',
   multicolor: 'linear-gradient(135deg,#e53e3e,#f59e0b,#22c55e,#3b82f6,#9333ea)',
   multi: 'linear-gradient(135deg,#e53e3e,#f59e0b,#22c55e,#3b82f6,#9333ea)',
 };

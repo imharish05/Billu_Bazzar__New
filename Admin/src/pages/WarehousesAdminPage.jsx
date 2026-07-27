@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Plus, Search, Edit2, ShieldAlert, CheckCircle2, ChevronRight, X, Trash2 } from 'lucide-react';
+import { Plus, Search, Edit2, ShieldAlert, CheckCircle2, ChevronRight, X, Trash2, ArrowRightLeft } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
 import Switch from '../components/Switch';
 import api from '../services/api';
@@ -10,7 +10,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 const EMPTY_WAREHOUSE_FORM = {
   name: '', code: '', contactName: '', contactPhone: '',
   streetAddress: '', city: '', state: '', pincode: '', country: 'India',
-  isFulfillment: false, isActive: true
+  isFulfillment: false, isProcurement: false, isActive: true
 };
 
 const WarehousesAdminPage = () => {
@@ -27,6 +27,13 @@ const WarehousesAdminPage = () => {
   const [stockLoading, setStockLoading] = useState(false);
   const [stockSearch, setStockSearch] = useState('');
   const [onlyLowStock, setOnlyLowStock] = useState(false);
+
+  // Checkbox Selection & Bulk Transfer State
+  const [selectedStockIds, setSelectedStockIds] = useState([]);
+  const [transferModalOpen, setTransferModalOpen] = useState(false);
+  const [targetWarehouseId, setTargetWarehouseId] = useState('');
+  const [transferItemsList, setTransferItemsList] = useState([]);
+  const [transferring, setTransferring] = useState(false);
 
   // Adjust stock modal state
   const [adjustModalOpen, setAdjustModalOpen] = useState(false);
@@ -108,6 +115,7 @@ const WarehousesAdminPage = () => {
         pincode: wh.pincode || '',
         country: parsedAddress.country || wh.country || 'India',
         isFulfillment: !!wh.isFulfillment,
+        isProcurement: !!wh.isProcurement,
         isActive: !!wh.isActive
       });
     } else {
@@ -134,6 +142,7 @@ const WarehousesAdminPage = () => {
           country: warehouseForm.country
         },
         isFulfillment: warehouseForm.isFulfillment,
+        isProcurement: warehouseForm.isProcurement,
         isActive: warehouseForm.isActive
       };
 
@@ -173,28 +182,28 @@ const WarehousesAdminPage = () => {
   // Delete warehouse direct from card
   const handleDeleteWarehouseDirect = (wh) => {
     toast((t) => (
-      <div className="flex flex-col gap-2 p-1 text-xs">
+      <div className="flex flex-col items-center text-center gap-2 p-1 text-xs">
         <p className="font-semibold text-neutral-900">Delete <span className="text-brand-gold font-bold">{wh.name}</span>?</p>
-        <p className="text-neutral-500">This will remove all stock configurations and inventory logs completely from the database.</p>
-        <div className="flex gap-2 justify-end mt-1">
-          <button
-            onClick={() => toast.dismiss(t.id)}
-            className="px-2.5 py-1.5 border border-neutral-300 text-neutral-700 hover:bg-neutral-50 text-[10px] font-semibold uppercase tracking-wider transition-all"
-          >
-            Cancel
-          </button>
+        <p className="text-neutral-500 max-w-xs">This will remove all stock configurations and inventory logs completely from the database.</p>
+        <div className="flex justify-center items-center gap-3 mt-2 w-full">
           <button
             onClick={async () => {
               toast.dismiss(t.id);
               await proceedDelete(wh.id);
             }}
-            className="px-2.5 py-1.5 bg-red-650 text-white hover:bg-red-750 text-[10px] font-semibold uppercase tracking-wider transition-all"
+            className="px-3 py-1.5 bg-red-600 text-white hover:bg-red-700 text-[10px] font-semibold uppercase tracking-wider transition-all rounded shadow-sm"
           >
-            Confirm Delete
+            Yes, Delete
+          </button>
+          <button
+            onClick={() => toast.dismiss(t.id)}
+            className="px-3 py-1.5 border border-neutral-300 text-neutral-700 hover:bg-neutral-50 text-[10px] font-semibold uppercase tracking-wider transition-all rounded"
+          >
+            Cancel
           </button>
         </div>
       </div>
-    ), { duration: 10000 });
+    ), { duration: 6000, position: 'top-center' });
   };
 
   // Open adjust stock modal
@@ -252,12 +261,104 @@ const WarehousesAdminPage = () => {
     return Object.entries(parsed).map(([k, v]) => `${k}: ${v}`).join(' · ');
   };
 
+  // Handle Checkbox Selection
+  const handleToggleSelectAll = () => {
+    if (selectedStockIds.length === filteredStock.length) {
+      setSelectedStockIds([]);
+    } else {
+      setSelectedStockIds(filteredStock.map(s => s.id));
+    }
+  };
+
+  const handleToggleSelectItem = (id) => {
+    setSelectedStockIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  // Open Bulk Transfer Modal for selected items or a single item
+  const openBulkTransferModal = (singleItem = null) => {
+    let itemsToTransfer = [];
+    if (singleItem) {
+      itemsToTransfer = [singleItem];
+    } else {
+      itemsToTransfer = warehouseStock.filter(s => selectedStockIds.includes(s.id));
+    }
+
+    if (itemsToTransfer.length === 0) {
+      toast.error('Please select at least one product using checkboxes');
+      return;
+    }
+
+    const otherWh = warehouses.find(w => w.id !== selectedWarehouse.id);
+    setTargetWarehouseId(otherWh ? String(otherWh.id) : '');
+    setTransferItemsList(itemsToTransfer.map(item => ({
+      id: item.id,
+      productId: item.productId,
+      variantId: item.variantId,
+      productName: item.product?.name || 'Product',
+      variantDetails: item.variantId ? renderAttributes(item.variant?.attributes) : 'Default',
+      sku: item.variant?.sku || item.product?.sku || 'N/A',
+      availableQty: item.quantity,
+      transferQty: item.quantity > 0 ? item.quantity : 1,
+    })));
+    setTransferModalOpen(true);
+  };
+
+  // Submit Bulk Stock Transfer
+  const handleBulkTransferSubmit = async (e) => {
+    e.preventDefault();
+    if (!targetWarehouseId) {
+      toast.error('Please select a target destination warehouse');
+      return;
+    }
+
+    // Validate quantities
+    const invalidItem = transferItemsList.find(t => !t.transferQty || parseInt(t.transferQty, 10) <= 0 || parseInt(t.transferQty, 10) > t.availableQty);
+    if (invalidItem) {
+      toast.error(`Invalid quantity for "${invalidItem.productName}". Available stock: ${invalidItem.availableQty}`);
+      return;
+    }
+
+    setTransferring(true);
+    try {
+      const payload = {
+        fromWarehouseId: selectedWarehouse.id,
+        toWarehouseId: parseInt(targetWarehouseId, 10),
+        items: transferItemsList.map(t => ({
+          productId: t.productId,
+          variantId: t.variantId,
+          quantity: parseInt(t.transferQty, 10)
+        }))
+      };
+
+      const res = await api.post('/warehouses/transfer', payload);
+      if (res.data.success) {
+        toast.success(`Transferred ${transferItemsList.length} product(s) successfully!`);
+        setTransferModalOpen(false);
+        setSelectedStockIds([]);
+        loadWarehouseStock(selectedWarehouse.id);
+        loadWarehouses();
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || err.message || 'Transfer failed');
+    } finally {
+      setTransferring(false);
+    }
+  };
+
+  const [hideZeroStock, setHideZeroStock] = useState(true);
+
   // Filtered Stock list
   const filteredStock = warehouseStock.filter(item => {
     const productName = item.product?.name || '';
     const variantSku = item.variant?.sku || item.product?.sku || '';
     const matchSearch = productName.toLowerCase().includes(stockSearch.toLowerCase()) || variantSku.toLowerCase().includes(stockSearch.toLowerCase());
     
+    if (hideZeroStock && item.quantity <= 0) {
+      return false;
+    }
+
     if (onlyLowStock) {
       return matchSearch && item.quantity <= item.reorderLevel;
     }
@@ -286,70 +387,92 @@ const WarehousesAdminPage = () => {
         </div>
       ) : (
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-          {warehouses.map(w => (
-            <div
-              key={w.id}
-              className={`bg-white border transition-all relative overflow-hidden ${
-                selectedWarehouse?.id === w.id ? 'border-brand-gold ring-1 ring-brand-gold/30' : 'border-neutral-200 hover:border-neutral-350'
-              }`}
-            >
-              <div className="p-6">
-                <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <h3 className="font-semibold text-base text-neutral-900">{w.name}</h3>
-                    <p className="text-xs font-mono font-medium text-brand-gold mt-0.5">{w.code}</p>
-                  </div>
-                  <div className="flex flex-col items-end gap-1.5">
-                    <span className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 ${w.isActive ? 'bg-green-50 text-green-700' : 'bg-gray-150 text-gray-500'}`}>
-                      {w.isActive ? 'Active' : 'Inactive'}
-                    </span>
-                    {w.isFulfillment && (
-                      <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 bg-brand-gold/10 text-brand-gold border border-brand-gold/20">
-                        Fulfillment Hub
-                      </span>
-                    )}
-                  </div>
-                </div>
+            {warehouses.map(w => {
+              const variantProductIds = new Set(
+                (w.stocks || []).filter(s => s.variantId).map(s => s.productId)
+              );
+              const totalUnits = (w.stocks || []).reduce((acc, curr) => {
+                if (!curr.variantId && variantProductIds.has(curr.productId)) {
+                  return acc; // Skip parent duplicate stock if variant stocks exist
+                }
+                return acc + (curr.quantity || 0);
+              }, 0);
 
-                <div className="space-y-1 text-xs text-brand-grey mb-4">
-                  {w.address?.streetAddress && <p>🏠 {w.address.streetAddress}</p>}
-                  <p>📍 {w.city}, {w.state} {w.pincode} {w.address?.country ? `(${w.address.country})` : ''}</p>
-                  <p>📞 {w.contactName || 'N/A'} ({w.contactPhone || 'N/A'})</p>
-                </div>
+              const isProcurementWh = w.isProcurement || (w.name || '').toLowerCase().includes('dubai') || (w.code || '').toLowerCase().includes('dxb');
 
-                <div className="pt-4 border-t border-brand-light flex items-center justify-between">
-                  <div>
-                    <p className="text-xl font-bold text-neutral-900">
-                      {w.stocks?.reduce((acc, curr) => acc + (curr.quantity || 0), 0).toLocaleString('en-IN') || 0}
-                    </p>
-                    <p className="text-[10px] uppercase tracking-wider font-semibold text-brand-grey">Total Units in Stock</p>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      onClick={() => openWarehouseModal(w)}
-                      className="p-2 border border-neutral-200 text-neutral-600 hover:text-brand-gold hover:border-brand-gold transition-all"
-                      title="Edit Warehouse"
-                    >
-                      <Edit2 size={12} />
-                    </button>
-                    <button
-                      onClick={() => handleDeleteWarehouseDirect(w)}
-                      className="p-2 border border-neutral-200 text-neutral-600 hover:text-red-600 hover:border-red-200 transition-all"
-                      title="Delete Warehouse"
-                    >
-                      <Trash2 size={12} />
-                    </button>
-                    <button
-                      onClick={() => handleSelectWarehouse(w)}
-                      className="px-3 py-1.5 bg-neutral-950 text-white hover:bg-neutral-800 text-xs font-semibold uppercase tracking-wider transition-all flex items-center gap-1"
-                    >
-                      Manage Stock <ChevronRight size={12} />
-                    </button>
+              return (
+                <div
+                  key={w.id}
+                  className={`bg-white border transition-all relative overflow-hidden ${
+                    selectedWarehouse?.id === w.id ? 'border-brand-gold ring-1 ring-brand-gold/30' : 'border-neutral-200 hover:border-neutral-350'
+                  }`}
+                >
+                  <div className="p-6">
+                    <div className="flex items-start justify-between mb-3">
+                      <div>
+                        <h3 className="font-semibold text-base text-neutral-900">{w.name}</h3>
+                        <p className="text-xs font-mono font-medium text-brand-gold mt-0.5">{w.code}</p>
+                      </div>
+                      <div className="flex flex-col items-end gap-1.5">
+                        <span className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 ${w.isActive ? 'bg-green-50 text-green-700' : 'bg-gray-150 text-gray-500'}`}>
+                          {w.isActive ? 'Active' : 'Inactive'}
+                        </span>
+                        {w.isFulfillment ? (
+                          <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 bg-amber-50 text-amber-800 border border-amber-300 flex items-center gap-1">
+                            🇮🇳 Primary Fulfillment Hub
+                          </span>
+                        ) : isProcurementWh ? (
+                          <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 bg-blue-50 text-blue-800 border border-blue-200 flex items-center gap-1">
+                            🇦🇪 Procurement Source
+                          </span>
+                        ) : (
+                          <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 bg-neutral-100 text-neutral-600 border border-neutral-200">
+                            Regional Depot
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="space-y-1 text-xs text-brand-grey mb-4">
+                      {w.address?.streetAddress && <p>🏠 {w.address.streetAddress}</p>}
+                      <p>📍 {w.city}, {w.state} {w.pincode} {w.address?.country ? `(${w.address.country})` : ''}</p>
+                      <p>📞 {w.contactName || 'N/A'} ({w.contactPhone || 'N/A'})</p>
+                    </div>
+
+                    <div className="pt-4 border-t border-brand-light flex items-center justify-between">
+                      <div>
+                        <p className="text-xl font-bold text-neutral-900">
+                          {totalUnits.toLocaleString('en-IN')}
+                        </p>
+                        <p className="text-[10px] uppercase tracking-wider font-semibold text-brand-grey">Total Units in Stock</p>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => openWarehouseModal(w)}
+                          className="p-2 border border-neutral-200 text-neutral-600 hover:text-brand-gold hover:border-brand-gold transition-all"
+                          title="Edit Warehouse"
+                        >
+                          <Edit2 size={12} />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteWarehouseDirect(w)}
+                          className="p-2 border border-neutral-200 text-neutral-600 hover:text-red-600 hover:border-red-200 transition-all"
+                          title="Delete Warehouse"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                        <button
+                          onClick={() => handleSelectWarehouse(w)}
+                          className="px-3 py-1.5 bg-neutral-950 text-white hover:bg-neutral-800 text-xs font-semibold uppercase tracking-wider transition-all flex items-center gap-1"
+                        >
+                          Manage Stock <ChevronRight size={12} />
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </div>
-          ))}
+              );
+            })}
         </div>
       )}
 
@@ -361,7 +484,7 @@ const WarehousesAdminPage = () => {
               <h3 className="text-base font-semibold text-neutral-950 flex items-center gap-2">
                 📦 Stock Inventory: <span className="text-brand-gold">{selectedWarehouse.name}</span>
               </h3>
-              <p className="text-xs text-brand-grey mt-0.5">Manage stock quantities and set custom reorder alert levels</p>
+              <p className="text-xs text-brand-grey mt-0.5">Manage stock quantities and perform bulk stock transfers across warehouses</p>
             </div>
             
             <div className="flex flex-wrap items-center gap-3">
@@ -376,6 +499,17 @@ const WarehousesAdminPage = () => {
                   className="pl-8 pr-3 py-1.5 border border-brand-light text-xs focus:outline-none focus:border-brand-gold max-w-[200px]"
                 />
               </div>
+
+              {/* Hide 0-Stock Toggle */}
+              <label className="flex items-center gap-2 text-xs font-semibold text-neutral-800 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={hideZeroStock}
+                  onChange={e => setHideZeroStock(e.target.checked)}
+                  className="rounded border-neutral-300 text-brand-gold focus:ring-brand-gold accent-brand-gold"
+                />
+                Hide 0-Stock Products
+              </label>
 
               {/* Low Stock Toggle */}
               <label className="flex items-center gap-2 text-xs font-semibold text-neutral-800 cursor-pointer select-none">
@@ -403,6 +537,15 @@ const WarehousesAdminPage = () => {
               <table className="w-full text-left text-xs" aria-label="Warehouse Stock list">
                 <thead>
                   <tr className="bg-neutral-50 border-b border-brand-light text-brand-grey font-bold uppercase tracking-wider text-[10px]">
+                    <th className="px-3 py-3 w-10 text-center">
+                      <input
+                        type="checkbox"
+                        checked={filteredStock.length > 0 && selectedStockIds.length === filteredStock.length}
+                        onChange={handleToggleSelectAll}
+                        className="rounded border-neutral-300 text-brand-gold focus:ring-brand-gold accent-brand-gold cursor-pointer"
+                        title="Select All Products"
+                      />
+                    </th>
                     <th className="px-4 py-3">Product Name</th>
                     <th className="px-4 py-3">Variant Details</th>
                     <th className="px-4 py-3">SKU Code</th>
@@ -419,9 +562,23 @@ const WarehousesAdminPage = () => {
                     const isVar = !!item.variantId;
                     const variantDetails = isVar ? renderAttributes(item.variant?.attributes) : 'Default (No Variants)';
                     const skuCode = isVar ? (item.variant?.sku || 'N/A') : (item.product?.sku || 'N/A');
+                    const isSelected = selectedStockIds.includes(item.id);
 
                     return (
-                      <tr key={item.id} className="border-b border-brand-light hover:bg-neutral-50/40 transition-colors">
+                      <tr
+                        key={item.id}
+                        className={`border-b border-brand-light transition-colors ${
+                          isSelected ? 'bg-amber-50/60' : 'hover:bg-neutral-50/40'
+                        }`}
+                      >
+                        <td className="px-3 py-3 text-center">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => handleToggleSelectItem(item.id)}
+                            className="rounded border-neutral-300 text-brand-gold focus:ring-brand-gold accent-brand-gold cursor-pointer"
+                          />
+                        </td>
                         <td className="px-4 py-3 font-semibold text-neutral-900">{prodName}</td>
                         <td className="px-4 py-3 text-brand-grey font-medium">{variantDetails}</td>
                         <td className="px-4 py-3 font-mono font-medium text-neutral-800">{skuCode}</td>
@@ -441,7 +598,7 @@ const WarehousesAdminPage = () => {
                         <td className="px-4 py-3 text-right whitespace-nowrap">
                           <button
                             onClick={() => openAdjustStockModal(item)}
-                            className="px-3 py-1 bg-neutral-950 text-white hover:bg-neutral-800 font-semibold uppercase tracking-wider text-[10px] transition-colors"
+                            className="px-2.5 py-1 bg-neutral-950 text-white hover:bg-neutral-800 font-semibold uppercase tracking-wider text-[10px] transition-colors"
                           >
                             Adjust Qty / Alert Level
                           </button>
@@ -589,7 +746,17 @@ const WarehousesAdminPage = () => {
                       onChange={e => setWarehouseForm(f => ({ ...f, isFulfillment: e.target.checked }))}
                       className="rounded border-neutral-350 text-brand-gold focus:ring-brand-gold accent-brand-gold"
                     />
-                    Mark as single Fulfillment Warehouse (stock will be automatically deducted from here upon order placement)
+                    Mark as single Primary Fulfillment Warehouse (all customer orders fulfilled from here)
+                  </label>
+
+                  <label className="flex items-center gap-2 text-xs font-semibold text-neutral-800 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={warehouseForm.isProcurement}
+                      onChange={e => setWarehouseForm(f => ({ ...f, isProcurement: e.target.checked }))}
+                      className="rounded border-neutral-350 text-blue-600 focus:ring-blue-600 accent-blue-600"
+                    />
+                    Mark as Procurement Source / Supply Hub (e.g. Dubai Depot — stock procurement source)
                   </label>
 
                   <div className="flex items-center justify-between bg-neutral-50 p-3 border border-brand-light">

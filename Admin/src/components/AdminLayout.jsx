@@ -18,7 +18,7 @@ const ORDER_SUB_ITEMS = [
     label: 'Abandoned Carts',
     icon: ShoppingBag,
     badgeKey: 'ABANDONED',
-    badgeClass: 'bg-amber-100 text-amber-900 font-semibold px-2 py-0.5 rounded-full',
+    badgeClass: 'bg-amber-100 text-amber-900 font-semibold px-2 py-0.5 rounded-full text-[11px]',
     match: (pathname) => pathname === '/abandoned-carts'
   },
   {
@@ -27,7 +27,7 @@ const ORDER_SUB_ITEMS = [
     label: 'New Orders',
     icon: ShoppingBag,
     badgeKey: 'PENDING',
-    badgeClass: 'text-neutral-600 font-medium',
+    badgeClass: 'bg-rose-100 text-rose-900 font-semibold px-2 py-0.5 rounded-full text-[11px]',
     match: (pathname, statusParam) => pathname === '/orders' && statusParam === 'PENDING'
   },
   {
@@ -36,7 +36,7 @@ const ORDER_SUB_ITEMS = [
     label: 'Confirmed',
     icon: Package,
     badgeKey: 'CONFIRMED',
-    badgeClass: 'text-neutral-600 font-medium',
+    badgeClass: 'bg-blue-100 text-blue-900 font-semibold px-2 py-0.5 rounded-full text-[11px]',
     match: (pathname, statusParam) => pathname === '/orders' && statusParam === 'CONFIRMED'
   },
   {
@@ -45,7 +45,7 @@ const ORDER_SUB_ITEMS = [
     label: 'Packing',
     icon: Package,
     badgeKey: 'PROCESSING',
-    badgeClass: 'bg-amber-100 text-amber-900 font-semibold px-2 py-0.5 rounded-full',
+    badgeClass: 'bg-yellow-100 text-yellow-900 font-semibold px-2 py-0.5 rounded-full text-[11px]',
     match: (pathname, statusParam) => pathname === '/orders' && statusParam === 'PROCESSING'
   },
   {
@@ -54,7 +54,7 @@ const ORDER_SUB_ITEMS = [
     label: 'Dispatched',
     icon: Truck,
     badgeKey: 'SHIPPED',
-    badgeClass: 'bg-purple-100 text-purple-900 font-semibold px-2 py-0.5 rounded-full',
+    badgeClass: 'bg-purple-100 text-purple-900 font-semibold px-2 py-0.5 rounded-full text-[11px]',
     match: (pathname, statusParam) => pathname === '/orders' && statusParam === 'SHIPPED'
   },
   {
@@ -63,7 +63,7 @@ const ORDER_SUB_ITEMS = [
     label: 'Out for Delivery',
     icon: Truck,
     badgeKey: 'OUT_FOR_DELIVERY',
-    badgeClass: 'bg-blue-100 text-blue-900 font-semibold px-2 py-0.5 rounded-full',
+    badgeClass: 'bg-sky-100 text-sky-900 font-semibold px-2 py-0.5 rounded-full text-[11px]',
     match: (pathname, statusParam) => pathname === '/orders' && statusParam === 'OUT_FOR_DELIVERY'
   },
   {
@@ -72,7 +72,7 @@ const ORDER_SUB_ITEMS = [
     label: 'Delivered',
     icon: Truck,
     badgeKey: 'DELIVERED',
-    badgeClass: 'bg-emerald-100 text-emerald-900 font-semibold px-2 py-0.5 rounded-full',
+    badgeClass: 'bg-emerald-100 text-emerald-900 font-semibold px-2 py-0.5 rounded-full text-[11px]',
     match: (pathname, statusParam) => pathname === '/orders' && statusParam === 'DELIVERED'
   },
   {
@@ -81,17 +81,8 @@ const ORDER_SUB_ITEMS = [
     label: 'Cancelled',
     icon: XCircle,
     badgeKey: 'CANCELLED',
-    badgeClass: 'text-neutral-600 font-medium',
+    badgeClass: 'bg-neutral-100 text-neutral-700 font-semibold px-2 py-0.5 rounded-full text-[11px]',
     match: (pathname, statusParam) => pathname === '/orders' && statusParam === 'CANCELLED'
-  },
-  {
-    to: '/orders?status=RTO',
-    status: 'RTO',
-    label: 'RTO',
-    icon: Truck,
-    badgeKey: 'RTO',
-    badgeClass: 'text-neutral-600 font-medium',
-    match: (pathname, statusParam) => pathname === '/orders' && statusParam === 'RTO'
   },
   {
     to: '/orders?status=RETURNED',
@@ -99,7 +90,7 @@ const ORDER_SUB_ITEMS = [
     label: 'Returned',
     icon: Truck,
     badgeKey: 'RETURNED',
-    badgeClass: 'text-neutral-600 font-medium',
+    badgeClass: 'bg-pink-100 text-pink-900 font-semibold px-2 py-0.5 rounded-full text-[11px]',
     match: (pathname, statusParam) => pathname === '/orders' && statusParam === 'RETURNED'
   },
 ];
@@ -137,6 +128,7 @@ const NAV_SECTIONS = [
       { to: '/sub-sub-categories', label: 'Child Categories', icon: Tag },
       { to: '/products', label: 'Products', icon: Package },
       { to: '/variants', label: 'Variants', icon: Package },
+      { to: '/stock-alerts', label: 'Restock Requests', icon: Bell },
       { to: '/reviews', label: 'Product Reviews', icon: Star },
       { label: 'Orders', icon: ShoppingBag, isAccordion: true },
     ],
@@ -223,13 +215,23 @@ const AdminLayout = ({ children, title = '' }) => {
   useEffect(() => {
     loadNotifications();
     loadOrderCounts();
+
+    const handleOrderStatusChange = () => {
+      loadOrderCounts();
+    };
+
+    window.addEventListener('adminOrderStatusChanged', handleOrderStatusChange);
+    return () => {
+      window.removeEventListener('adminOrderStatusChanged', handleOrderStatusChange);
+    };
   }, [loadNotifications, loadOrderCounts]);
 
   useEffect(() => {
+    loadOrderCounts();
     if (location.pathname === '/orders' || location.pathname === '/abandoned-carts') {
       setOrdersOpen(true);
     }
-  }, [location.pathname]);
+  }, [location.pathname, location.search, loadOrderCounts]);
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
@@ -463,13 +465,15 @@ const AdminLayout = ({ children, title = '' }) => {
             <div className="relative">
               <button
                 onClick={() => setNotificationsOpen(!notificationsOpen)}
-                className="p-1.5 text-brand-grey hover:text-brand-gold transition-colors focus-visible:outline-brand-gold relative flex items-center"
+                className="p-1.5 text-brand-grey hover:text-brand-gold transition-colors focus-visible:outline-brand-gold relative flex items-center justify-center"
                 aria-label="Notifications"
                 id="admin-notifications-bell"
               >
                 <Bell size={18} strokeWidth={1.5} />
                 {unreadCount > 0 && (
-                  <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full ring-2 ring-white animate-pulse" />
+                  <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] font-bold min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full ring-2 ring-white shadow-sm animate-pulse">
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </span>
                 )}
               </button>
 
@@ -485,7 +489,9 @@ const AdminLayout = ({ children, title = '' }) => {
                       className="absolute right-0 mt-2 w-80 bg-white border border-brand-light shadow-xl z-50 rounded-lg overflow-hidden"
                     >
                       <div className="flex items-center justify-between px-4 py-3 border-b border-brand-light bg-neutral-50">
-                        <span className="text-xs font-bold text-neutral-900 uppercase tracking-wider">Notifications</span>
+                        <span className="text-xs font-bold text-neutral-900 uppercase tracking-wider">
+                          Notifications {notifications.length > 0 && `(${notifications.length})`}
+                        </span>
                         <div className="flex items-center gap-2">
                           {unreadCount > 0 && (
                             <button

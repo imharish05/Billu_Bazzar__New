@@ -47,7 +47,6 @@ const processProductData = (req) => {
 
   if (data.tags) data.tags = parseJsonField(data.tags);
   if (data.attributes) data.attributes = parseJsonField(data.attributes);
-  if (data.dimensions) data.dimensions = parseJsonField(data.dimensions);
 
   // Parse dynamic variant options [{ optionName, optionValue }] -> attributes object
   if (data.variantOptions) {
@@ -67,8 +66,6 @@ const processProductData = (req) => {
   if (data.price !== undefined) data.price = data.price === '' ? null : parseFloat(data.price);
   if (data.comparePrice !== undefined) data.comparePrice = data.comparePrice === '' || data.comparePrice === 'null' ? null : parseFloat(data.comparePrice);
   if (data.stock !== undefined) data.stock = data.stock === '' ? 0 : parseInt(data.stock, 10);
-  if (data.weight !== undefined) data.weight = data.weight === '' || data.weight === 'null' ? null : parseFloat(data.weight);
-  if (data.dimensions !== undefined) data.dimensions = parseJsonField(data.dimensions);
   if (data.categoryId !== undefined) data.categoryId = data.categoryId === '' || data.categoryId === 'null' ? null : parseInt(data.categoryId, 10);
   if (data.subCategoryId !== undefined) data.subCategoryId = data.subCategoryId === '' || data.subCategoryId === 'null' ? null : parseInt(data.subCategoryId, 10);
   if (data.subSubCategoryId !== undefined) data.subSubCategoryId = data.subSubCategoryId === '' || data.subSubCategoryId === 'null' ? null : parseInt(data.subSubCategoryId, 10);
@@ -254,6 +251,10 @@ const getOne = async (req, res) => {
 const create = async (req, res) => {
   try {
     const { data } = processProductData(req);
+    if (!data.warehouseId) {
+      const primaryWh = await Warehouse.findOne({ where: { isFulfillment: true, isActive: true } });
+      if (primaryWh) data.warehouseId = primaryWh.id;
+    }
     const product = await Product.create(data);
 
     const spinMeta = materializeSpinSequence(product.id, product.spin_images);

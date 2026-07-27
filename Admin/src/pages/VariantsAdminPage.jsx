@@ -17,8 +17,8 @@ const COLOR_MAP = {
   orange: '#f97316', coral: '#ff6b6b', salmon: '#fa8072', peach: '#ffcba4',
   purple: '#9333ea', lavender: '#c4b5fd', violet: '#7c3aed', indigo: '#6366f1', mauve: '#9f8fba', plum: '#8b008b', lilac: '#c8a2c8', burgundy: '#800020',
   brown: '#92400e', tan: '#d2b48c', beige: '#f5f5dc', caramel: '#c68642', chocolate: '#7b3f00', coffee: '#6f4e37',
-  black: '#111111', charcoal: '#374151', grey: '#9ca3af', gray: '#9ca3af', silver: '#c0c0c0', ash: '#b2beb5',
-  white: '#ffffff', cream: '#fffdd0', ivory: '#fffff0', off: '#faf9f6',
+  black: '#111111', charcoal: '#374151', grey: '#9ca3af', gray: '#9ca3af', silver: '#c0c0c0', ash: '#b2beb5', steel: '#4682b4', neutral: '#d1d5db',
+  white: '#ffffff', cream: '#fffdd0', ivory: '#fffff0', off: '#faf9f6', clear: 'linear-gradient(135deg,#e2e8f0 0%,#cbd5e1 100%)', 'pastel blue': '#90caf9',
   multicolor: 'linear-gradient(135deg,#e53e3e 0%,#f59e0b 25%,#22c55e 50%,#3b82f6 75%,#9333ea 100%)',
   multi: 'linear-gradient(135deg,#e53e3e 0%,#f59e0b 25%,#22c55e 50%,#3b82f6 75%,#9333ea 100%)',
 };
@@ -35,12 +35,46 @@ const resolveColor = (name = '') => {
 
 // Preset suggestion chips per option name (mirrors ProductsAdminPage)
 const VARIANT_PRESET_VALUES = {
-  Size: ['FREE SIZE', 'XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL'],
-  Color: ['Red', 'Blue', 'Black', 'Green', 'Maroon', 'Pink', 'Gold', 'Purple', 'Navy', 'Yellow', 'White', 'Orange', 'Teal', 'Grey', 'Emerald', 'Burgundy', 'Beige', 'Lavender', 'Peach', 'Olive'],
-  Material: ['Silk', 'Cotton', 'Denim', 'Leather', 'Wool', 'Linen', 'Velvet'],
-  Fabric: ['Georgette', 'Chiffon', 'Organza', 'Satin', 'Crepe', 'Rayon'],
-  Style: ['Casual', 'Ethnic', 'Party', 'Formal', 'Boho'],
-  'Metal Purity': ['24K Gold', '22K Gold', '18K Gold', '925 Silver', 'Platinum'],
+  Size: ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL', 'FREE SIZE'],
+  Color: ['Black', 'White', 'Red', 'Blue', 'Green', 'Gray', 'Navy', 'Pink', 'Gold', 'Brown'],
+  'Band Color': ['Black', 'White', 'Pink', 'Green', 'Blue'],
+  Storage: ['128GB', '256GB', '512GB', '1TB', '2TB'],
+  RAM: ['4GB', '6GB', '8GB', '12GB', '16GB', '32GB', '64GB'],
+  Processor: ['i5', 'i7', 'i9', 'Ryzen 5', 'Ryzen 7', 'M2', 'M3'],
+  Connectivity: ['Wired', 'Bluetooth', 'Wi-Fi', 'Zigbee', 'Matter'],
+  Resolution: ['1080p', '1440p', '4K'],
+  'Refresh Rate': ['60Hz', '120Hz', '144Hz', '240Hz'],
+  Capacity: ['8GB', '16GB', '256GB', '512GB', '1TB', '10000mAh', '20000mAh'],
+  Type: ['DDR4', 'DDR5', 'SATA', 'NVMe', 'Indoor', 'Outdoor'],
+  Wattage: ['20W', '30W', '65W', '100W', '1800W'],
+  'Band Material': ['Silicone', 'Leather', 'Metal', 'Nylon'],
+  'Case Size': ['40mm', '42mm', '44mm', '45mm'],
+  Fit: ['Slim', 'Regular', 'Relaxed', 'Oversized'],
+  Material: ['Cotton', 'Polyester', 'Denim', 'Leather', 'Wood', 'Stainless Steel'],
+  'Metal Type': ['Gold', 'Silver', 'Rose Gold', 'Stainless Steel'],
+  Width: ['Regular', 'Wide'],
+  'Age / Size': ['0-3M', '3-6M', '6-12M', '2T', '3T', '4T', '5-6Y', '7-8Y'],
+  'Age Range': ['0-2Y', '3-5Y', '6-8Y', '9+'],
+  Finish: ['Matte', 'Dewy', 'Glossy', 'Oak', 'Walnut'],
+  Style: ['Modern', 'Boho', 'Minimalist', 'Casual', 'Formal'],
+  'Skin Type': ['Oily', 'Dry', 'Combination', 'Sensitive'],
+  SPF: ['SPF 15', 'SPF 30', 'SPF 50'],
+  Shade: ['Fair', 'Light', 'Medium', 'Tan', 'Deep'],
+  'Hair Type': ['Curly', 'Straight', 'Color-treated', 'Oily'],
+  Concentration: ['EDT', 'EDP', 'Parfum'],
+  Scent: ['Fresh', 'Unscented', 'Citrus', 'Musk'],
+  Weight: ['5lb', '10lb', '20lb', '50lb'],
+  'Resistance Level': ['Light', 'Medium', 'Heavy'],
+  'Temp Rating': ['20°F', '0°F', '32°F'],
+  'Frame Size': ['S', 'M', 'L', 'XL'],
+  'Wheel Size': ['26"', '27.5"', '29"'],
+  'Helmet Size': ['S', 'M', 'L'],
+  'Piece Count': ['100pc', '500pc', '1000pc'],
+  'Player Count': ['1-2', '2-4', '4-6'],
+  Platform: ['PS5', 'Xbox Series X', 'Switch', 'PC'],
+  Edition: ['Standard', 'Deluxe', "Collector's"],
+  Format: ['Hardcover', 'Paperback', 'E-book', 'Audiobook'],
+  Language: ['English', 'Spanish', 'French', 'Hindi'],
 };
 
 /**
@@ -57,15 +91,27 @@ const VariantAttributeChips = ({ label, value, onChange, suggestions = [] }) => 
   const [colorPickerHex, setColorPickerHex] = useState('#e53e3e');
   const isColor = label.toLowerCase() === 'color';
 
-  // Resolve presets — case-insensitive + handle plural labels (e.g. "Sizes" → "Size")
+  // Resolve presets — case-insensitive + handle plural labels & partial matches
   const presets = useMemo(() => {
-    const normalize = (s) => s.toLowerCase().replace(/s$/, ''); // strip trailing 's' for plural match
-    const labelNorm = normalize(label);
-    const matchedKey = Object.keys(VARIANT_PRESET_VALUES).find(
-      k => normalize(k) === labelNorm
-    );
-    const globalPresets = matchedKey ? VARIANT_PRESET_VALUES[matchedKey] : [];
-    return [...new Set([...globalPresets, ...suggestions.filter(s => !globalPresets.includes(s))])];
+    const rawLabel = String(label || '').trim();
+    if (!rawLabel) return [];
+
+    let globalPresets = [];
+    if (VARIANT_PRESET_VALUES[rawLabel]) {
+      globalPresets = VARIANT_PRESET_VALUES[rawLabel];
+    } else {
+      const normalize = (s) => s.toLowerCase().replace(/s$/, '');
+      const labelNorm = normalize(rawLabel);
+      const matchedKey = Object.keys(VARIANT_PRESET_VALUES).find(
+        k => normalize(k) === labelNorm || rawLabel.toLowerCase().includes(k.toLowerCase()) || k.toLowerCase().includes(rawLabel.toLowerCase())
+      );
+      if (matchedKey) {
+        globalPresets = VARIANT_PRESET_VALUES[matchedKey];
+      }
+    }
+
+    const slicedGlobal = globalPresets.slice(0, 8);
+    return [...new Set([...slicedGlobal, ...suggestions.filter(s => !slicedGlobal.includes(s))])];
   }, [label, suggestions]);
 
   const toggleValue = (v) => {
@@ -749,29 +795,29 @@ const VariantsAdminPage = () => {
 
   const handleDelete = (id) => {
     toast((t) => (
-      <div className="flex flex-col gap-2 p-1">
+      <div className="flex flex-col items-center text-center gap-2 p-1">
         <p className="text-sm font-semibold text-neutral-800">Confirm Deletion</p>
-        <p className="text-xs text-neutral-600">Are you sure you want to delete this variant? This will remove its stock records.</p>
-        <div className="flex justify-end gap-2 mt-2">
+        <p className="text-xs text-neutral-600 max-w-xs">Are you sure you want to delete this variant? This will remove its stock records.</p>
+        <div className="flex justify-center items-center gap-3 mt-2 w-full">
           <button
             onClick={() => {
               toast.dismiss(t.id);
               executeDelete(id);
             }}
-            className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold uppercase tracking-wider transition-colors rounded shadow-sm"
+            className="px-3.5 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold uppercase tracking-wider transition-colors rounded shadow-sm"
           >
             Yes, Delete
           </button>
           <button
             onClick={() => toast.dismiss(t.id)}
-            className="px-3 py-1.5 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 text-xs font-semibold uppercase tracking-wider transition-colors rounded border border-neutral-200"
+            className="px-3.5 py-1.5 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 text-xs font-semibold uppercase tracking-wider transition-colors rounded border border-neutral-200"
           >
             Cancel
           </button>
         </div>
       </div>
     ), {
-      duration: 10000,
+      duration: 6000,
       position: 'top-center'
     });
   };

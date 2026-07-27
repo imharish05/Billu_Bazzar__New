@@ -249,7 +249,9 @@ const getStock = async (req, res) => {
       include: stockInclude,
       order: [['quantity', 'ASC']]
     });
-    res.json({ success: true, stocks });
+    // Filter out orphaned stocks where product does not exist
+    const validStocks = stocks.filter(s => s.product != null);
+    res.json({ success: true, stocks: validStocks });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -304,52 +306,71 @@ const upsertStock = async (req, res) => {
 const transferStock = async (req, res) => {
   const transaction = await WarehouseStock.sequelize.transaction();
   try {
-    const { fromWarehouseId, toWarehouseId, productId, variantId, quantity } = req.body;
+    const { fromWarehouseId, toWarehouseId, productId, variantId, quantity, items } = req.body;
 
-    if (!fromWarehouseId || !toWarehouseId || !productId || !quantity || quantity <= 0) {
+    if (!fromWarehouseId || !toWarehouseId) {
       await transaction.rollback();
-      return res.status(400).json({ success: false, message: 'fromWarehouseId, toWarehouseId, productId, and positive quantity are required' });
+      return res.status(400).json({ success: false, message: 'fromWarehouseId and toWarehouseId are required' });
     }
 
-    // Find source stock
-    const sourceStock = await WarehouseStock.findOne({
-      where: { warehouseId: fromWarehouseId, productId, variantId: variantId || null },
-      transaction
-    });
+    const transferItems = Array.isArray(items) && items.length > 0
+      ? items
+      : (productId && quantity ? [{ productId, variantId: variantId || null, quantity: parseInt(quantity, 10) }] : []);
 
-    if (!sourceStock || sourceStock.quantity < quantity) {
+    if (transferItems.length === 0) {
       await transaction.rollback();
-      return res.status(400).json({ success: false, message: `Insufficient stock in source warehouse. Available: ${sourceStock ? sourceStock.quantity : 0}` });
+      return res.status(400).json({ success: false, message: 'No valid items specified for transfer' });
     }
 
-    // Deduct source stock
-    await sourceStock.decrement('quantity', { by: quantity, transaction });
+    for (const item of transferItems) {
+      const pId = item.productId;
+      const vId = item.variantId || null;
+      const qty = parseInt(item.quantity, 10);
 
-    // Add target stock
-    const [targetStock] = await WarehouseStock.findOrCreate({
-      where: { warehouseId: toWarehouseId, productId, variantId: variantId || null },
-      defaults: { warehouseId: toWarehouseId, productId, variantId: variantId || null, quantity: 0 },
-      transaction
-    });
-    await targetStock.increment('quantity', { by: quantity, transaction });
+      if (!pId || !qty || qty <= 0) continue;
 
-    // Log the movement
-    await InventoryMovementLog.create({
-      productId,
-      variantId: variantId || null,
-      warehouseId: fromWarehouseId,
-      toWarehouseId,
-      quantity,
-      type: 'MANUAL_ADJUSTMENT', // Can represent transfer
-      reason: `Stock transfer of ${quantity} units from warehouse #${fromWarehouseId} to warehouse #${toWarehouseId}`,
-    }, { transaction });
+      const sourceStock = await WarehouseStock.findOne({
+        where: { warehouseId: fromWarehouseId, productId: pId, variantId: vId },
+        transaction
+      });
+
+      if (!sourceStock || sourceStock.quantity < qty) {
+        await transaction.rollback();
+        return res.status(400).json({
+          success: false,
+          message: `Insufficient stock in source warehouse for Product #${pId}. Available: ${sourceStock ? sourceStock.quantity : 0}`
+        });
+      }
+
+      await sourceStock.decrement('quantity', { by: qty, transaction });
+
+      const [targetStock] = await WarehouseStock.findOrCreate({
+        where: { warehouseId: toWarehouseId, productId: pId, variantId: vId },
+        defaults: { warehouseId: toWarehouseId, productId: pId, variantId: vId, quantity: 0 },
+        transaction
+      });
+
+      await targetStock.increment('quantity', { by: qty, transaction });
+
+      await InventoryMovementLog.create({
+        productId: pId,
+        variantId: vId,
+        warehouseId: fromWarehouseId,
+        toWarehouseId,
+        quantity: qty,
+        type: 'MANUAL_ADJUSTMENT',
+        reason: `Stock transfer of ${qty} units from warehouse #${fromWarehouseId} to warehouse #${toWarehouseId}`,
+      }, { transaction });
+    }
 
     await transaction.commit();
 
-    // Sync storefront stock for both warehouses (if either is fulfillment)
-    await syncStorefrontStock(productId, variantId);
+    // Sync storefront stock for all transferred items
+    for (const item of transferItems) {
+      await syncStorefrontStock(item.productId, item.variantId || null);
+    }
 
-    res.json({ success: true, message: 'Stock transferred successfully' });
+    res.json({ success: true, message: `Successfully transferred ${transferItems.length} item(s)` });
   } catch (err) {
     await transaction.rollback();
     res.status(500).json({ success: false, message: err.message });

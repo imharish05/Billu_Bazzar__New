@@ -13,6 +13,7 @@ const Warehouse = sequelize.define('Warehouse', {
   contactName: { type: DataTypes.STRING(100) },
   contactPhone: { type: DataTypes.STRING(20) },
   isFulfillment: { type: DataTypes.BOOLEAN, defaultValue: false },
+  isProcurement: { type: DataTypes.BOOLEAN, defaultValue: false },
   isActive: { type: DataTypes.BOOLEAN, defaultValue: true },
 });
 

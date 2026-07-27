@@ -3,6 +3,7 @@
 const crypto = require('crypto');
 const { sequelize, Order, OrderItem, Product, ProductVariant, InventoryMovementLog, Customer, Warehouse, WarehouseStock } = require('../models');
 const resolver = require('../services/paymentGatewayResolver');
+const { sendOrderStatusNotification } = require('../services/emailService');
 
 // Helper to push order details to Shiprocket shipping API
 const pushToShiprocket = async (orderId) => {
@@ -273,6 +274,7 @@ const processConfirmedPayment = async ({ orderQuery, gatewayPaymentId, signature
       // Post-commit async hooks
       pushToShiprocket(order.id).catch(console.error);
       checkAndNotifyLowStock(sortedItems).catch(console.error);
+      sendOrderStatusNotification(order, 'PAID').catch(err => console.error('[paymentController] Error sending order paid email:', err.message));
 
       return res.json({ success: true, status: 'PAID' });
     } else {

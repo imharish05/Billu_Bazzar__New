@@ -3,7 +3,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Star, Edit3, Trash2, Eye, Package, MessageSquare, CheckCircle, AlertCircle, X, Loader2, ExternalLink } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { fetchMyDeliveredItems, updateReview, deleteReview } from '../../redux/slices/reviewsSlice';
+import { fetchMyDeliveredItems, createReview, updateReview, deleteReview } from '../../redux/slices/reviewsSlice';
 import toast from 'react-hot-toast';
 
 const StarPicker = ({ value, onChange }) => (
@@ -106,7 +106,7 @@ const EditReviewModal = ({ item, onClose, onSave, submitting }) => {
             disabled={submitting}
             className="w-full py-3 bg-amber-400 hover:bg-amber-500 text-white font-semibold rounded-xl text-sm transition-colors flex items-center justify-center gap-2"
           >
-            {submitting ? <><Loader2 size={16} className="animate-spin" /> Saving...</> : 'Save Review'}
+            {submitting ? <><Loader2 size={16} className="animate-spin" /> Saving...</> : (item.existingReview ? 'Save Review' : 'Submit Review')}
           </button>
         </form>
       </motion.div>
@@ -138,6 +138,15 @@ const MyReviewsPage = () => {
           productId: editingItem.productId,
         })).unwrap();
         toast.success('Review updated successfully!');
+      } else {
+        await dispatch(createReview({
+          productId: editingItem.productId,
+          orderId: editingItem.orderId,
+          rating,
+          title,
+          body,
+        })).unwrap();
+        toast.success('Review submitted successfully!');
       }
       // Refresh list
       dispatch(fetchMyDeliveredItems());
@@ -343,12 +352,20 @@ const MyReviewsPage = () => {
                         </Link>
                       </>
                     ) : (
-                      <Link
-                        to={item.productSlug ? `/products/${item.productSlug}` : '#'}
-                        className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-5 py-2.5 text-xs font-semibold rounded-xl bg-amber-400 text-white hover:bg-amber-500 shadow-sm transition-colors"
-                      >
-                        <Star size={14} /> Write a Review
-                      </Link>
+                      <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
+                        <button
+                          onClick={() => setEditingItem(item)}
+                          className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-5 py-2.5 text-xs font-semibold rounded-xl bg-amber-400 text-white hover:bg-amber-500 shadow-sm transition-colors cursor-pointer"
+                        >
+                          <Star size={14} /> Write a Review
+                        </button>
+                        <Link
+                          to={item.productSlug ? `/products/${item.productSlug}?writeReview=true` : '#'}
+                          className="inline-flex items-center justify-center gap-1 px-3.5 py-2.5 text-xs font-medium text-neutral-500 hover:text-neutral-900 border border-neutral-200 rounded-xl hover:bg-neutral-50 transition-colors"
+                        >
+                          <ExternalLink size={13} /> View Product
+                        </Link>
+                      </div>
                     )}
                   </div>
                 </div>

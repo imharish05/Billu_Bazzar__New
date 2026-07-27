@@ -1,5 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
-import { ToggleLeft, ToggleRight, X, Save, Plus, Edit2, Trash2, Upload, Copy, RefreshCw } from 'lucide-react';
+import { 
+  X, Save, Plus, Edit2, Trash2, Upload, Copy, RefreshCw, 
+  FileText, ExternalLink, Eye, CheckSquare, Square, Download, Eye as PreviewIcon
+} from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
 import Switch from '../components/Switch';
 import api from '../services/api';
@@ -14,29 +17,71 @@ const generateUniqueCode = () => {
   return code;
 };
 
+const DEFAULT_PLATFORMS = ['Instagram', 'YouTube', 'TikTok', 'Facebook'];
+
+const buildDefaultSocials = (existingList = []) => {
+  const result = DEFAULT_PLATFORMS.map(pName => {
+    const found = existingList.find(x => x.platform?.toLowerCase() === pName.toLowerCase());
+    if (found) {
+      return {
+        platform: pName,
+        enabled: found.enabled !== false,
+        handle: found.handle || '',
+        followersCount: found.followersCount || found.followers || ''
+      };
+    }
+    return { platform: pName, enabled: false, handle: '', followersCount: '' };
+  });
+
+  const customItems = existingList.filter(x => 
+    x.platform && !DEFAULT_PLATFORMS.some(dp => dp.toLowerCase() === x.platform.toLowerCase())
+  ).map(c => ({
+    platform: c.platform,
+    enabled: c.enabled !== false,
+    handle: c.handle || '',
+    followersCount: c.followersCount || c.followers || '',
+    isCustom: true
+  }));
+
+  return [...result, ...customItems];
+};
+
 const AffiliatesAdminPage = () => {
   const [affiliates, setAffiliates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
+  
+  // Document Preview Modal state
+  const [docModalOpen, setDocModalOpen] = useState(false);
+  const [docModalUrl, setDocModalUrl] = useState(null);
+  const [docModalTitle, setDocModalTitle] = useState('');
+
+  // Orders View Modal state
+  const [ordersModalOpen, setOrdersModalOpen] = useState(false);
+  const [selectedAffiliateForOrders, setSelectedAffiliateForOrders] = useState(null);
+  const [affiliateOrders, setAffiliateOrders] = useState([]);
+  const [loadingOrders, setLoadingOrders] = useState(false);
+
   const [form, setForm] = useState({
     name: '',
     email: '',
     referralCode: '',
     commissionRate: 5.0,
     payoutMethod: 'Bank Transfer',
-    followers: '0',
-    handle: '',
-    productsCurated: 0
+    socialMedia: buildDefaultSocials([])
   });
   
-  const [imagePreview, setImagePreview] = useState(null);
-  const [imageFile, setImageFile] = useState(null);
-  const [isDragging, setIsDragging] = useState(false);
+  const [docFile, setDocFile] = useState(null);
+  const [docPreviewUrl, setDocPreviewUrl] = useState(null);
+  const [docPreviewName, setDocPreviewName] = useState(null);
+  const [existingDocUrl, setExistingDocUrl] = useState(null);
+
+  const [isDraggingDoc, setIsDraggingDoc] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 
-  const fileInputRef = useRef(null);
+  const docInputRef = useRef(null);
 
   const load = async () => {
     try {
@@ -57,44 +102,56 @@ const AffiliatesAdminPage = () => {
 
   const handleCopyLink = (code) => {
     const origin = import.meta.env.VITE_CLIENT_URL || window.location.origin.replace(':5174', ':5173');
-    const url = `${origin}/products?ref=${code}`;
+    const url = `${origin}/?ref=${code}`;
     navigator.clipboard.writeText(url)
-      .then(() => toast.success('Referral link copied to clipboard!'))
+      .then(() => toast.success('Unique referral link copied to clipboard!'))
       .catch(() => toast.error('Failed to copy link.'));
+  };
+
+  const openDocPreviewModal = (url, title = 'Document Proof Preview') => {
+    if (!url) return;
+    setDocModalUrl(url);
+    setDocModalTitle(title);
+    setDocModalOpen(true);
   };
 
   const openModal = (aff = null) => {
     setEditing(aff);
+    let parsedSocials = [];
+    if (aff?.socialMedia) {
+      parsedSocials = typeof aff.socialMedia === 'string' ? JSON.parse(aff.socialMedia) : aff.socialMedia;
+    }
+
     setForm(aff ? {
       name: aff.name,
       email: aff.email,
       referralCode: aff.referralCode,
       commissionRate: aff.commissionRate,
       payoutMethod: aff.payoutMethod || 'Bank Transfer',
-      followers: aff.followers || '0',
-      handle: aff.handle || '',
-      productsCurated: aff.productsCurated || 0
+      socialMedia: buildDefaultSocials(parsedSocials)
     } : {
       name: '',
       email: '',
       referralCode: generateUniqueCode(),
       commissionRate: 5.0,
       payoutMethod: 'Bank Transfer',
-      followers: '0',
-      handle: '',
-      productsCurated: 0
+      socialMedia: buildDefaultSocials([])
     });
-    setImagePreview(aff?.avatar || null);
-    setImageFile(null);
+
+    setDocFile(null);
+    setDocPreviewUrl(null);
+    setDocPreviewName(null);
+    setExistingDocUrl(aff?.documentProof || null);
     setError(null);
-    if (fileInputRef.current) fileInputRef.current.value = '';
+
+    if (docInputRef.current) docInputRef.current.value = '';
     setModalOpen(true);
   };
 
   const handleToggleActive = async (aff) => {
     try {
       await api.put(`/affiliates/${aff.id}`, { ...aff, isActive: !aff.isActive });
-      toast.success('Status updated successfully.');
+      toast.success(aff.isActive ? 'Affiliate link disabled' : 'Affiliate link activated');
       load();
     } catch (err) {
       console.error(err);
@@ -102,17 +159,46 @@ const AffiliatesAdminPage = () => {
     }
   };
 
-  const handleFileSelect = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    processFile(file);
+  // Document proof file handling
+  const processDocFile = (file) => {
+    setDocFile(file);
+    setDocPreviewName(file.name);
+    const objectUrl = URL.createObjectURL(file);
+    setDocPreviewUrl(objectUrl);
   };
 
-  const processFile = (file) => {
-    setImageFile(file);
-    const reader = new FileReader();
-    reader.onloadend = () => setImagePreview(reader.result);
-    reader.readAsDataURL(file);
+  // Social media form handlers
+  const handleToggleSocial = (index) => {
+    setForm(prev => {
+      const updated = [...prev.socialMedia];
+      updated[index] = { ...updated[index], enabled: !updated[index].enabled };
+      return { ...prev, socialMedia: updated };
+    });
+  };
+
+  const handleSocialFieldChange = (index, field, value) => {
+    setForm(prev => {
+      const updated = [...prev.socialMedia];
+      updated[index] = { ...updated[index], [field]: value };
+      return { ...prev, socialMedia: updated };
+    });
+  };
+
+  const handleAddCustomSocial = () => {
+    setForm(prev => ({
+      ...prev,
+      socialMedia: [
+        ...prev.socialMedia,
+        { platform: '', enabled: true, handle: '', followersCount: '', isCustom: true }
+      ]
+    }));
+  };
+
+  const handleRemoveCustomSocial = (index) => {
+    setForm(prev => ({
+      ...prev,
+      socialMedia: prev.socialMedia.filter((_, i) => i !== index)
+    }));
   };
 
   const handleSave = async (e) => {
@@ -127,13 +213,12 @@ const AffiliatesAdminPage = () => {
       fd.append('referralCode', form.referralCode.trim());
       fd.append('commissionRate', String(form.commissionRate));
       fd.append('payoutMethod', form.payoutMethod);
-      fd.append('followers', form.followers.trim());
-      fd.append('handle', form.handle.trim());
-      fd.append('productsCurated', String(form.productsCurated));
 
-      const file = imageFile || fileInputRef.current?.files?.[0];
-      if (file) {
-        fd.append('avatar', file);
+      const validSocials = form.socialMedia.filter(s => s.platform.trim() !== '');
+      fd.append('socialMedia', JSON.stringify(validSocials));
+
+      if (docFile) {
+        fd.append('documentProof', docFile);
       }
 
       if (editing) {
@@ -152,134 +237,278 @@ const AffiliatesAdminPage = () => {
     }
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to permanently delete this affiliate? This action cannot be undone.')) return;
+  const handleDelete = (id) => {
+    toast((t) => (
+      <div className="flex flex-col items-center text-center gap-2 p-1 min-w-[260px]">
+        <p className="text-sm font-bold text-brand-text">Delete this affiliate?</p>
+        <p className="text-xs text-brand-grey max-w-xs">This action cannot be undone.</p>
+        <div className="flex justify-center items-center gap-3 mt-2 w-full">
+          <button
+            onClick={async () => {
+              toast.dismiss(t.id);
+              try {
+                await api.delete(`/affiliates/${id}`);
+                toast.success('Affiliate permanently deleted.');
+                load();
+              } catch (err) {
+                console.error(err);
+                toast.error('Failed to delete affiliate.');
+              }
+            }}
+            className="px-3.5 py-1.5 text-xs bg-red-600 text-white rounded font-medium hover:bg-red-700 shadow-sm transition-colors"
+          >
+            Yes, Delete
+          </button>
+          <button
+            onClick={() => toast.dismiss(t.id)}
+            className="px-3.5 py-1.5 text-xs border border-brand-light rounded text-brand-grey hover:bg-neutral-100 transition-colors"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    ), {
+      duration: 6000,
+      position: 'top-center',
+      style: {
+        borderRadius: '12px',
+        background: '#ffffff',
+        color: '#1a1a1a',
+        border: '1px solid #E5E7EB',
+        boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.12), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
+        padding: '14px 18px',
+      },
+    });
+  };
+
+  const handleViewOrders = async (aff) => {
+    setSelectedAffiliateForOrders(aff);
+    setOrdersModalOpen(true);
+    setLoadingOrders(true);
     try {
-      await api.delete(`/affiliates/${id}`);
-      toast.success('Affiliate permanently deleted.');
-      load();
+      const res = await api.get(`/affiliates/${aff.id}/orders`);
+      setAffiliateOrders(res.data.orders || []);
     } catch (err) {
       console.error(err);
-      toast.error('Failed to delete affiliate.');
+      toast.error('Failed to load orders for this affiliate.');
+    } finally {
+      setLoadingOrders(false);
     }
   };
 
   return (
     <AdminLayout title="Affiliates">
-      <div className="flex justify-between items-center mb-6">
-        <p className="text-sm text-brand-grey">
-          {affiliates.length} affiliates · ₹{affiliates.reduce((s, a) => s + Number(a.totalEarnings || 0), 0).toLocaleString('en-IN')} total paid out
-        </p>
-        <button onClick={() => openModal()} className="btn-primary flex items-center gap-2" id="add-affiliate-btn">
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-6">
+        <div>
+          <h2 className="text-xl font-playfair font-bold text-brand-text">Affiliate Management</h2>
+          <p className="text-sm text-brand-grey mt-0.5">
+            {affiliates.length} affiliates registered · ₹{affiliates.reduce((s, a) => s + Number(a.totalEarnings || 0), 0).toLocaleString('en-IN')} total paid out
+          </p>
+        </div>
+        <button onClick={() => openModal()} className="btn-primary flex items-center justify-center gap-2" id="add-affiliate-btn">
           <Plus size={16} /> Add Affiliate
         </button>
       </div>
 
       {loading ? (
-        <div className="bg-white rounded-xl shadow-sm p-8 text-center text-brand-grey">Loading...</div>
+        <div className="bg-white rounded-xl shadow-sm p-8 text-center text-brand-grey">Loading affiliates...</div>
       ) : (
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-brand-light">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm text-left border-collapse" aria-label="Affiliates table">
+        <div className="bg-white rounded-xl shadow-sm border border-brand-light overflow-hidden">
+          <div className="overflow-x-auto w-full">
+            <table className="min-w-[1250px] w-full text-sm text-left border-collapse" aria-label="Affiliates table">
               <thead>
                 <tr className="bg-brand-light/40 border-b border-brand-light">
-                  {['Influencer', 'Email', 'Referral Code', 'Followers', 'Commission', 'Earnings', 'Clicks', 'Orders', 'Status', 'Actions'].map(h => (
-                    <th key={h} className="px-5 py-4 text-xs font-semibold text-brand-grey uppercase tracking-wider">{h}</th>
+                  {['Affiliate Name', 'Email', 'Referral Code', 'Social Platforms & Followers', 'Commission', 'Total Earnings', 'Clicks', 'Orders', 'Document Proof', 'Status', 'Actions'].map(h => (
+                    <th key={h} className="px-4 py-3.5 text-xs font-semibold text-brand-grey uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-brand-light">
-                {affiliates.map(a => (
-                  <tr key={a.id} className="hover:bg-brand-light/10 transition-colors">
-                    <td className="px-5 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-full overflow-hidden border border-brand-light bg-neutral-100 flex items-center justify-center">
-                          {a.avatar ? (
-                            <img src={a.avatar} alt={a.name} className="w-full h-full object-cover" />
-                          ) : (
-                            <span className="text-brand-text font-bold text-xs">{a.name[0]}</span>
-                          )}
-                        </div>
-                        <p className="font-semibold text-brand-text">{a.name}</p>
-                      </div>
-                    </td>
-                    <td className="px-5 py-4 text-brand-grey">{a.email}</td>
-                    <td className="px-5 py-4">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-xs bg-brand-light text-brand-text px-2 py-0.5 rounded border border-brand-light/60">
-                          {a.referralCode}
-                        </span>
-                        <button
-                          onClick={() => handleCopyLink(a.referralCode)}
-                          className="p-1 text-brand-grey hover:text-brand-gold hover:bg-brand-light rounded transition-all"
-                          title="Copy Referral Link"
-                          id={`copy-aff-${a.id}`}
-                        >
-                          <Copy size={13} />
-                        </button>
-                      </div>
-                    </td>
-                    <td className="px-5 py-4 font-medium text-brand-text">{a.followers || '0'}</td>
-                    <td className="px-5 py-4 font-semibold text-brand-text">{a.commissionRate}%</td>
-                    <td className="px-5 py-4 font-semibold text-green-700">
-                      ₹{Number(a.totalEarnings || 0).toLocaleString('en-IN')}
-                    </td>
-                    <td className="px-5 py-4 text-brand-grey">{Number(a.totalClicks || 0).toLocaleString('en-IN')}</td>
-                    <td className="px-5 py-4 font-medium text-brand-text">{a.totalOrders || 0}</td>
-                    <td className="px-5 py-4">
-                      <div className="flex items-center">
-                        <Switch
-                          checked={a.isActive}
-                          onChange={() => handleToggleActive(a)}
-                          id={`toggle-aff-${a.id}`}
-                        />
-                      </div>
-                    </td>
-                    <td className="px-5 py-4 text-right">
-                      <div className="flex items-center gap-2">
-                        <button onClick={() => openModal(a)} className="p-2 text-brand-grey hover:text-brand-gold hover:bg-brand-light/35 rounded transition-colors" id={`edit-aff-${a.id}`} title="Edit">
-                          <Edit2 size={14} />
-                        </button>
-                        <button onClick={() => handleDelete(a.id)} className="p-2 text-brand-grey hover:text-red-500 hover:bg-red-50 rounded transition-colors" id={`del-aff-${a.id}`} title="Delete">
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
+                {affiliates.length === 0 ? (
+                  <tr>
+                    <td colSpan="11" className="px-5 py-8 text-center text-brand-grey">
+                      No affiliates found. Click "Add Affiliate" to create one.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  affiliates.map(a => {
+                    let parsedSocials = [];
+                    if (a.socialMedia) {
+                      parsedSocials = typeof a.socialMedia === 'string' ? JSON.parse(a.socialMedia) : a.socialMedia;
+                    }
+                    const activeSocials = parsedSocials.filter(s => s.enabled !== false && (s.handle || s.followersCount));
+
+                    return (
+                      <tr key={a.id} className="hover:bg-brand-light/10 transition-colors">
+                        {/* Name */}
+                        <td className="px-4 py-4 whitespace-nowrap">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-full bg-brand-light text-brand-text flex items-center justify-center font-bold text-xs shrink-0">
+                              {a.name ? a.name[0].toUpperCase() : 'A'}
+                            </div>
+                            <p className="font-semibold text-brand-text">{a.name}</p>
+                          </div>
+                        </td>
+
+                        {/* Email */}
+                        <td className="px-4 py-4 text-brand-grey text-xs whitespace-nowrap">{a.email}</td>
+
+                        {/* Referral Code & Unique Link */}
+                        <td className="px-4 py-4 whitespace-nowrap">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono text-xs font-semibold bg-brand-light/80 text-brand-text px-2 py-1 rounded border border-brand-light whitespace-nowrap">
+                              {a.referralCode}
+                            </span>
+                            <button
+                              onClick={() => handleCopyLink(a.referralCode)}
+                              className="p-1.5 text-brand-grey hover:text-brand-gold hover:bg-brand-light rounded transition-all"
+                              title="Copy Unique Link"
+                              id={`copy-aff-${a.id}`}
+                            >
+                              <Copy size={14} />
+                            </button>
+                          </div>
+                        </td>
+
+                        {/* Social Platforms & Followers */}
+                        <td className="px-4 py-4">
+                          {activeSocials.length > 0 ? (
+                            <div className="flex flex-wrap items-center gap-1.5 max-w-[320px]">
+                              {activeSocials.map((s, idx) => {
+                                const cleanHandle = s.handle?.replace(/^https?:\/\/(www\.)?/, '') || 'N/A';
+                                return (
+                                  <span key={idx} className="inline-flex items-center gap-1 text-[11px] bg-neutral-100 text-neutral-800 px-2 py-0.5 rounded border border-neutral-200 whitespace-nowrap max-w-[280px]" title={`${s.platform}: ${s.handle}`}>
+                                    <span className="font-semibold">{s.platform}:</span>
+                                    <span className="truncate max-w-[140px]">{cleanHandle}</span>
+                                    {s.followersCount && (
+                                      <span className="bg-brand-gold/15 text-brand-gold text-[10px] font-bold px-1 rounded shrink-0">
+                                        {s.followersCount}
+                                      </span>
+                                    )}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <span className="text-xs text-brand-grey/60 italic whitespace-nowrap">None specified</span>
+                          )}
+                        </td>
+
+                        {/* Commission Rate */}
+                        <td className="px-4 py-4 font-semibold text-brand-text whitespace-nowrap">{a.commissionRate}%</td>
+
+                        {/* Total Earnings */}
+                        <td className="px-4 py-4 font-bold text-emerald-600 whitespace-nowrap">
+                          ₹{Number(a.totalEarnings || 0).toLocaleString('en-IN')}
+                        </td>
+
+                        {/* Clicks */}
+                        <td className="px-4 py-4 text-brand-grey font-medium whitespace-nowrap">{Number(a.totalClicks || 0).toLocaleString('en-IN')}</td>
+
+                        {/* Orders */}
+                        <td className="px-4 py-4 font-medium text-brand-text whitespace-nowrap">{a.totalOrders || 0}</td>
+
+                        {/* Document Proof (Modal Trigger) */}
+                        <td className="px-4 py-4 whitespace-nowrap">
+                          {a.documentProof ? (
+                            <button
+                              type="button"
+                              onClick={() => openDocPreviewModal(a.documentProof, `Document Proof — ${a.name}`)}
+                              className="inline-flex items-center gap-1 text-xs text-brand-gold hover:underline font-semibold cursor-pointer"
+                              title="View Document Proof in Modal"
+                            >
+                              <FileText size={14} /> View Document
+                            </button>
+                          ) : (
+                            <span className="text-xs text-brand-grey/60 italic">No Document</span>
+                          )}
+                        </td>
+
+                        {/* Status Toggle */}
+                        <td className="px-4 py-4 whitespace-nowrap">
+                          <div className="flex items-center gap-2">
+                            <Switch
+                              checked={a.isActive}
+                              onChange={() => handleToggleActive(a)}
+                              id={`toggle-aff-${a.id}`}
+                            />
+                            <span className={`text-[11px] font-medium px-1.5 py-0.5 rounded ${a.isActive ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'}`}>
+                              {a.isActive ? 'Active' : 'Disabled'}
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* Actions */}
+                        <td className="px-4 py-4 text-right whitespace-nowrap">
+                          <div className="flex items-center gap-1 justify-end">
+                            <button
+                              onClick={() => handleViewOrders(a)}
+                              className="p-1.5 text-brand-grey hover:text-brand-gold hover:bg-brand-light rounded transition-colors"
+                              title="View Orders History"
+                            >
+                              <Eye size={15} />
+                            </button>
+                            <button
+                              onClick={() => openModal(a)}
+                              className="p-1.5 text-brand-grey hover:text-brand-gold hover:bg-brand-light rounded transition-colors"
+                              id={`edit-aff-${a.id}`}
+                              title="Edit"
+                            >
+                              <Edit2 size={15} />
+                            </button>
+                            <button
+                              onClick={() => handleDelete(a.id)}
+                              className="p-1.5 text-brand-grey hover:text-red-500 hover:bg-red-50 rounded transition-colors"
+                              id={`del-aff-${a.id}`}
+                              title="Delete"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
         </div>
       )}
 
+      {/* Add / Edit Affiliate Modal */}
       {modalOpen && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={e => e.target === e.currentTarget && !saving && setModalOpen(false)}>
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
-            <div className="flex justify-between items-center px-6 py-4 border-b border-brand-light">
-              <h3 className="font-playfair text-lg font-semibold text-brand-text">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+            <div className="flex justify-between items-center px-6 py-4 border-b border-brand-light bg-neutral-50 shrink-0">
+              <h3 className="font-playfair text-lg font-bold text-brand-text">
                 {editing ? 'Edit Affiliate Profile' : 'Add New Affiliate'}
               </h3>
               <button onClick={() => !saving && setModalOpen(false)} className="text-brand-grey hover:text-brand-text">
                 <X size={20} />
               </button>
             </div>
-            <form onSubmit={handleSave} className="p-6 space-y-4">
-              {error && <p className="text-red-500 text-xs bg-red-50 p-2.5 rounded border border-red-200">{error}</p>}
+
+            <form onSubmit={handleSave} className="p-6 space-y-6 overflow-y-auto flex-1 text-sm">
+              {error && <p className="text-red-500 text-xs bg-red-50 p-3 rounded border border-red-200">{error}</p>}
               
-              <div>
-                <label className="block text-xs font-medium text-brand-grey mb-1.5" htmlFor="aff-name">Full Name *</label>
-                <input id="aff-name" type="text" required value={form.name} onChange={e => setForm({...form, name: e.target.value})} className="w-full border border-brand-light px-3 py-2 text-sm focus:outline-none focus:border-brand-gold transition-colors" />
-              </div>
-              
-              <div>
-                <label className="block text-xs font-medium text-brand-grey mb-1.5" htmlFor="aff-email">Email Address *</label>
-                <input id="aff-email" type="email" required value={form.email} onChange={e => setForm({...form, email: e.target.value})} className="w-full border border-brand-light px-3 py-2 text-sm focus:outline-none focus:border-brand-gold transition-colors" />
+              {/* Basic Info Section */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-brand-grey mb-1" htmlFor="aff-name">Full Name *</label>
+                  <input id="aff-name" type="text" required value={form.name} onChange={e => setForm({...form, name: e.target.value})} className="w-full border border-brand-light px-3 py-2 text-sm focus:outline-none focus:border-brand-gold rounded" placeholder="e.g. Rahul Sharma" />
+                </div>
+                
+                <div>
+                  <label className="block text-xs font-medium text-brand-grey mb-1" htmlFor="aff-email">Email Address *</label>
+                  <input id="aff-email" type="email" required value={form.email} onChange={e => setForm({...form, email: e.target.value})} className="w-full border border-brand-light px-3 py-2 text-sm focus:outline-none focus:border-brand-gold rounded" placeholder="e.g. rahul@example.com" />
+                </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              {/* Referral Code & Commission */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-brand-grey mb-1.5" htmlFor="aff-code">Referral Code *</label>
+                  <label className="block text-xs font-medium text-brand-grey mb-1" htmlFor="aff-code">Referral Code *</label>
                   <div className="relative">
                     <input
                       id="aff-code"
@@ -287,84 +516,325 @@ const AffiliatesAdminPage = () => {
                       required
                       value={form.referralCode}
                       onChange={e => setForm({...form, referralCode: e.target.value.toUpperCase().replace(/\s+/g, '')})}
-                      className="w-full border border-brand-light pl-3 pr-8 py-2 text-sm focus:outline-none focus:border-brand-gold transition-colors font-mono"
+                      className="w-full border border-brand-light pl-3 pr-8 py-2 text-sm focus:outline-none focus:border-brand-gold font-mono rounded"
                     />
                     <button
                       type="button"
                       onClick={() => setForm(f => ({ ...f, referralCode: generateUniqueCode() }))}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-brand-grey hover:text-brand-gold transition-colors"
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-brand-grey hover:text-brand-gold transition-colors"
                       title="Generate Unique Code"
                     >
                       <RefreshCw size={14} />
                     </button>
                   </div>
+                  <p className="text-[11px] text-brand-grey/70 mt-1">Unique link: <span className="font-mono text-brand-gold">?ref={form.referralCode}</span></p>
                 </div>
+
                 <div>
-                  <label className="block text-xs font-medium text-brand-grey mb-1.5" htmlFor="aff-rate">Commission Rate (%)</label>
-                  <input id="aff-rate" type="number" step="0.1" required value={form.commissionRate} onChange={e => setForm({...form, commissionRate: parseFloat(e.target.value) || 0})} className="w-full border border-brand-light px-3 py-2 text-sm focus:outline-none focus:border-brand-gold transition-colors" />
+                  <label className="block text-xs font-medium text-brand-grey mb-1" htmlFor="aff-rate">Commission Rate (%) *</label>
+                  <input id="aff-rate" type="number" step="0.1" required value={form.commissionRate} onChange={e => setForm({...form, commissionRate: parseFloat(e.target.value) || 0})} className="w-full border border-brand-light px-3 py-2 text-sm focus:outline-none focus:border-brand-gold rounded" placeholder="e.g. 5.0" />
                 </div>
               </div>
 
+              {/* Social Media & Per-Platform Followers Section */}
+              <div className="border border-brand-light rounded-lg p-4 bg-neutral-50/50 space-y-4">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <h4 className="font-semibold text-brand-text text-sm">Social Media & Individual Followers Count</h4>
+                    <p className="text-xs text-brand-grey">Select platforms and enter handles & follower counts for each platform.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleAddCustomSocial}
+                    className="text-xs text-brand-gold font-semibold hover:underline flex items-center gap-1"
+                  >
+                    <Plus size={14} /> Add Social Media
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  {form.socialMedia.map((soc, idx) => (
+                    <div key={idx} className="bg-white border border-brand-light p-3 rounded-lg flex flex-col md:flex-row md:items-center gap-3">
+                      <div className="flex items-center gap-2 min-w-[140px]">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleSocial(idx)}
+                          className="text-brand-gold focus:outline-none"
+                        >
+                          {soc.enabled ? <CheckSquare size={18} /> : <Square size={18} className="text-neutral-400" />}
+                        </button>
+                        {soc.isCustom ? (
+                          <input
+                            type="text"
+                            value={soc.platform}
+                            onChange={e => handleSocialFieldChange(idx, 'platform', e.target.value)}
+                            placeholder="Platform Name"
+                            className="w-full border border-brand-light px-2 py-1 text-xs rounded"
+                          />
+                        ) : (
+                          <span className={`font-semibold text-xs ${soc.enabled ? 'text-brand-text' : 'text-neutral-400'}`}>
+                            {soc.platform}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 flex-1">
+                        <input
+                          type="text"
+                          disabled={!soc.enabled}
+                          value={soc.handle}
+                          onChange={e => handleSocialFieldChange(idx, 'handle', e.target.value)}
+                          placeholder="Handle / Link (e.g. @user)"
+                          className="w-full border border-brand-light px-2.5 py-1 text-xs focus:outline-none focus:border-brand-gold rounded disabled:bg-neutral-100"
+                        />
+                        <input
+                          type="text"
+                          disabled={!soc.enabled}
+                          value={soc.followersCount}
+                          onChange={e => handleSocialFieldChange(idx, 'followersCount', e.target.value)}
+                          placeholder="Followers Count (e.g. 150K)"
+                          className="w-full border border-brand-light px-2.5 py-1 text-xs focus:outline-none focus:border-brand-gold rounded disabled:bg-neutral-100"
+                        />
+                      </div>
+
+                      {soc.isCustom && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveCustomSocial(idx)}
+                          className="text-neutral-400 hover:text-red-500 p-1"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Document Proof Upload & Inline Preview Section */}
               <div>
-                <label className="block text-xs font-medium text-brand-grey mb-1.5" htmlFor="aff-handle">Social Handle (e.g. @arya_official)</label>
-                <input id="aff-handle" type="text" value={form.handle} onChange={e => setForm({...form, handle: e.target.value})} className="w-full border border-brand-light px-3 py-2 text-sm focus:outline-none focus:border-brand-gold transition-colors" placeholder="@handle" />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-brand-grey mb-1.5" htmlFor="aff-followers">Followers (e.g. 150K, 1.2M)</label>
-                  <input id="aff-followers" type="text" value={form.followers} onChange={e => setForm({...form, followers: e.target.value})} className="w-full border border-brand-light px-3 py-2 text-sm focus:outline-none focus:border-brand-gold transition-colors" placeholder="e.g. 150K" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-brand-grey mb-1.5" htmlFor="aff-products-curated">Products Curated</label>
-                  <input id="aff-products-curated" type="number" value={form.productsCurated} onChange={e => setForm({...form, productsCurated: parseInt(e.target.value) || 0})} className="w-full border border-brand-light px-3 py-2 text-sm focus:outline-none focus:border-brand-gold transition-colors" />
-                </div>
-              </div>
-
-              {/* Avatar upload zone */}
-              <div>
-                <label className="block text-xs font-medium text-brand-grey mb-1.5">Avatar Image</label>
+                <label className="block text-xs font-medium text-brand-grey mb-1">Document Proof (ID / Tax / Agreement)</label>
                 <div
-                  className={`border-2 border-dashed rounded-lg p-4 text-center transition-colors cursor-pointer ${
-                    isDragging ? 'border-brand-gold bg-brand-gold/5' : 'border-brand-light hover:border-brand-gold'
+                  className={`border-2 border-dashed rounded-lg p-4 transition-colors cursor-pointer ${
+                    isDraggingDoc ? 'border-brand-gold bg-brand-gold/5' : 'border-brand-light hover:border-brand-gold'
                   }`}
-                  onClick={() => fileInputRef.current?.click()}
-                  onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-                  onDragLeave={() => setIsDragging(false)}
+                  onClick={() => docInputRef.current?.click()}
+                  onDragOver={(e) => { e.preventDefault(); setIsDraggingDoc(true); }}
+                  onDragLeave={() => setIsDraggingDoc(false)}
                   onDrop={(e) => {
                     e.preventDefault();
-                    setIsDragging(false);
+                    setIsDraggingDoc(false);
                     const file = e.dataTransfer.files?.[0];
-                    if (file && file.type.startsWith('image/')) {
-                      processFile(file);
-                    }
+                    if (file) processDocFile(file);
                   }}
                 >
-                  {imagePreview ? (
-                    <div className="relative">
-                      <img src={imagePreview} alt="Avatar Preview" className="max-h-24 mx-auto object-contain rounded-full w-24 h-24 border border-brand-light" />
-                      <button type="button" onClick={(e) => { e.stopPropagation(); setImagePreview(null); setImageFile(null); if (fileInputRef.current) fileInputRef.current.value = ''; }} className="absolute top-0 right-1/3 bg-white/80 p-1 rounded-full hover:bg-white border border-brand-light shadow-sm transition-colors">
-                        <X size={12} className="text-brand-text" />
+                  {docPreviewUrl || docPreviewName ? (
+                    <div className="flex flex-col items-center justify-center gap-3 py-1" onClick={e => e.stopPropagation()}>
+                      {/* Inline Image or PDF File Card Preview */}
+                      {docFile?.type?.startsWith('image/') ? (
+                        <div className="relative group">
+                          <img src={docPreviewUrl} alt="Document Proof Preview" className="max-h-32 rounded border border-brand-light object-contain shadow-sm bg-neutral-50" />
+                          <button
+                            type="button"
+                            onClick={() => openDocPreviewModal(docPreviewUrl, `Document Proof — ${docPreviewName || 'Preview'}`)}
+                            className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-semibold rounded gap-1"
+                          >
+                            <PreviewIcon size={16} /> Preview Modal
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-3 bg-neutral-50 p-3 rounded-lg border border-brand-light w-full max-w-md">
+                          <FileText size={28} className="text-brand-gold shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-bold text-brand-text truncate">{docPreviewName || 'Document File'}</p>
+                            <p className="text-[10px] text-brand-grey">Selected file ready to save</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => openDocPreviewModal(docPreviewUrl, `Document Proof — ${docPreviewName}`)}
+                            className="btn-outline text-xs py-1 px-2.5 flex items-center gap-1"
+                          >
+                            <PreviewIcon size={13} /> Preview
+                          </button>
+                        </div>
+                      )}
+
+                      <div className="flex items-center gap-3 mt-1">
+                        <button
+                          type="button"
+                          onClick={() => docInputRef.current?.click()}
+                          className="text-xs text-brand-gold font-medium hover:underline"
+                        >
+                          Change File
+                        </button>
+                        <span className="text-neutral-300">|</span>
+                        <button
+                          type="button"
+                          onClick={() => { setDocFile(null); setDocPreviewUrl(null); setDocPreviewName(null); if (docInputRef.current) docInputRef.current.value = ''; }}
+                          className="text-xs text-red-500 font-medium hover:underline"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  ) : existingDocUrl ? (
+                    <div className="flex flex-col items-center justify-center gap-3 py-1" onClick={e => e.stopPropagation()}>
+                      <div className="flex items-center gap-3 bg-neutral-50 p-3 rounded-lg border border-brand-light w-full max-w-md">
+                        <FileText size={28} className="text-brand-gold shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-bold text-brand-text truncate">Uploaded Document Proof</p>
+                          <p className="text-[10px] text-brand-grey">Stored safely on server</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => openDocPreviewModal(existingDocUrl, `Document Proof — ${form.name}`)}
+                          className="btn-primary text-xs py-1.5 px-3 flex items-center gap-1.5"
+                        >
+                          <PreviewIcon size={14} /> Preview Modal
+                        </button>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => docInputRef.current?.click()}
+                        className="text-xs text-brand-gold font-medium hover:underline mt-1"
+                      >
+                        Upload Replacement File
                       </button>
                     </div>
                   ) : (
-                    <div className="py-2">
-                      <Upload size={20} className="mx-auto text-brand-grey mb-1.5" />
-                      <p className="text-xs text-brand-grey font-medium">Drag & drop image or click to upload</p>
-                      <p className="text-[9px] text-brand-grey/60 mt-0.5">JPEG, PNG, WebP — max 5MB</p>
+                    <div className="py-3 text-center">
+                      <FileText size={24} className="mx-auto text-brand-grey mb-1.5" />
+                      <p className="text-xs text-brand-grey font-medium">Click or drag & drop to upload Document Proof</p>
+                      <p className="text-[10px] text-brand-grey/60 mt-0.5">PDF, JPEG, PNG, WebP (max 10MB)</p>
                     </div>
                   )}
                 </div>
-                <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handleFileSelect} />
+                <input ref={docInputRef} type="file" accept="application/pdf,image/jpeg,image/png,image/webp" className="hidden" onChange={e => e.target.files?.[0] && processDocFile(e.target.files[0])} />
               </div>
 
-              <div className="flex gap-3 pt-4 border-t border-brand-light">
+              <div className="flex gap-3 pt-4 border-t border-brand-light shrink-0">
                 <button type="button" onClick={() => setModalOpen(false)} disabled={saving} className="btn-outline flex-1">Cancel</button>
                 <button type="submit" disabled={saving} className="btn-primary flex items-center justify-center gap-2 flex-1">
-                  <Save size={15} /> {saving ? 'Saving...' : 'Save'}
+                  <Save size={15} /> {saving ? 'Saving...' : 'Save Affiliate'}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Document Proof Preview Modal */}
+      {docModalOpen && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={e => e.target === e.currentTarget && setDocModalOpen(false)}>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
+            <div className="flex justify-between items-center px-6 py-4 border-b border-brand-light bg-neutral-50 shrink-0">
+              <div className="flex items-center gap-2">
+                <FileText size={20} className="text-brand-gold" />
+                <h3 className="font-playfair text-lg font-bold text-brand-text">
+                  {docModalTitle}
+                </h3>
+              </div>
+              <div className="flex items-center gap-3">
+                {docModalUrl && (
+                  <a
+                    href={docModalUrl}
+                    download
+                    target="_blank"
+                    rel="noreferrer"
+                    className="btn-outline text-xs py-1.5 px-3 flex items-center gap-1.5"
+                  >
+                    <Download size={14} /> Download File
+                  </a>
+                )}
+                <button onClick={() => setDocModalOpen(false)} className="text-brand-grey hover:text-brand-text p-1">
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-4 bg-neutral-100 flex-1 overflow-y-auto flex items-center justify-center min-h-[500px]">
+              {docModalUrl ? (
+                docModalUrl.toLowerCase().includes('.pdf') || docModalUrl.startsWith('data:application/pdf') ? (
+                  <iframe
+                    src={docModalUrl}
+                    className="w-full h-[70vh] rounded-lg border shadow-inner bg-white"
+                    title="Document Proof Preview"
+                  />
+                ) : (
+                  <img
+                    src={docModalUrl}
+                    alt="Document Proof Preview"
+                    className="max-w-full max-h-[70vh] object-contain rounded-lg border shadow-md bg-white"
+                  />
+                )
+              ) : (
+                <p className="text-sm text-brand-grey">No document available to preview.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Orders Breakdown Modal */}
+      {ordersModalOpen && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={e => e.target === e.currentTarget && setOrdersModalOpen(false)}>
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl max-h-[85vh] flex flex-col overflow-hidden">
+            <div className="flex justify-between items-center px-6 py-4 border-b border-brand-light bg-neutral-50 shrink-0">
+              <div>
+                <h3 className="font-playfair text-lg font-bold text-brand-text">
+                  Orders History — {selectedAffiliateForOrders?.name}
+                </h3>
+                <p className="text-xs text-brand-grey">
+                  Referral Code: <span className="font-mono text-brand-gold">{selectedAffiliateForOrders?.referralCode}</span> · Commission Rate: {selectedAffiliateForOrders?.commissionRate}%
+                </p>
+              </div>
+              <button onClick={() => setOrdersModalOpen(false)} className="text-brand-grey hover:text-brand-text">
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto flex-1">
+              {loadingOrders ? (
+                <div className="text-center py-8 text-brand-grey text-sm">Loading affiliate orders...</div>
+              ) : affiliateOrders.length === 0 ? (
+                <div className="text-center py-8 text-brand-grey text-sm">
+                  No orders placed through this affiliate link yet.
+                </div>
+              ) : (
+                <table className="w-full text-xs text-left border-collapse">
+                  <thead>
+                    <tr className="bg-brand-light/40 border-b border-brand-light text-brand-grey font-semibold uppercase">
+                      <th className="px-4 py-3">Order #</th>
+                      <th className="px-4 py-3">Customer</th>
+                      <th className="px-4 py-3">Date</th>
+                      <th className="px-4 py-3">Order Total</th>
+                      <th className="px-4 py-3">Commission Earned</th>
+                      <th className="px-4 py-3">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-brand-light">
+                    {affiliateOrders.map(ord => {
+                      const commRate = parseFloat(selectedAffiliateForOrders?.commissionRate || 0);
+                      const earnedComm = (Number(ord.totalAmount || 0) * commRate) / 100;
+                      return (
+                        <tr key={ord.id} className="hover:bg-neutral-50">
+                          <td className="px-4 py-3 font-mono font-semibold text-brand-text">{ord.orderNumber}</td>
+                          <td className="px-4 py-3 text-brand-text">{ord.customer?.name || 'Guest'} ({ord.customer?.email || 'N/A'})</td>
+                          <td className="px-4 py-3 text-brand-grey">{new Date(ord.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</td>
+                          <td className="px-4 py-3 font-semibold text-brand-text">₹{Number(ord.totalAmount || 0).toLocaleString('en-IN')}</td>
+                          <td className="px-4 py-3 font-bold text-emerald-600">₹{earnedComm.toFixed(2)}</td>
+                          <td className="px-4 py-3">
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700">
+                              {ord.status}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
           </div>
         </div>
       )}

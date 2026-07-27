@@ -18,7 +18,6 @@ const STATUS_COLORS = {
   OUT_FOR_DELIVERY: 'bg-orange-50 text-orange-700 border-orange-200',
   DELIVERED: 'bg-green-50 text-green-700 border-green-200',
   CANCELLED: 'bg-red-50 text-red-700 border-red-200',
-  RTO: 'bg-slate-100 text-slate-700 border-slate-200',
   RETURNED: 'bg-pink-50 text-pink-700 border-pink-200',
 };
 
@@ -114,7 +113,7 @@ const AdminOrderDetailsModal = ({ order, onClose, onStatusUpdate }) => {
                   onChange={e => onStatusUpdate(order.id, e.target.value)}
                   className="text-xs px-2.5 py-1.5 rounded-lg border border-neutral-300 font-medium focus:border-brand-gold focus:outline-none bg-neutral-50 cursor-pointer"
                 >
-                  {['PENDING','CONFIRMED','PROCESSING','SHIPPED','OUT_FOR_DELIVERY','DELIVERED','CANCELLED','RTO','RETURNED'].map(s => (
+                  {['PENDING','CONFIRMED','PROCESSING','SHIPPED','OUT_FOR_DELIVERY','DELIVERED','CANCELLED','RETURNED'].map(s => (
                     <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>
                   ))}
                 </select>

@@ -1,9 +1,10 @@
 import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useDispatch, useSelector } from 'react-redux';
-import { X, Star, ShoppingBag, Eye, ShieldCheck, Sparkles, Zap, Heart, Plus, Minus, Check } from 'lucide-react';
+import { X, Star, ShoppingBag, Eye, ShieldCheck, Sparkles, Zap, Heart, Plus, Minus, Check, Mail, CheckCircle2 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
+import api from '../services/api';
 import { closeQuickView } from '../redux/slices/uiSlice';
 import { addLocal, openCart, setBuyNowItem } from '../redux/slices/cartSlice';
 import { toggleItem as toggleWishlistLocal } from '../redux/slices/wishlistSlice';
@@ -102,6 +103,16 @@ const QuickViewModal = () => {
   const [quantity, setQuantity] = useState(1);
   const [selectedAttributes, setSelectedAttributes] = useState({});
 
+  const [notifyEmail, setNotifyEmail] = useState('');
+  const [notifySuccess, setNotifySuccess] = useState(false);
+  const [submittingNotify, setSubmittingNotify] = useState(false);
+
+  useEffect(() => {
+    if (customer?.email) {
+      setNotifyEmail(customer.email);
+    }
+  }, [customer?.email]);
+
   // Parse DB variants
   const parsedVariants = useMemo(() => {
     if (!product || !product.variants) return [];
@@ -153,6 +164,7 @@ const QuickViewModal = () => {
     if (!product) return;
     setActiveImgIndex(0);
     setQuantity(1);
+    setNotifySuccess(false);
 
     if (parsedVariants.length > 0) {
       setSelectedAttributes(parsedVariants[0].attributes || {});
@@ -193,7 +205,7 @@ const QuickViewModal = () => {
     ? (selectedVariant.stock !== undefined ? selectedVariant.stock > 0 : true)
     : product.inStock !== false;
 
-  const stockLimit = selectedVariant?.stock || product.stock || 10;
+  const stockLimit = selectedVariant?.stock !== undefined ? parseInt(selectedVariant.stock, 10) : (product.stock || 10);
 
   const baseImages = (product.images && product.images.length > 0)
     ? product.images
@@ -334,16 +346,27 @@ const QuickViewModal = () => {
     });
   };
 
-  const handleNotifyMe = () => {
-    toast.success(`We will notify you at ${customer?.email || 'your email'} once ${product.name} is back in stock!`, {
-      iconTheme: { primary: '#C58837', secondary: 'white' },
-      style: {
-        border: '1px solid #C58837',
-        color: '#111111',
-        fontFamily: 'Montserrat, sans-serif'
-      }
-    });
-    dispatch(closeQuickView());
+  const handleNotifySubmit = async (e) => {
+    if (e) e.preventDefault();
+    if (!notifyEmail.trim()) {
+      toast.error('Please enter a valid email address.');
+      return;
+    }
+    try {
+      setSubmittingNotify(true);
+      await api.post('/stock-alerts', {
+        productId: product.id,
+        variantId: selectedVariant ? selectedVariant.id : null,
+        selectedVariant: currentSelectedAttrs,
+        email: notifyEmail.trim()
+      });
+      setNotifySuccess(true);
+      toast.success(`Restock notification registered for ${notifyEmail.trim()}!`);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to register restock alert.');
+    } finally {
+      setSubmittingNotify(false);
+    }
   };
 
   const discount = displayComparePrice && displayComparePrice > displayPrice
@@ -532,20 +555,20 @@ const QuickViewModal = () => {
                                     ? (directVariantMatch.stock !== undefined && parseInt(directVariantMatch.stock, 10) <= 0)
                                     : (anyVariantWithVal && anyVariantWithVal.stock !== undefined ? parseInt(anyVariantWithVal.stock, 10) <= 0 : false);
 
-                                  let ringStyle = 'border-transparent opacity-75 hover:opacity-100 hover:scale-105';
+                                  let ringStyle = 'border-transparent opacity-75 hover:opacity-100 hover:scale-105 cursor-pointer';
                                   if (isSelected) {
-                                    ringStyle = 'border-amber-600 scale-110 shadow-md ring-2 ring-amber-400/40';
-                                  } else if (!directVariantMatch && anyVariantWithVal) {
-                                    ringStyle = 'border-dashed border-amber-400 opacity-80 hover:opacity-100 hover:scale-105';
+                                    ringStyle = 'border-amber-600 scale-110 shadow-md ring-2 ring-amber-400/40 cursor-pointer';
                                   } else if (isOutOfStock) {
-                                    ringStyle = 'border-neutral-300 opacity-40 cursor-not-allowed';
+                                    ringStyle = 'border-neutral-300 opacity-50 hover:opacity-80 hover:scale-105 cursor-pointer';
+                                  } else if (!directVariantMatch && anyVariantWithVal) {
+                                    ringStyle = 'border-dashed border-amber-400 opacity-80 hover:opacity-100 hover:scale-105 cursor-pointer';
                                   }
 
                                   return (
                                     <button
                                       key={i}
                                       type="button"
-                                      disabled={isOutOfStock || (!directVariantMatch && !anyVariantWithVal)}
+                                      disabled={!directVariantMatch && !anyVariantWithVal}
                                       onClick={() => handleSelectAttribute(groupKey, val)}
                                       className={`relative p-0.5 rounded-full border-2 transition-all cursor-pointer ${ringStyle}`}
                                       title={isOutOfStock ? `${val} — Out of stock` : (!directVariantMatch && anyVariantWithVal ? `Click to select variant with ${groupKey}: ${val}` : val)}
@@ -560,7 +583,7 @@ const QuickViewModal = () => {
                                             <span className="w-full h-0.5 bg-rose-500 rotate-45 transform" />
                                           </span>
                                         )}
-                                        {isSelected && !isOutOfStock && (
+                                        {isSelected && (
                                           <Check size={12} className={['white', 'cream', 'beige', 'yellow', 'gold'].includes(val.toLowerCase()) ? 'text-black' : 'text-white'} />
                                         )}
                                       </span>
@@ -582,13 +605,17 @@ const QuickViewModal = () => {
                                     ? (directVariantMatch.stock !== undefined && parseInt(directVariantMatch.stock, 10) <= 0)
                                     : (anyVariantWithVal && anyVariantWithVal.stock !== undefined ? parseInt(anyVariantWithVal.stock, 10) <= 0 : false);
 
-                                  let btnStyle = "bg-white text-neutral-800 border-neutral-300 hover:border-amber-500 hover:bg-amber-50/50";
+                                  let btnStyle = "bg-white text-neutral-800 border-neutral-300 hover:border-amber-500 hover:bg-amber-50/50 cursor-pointer";
                                   if (isSelected) {
-                                    btnStyle = "bg-neutral-950 text-amber-400 border-neutral-900 shadow-sm scale-[1.02] ring-2 ring-amber-400/30 font-extrabold";
+                                    if (isOutOfStock) {
+                                      btnStyle = "bg-neutral-950 text-amber-400 border-neutral-900 shadow-sm scale-[1.02] ring-2 ring-amber-400/30 font-extrabold line-through opacity-85 cursor-pointer";
+                                    } else {
+                                      btnStyle = "bg-neutral-950 text-amber-400 border-neutral-900 shadow-sm scale-[1.02] ring-2 ring-amber-400/30 font-extrabold cursor-pointer";
+                                    }
                                   } else if (isOutOfStock) {
-                                    btnStyle = "bg-neutral-100 text-neutral-400 border-neutral-200 line-through opacity-60 cursor-not-allowed";
+                                    btnStyle = "bg-neutral-100 text-neutral-400 border-neutral-200 line-through opacity-60 hover:opacity-80 cursor-pointer";
                                   } else if (!directVariantMatch && anyVariantWithVal) {
-                                    btnStyle = "bg-amber-50/40 text-neutral-700 border-dashed border-amber-300 hover:border-amber-500 hover:bg-amber-100/50";
+                                    btnStyle = "bg-amber-50/40 text-neutral-700 border-dashed border-amber-300 hover:border-amber-500 hover:bg-amber-100/50 cursor-pointer";
                                   } else if (!anyVariantWithVal) {
                                     btnStyle = "bg-neutral-100 text-neutral-400 border-dashed border-neutral-200 line-through opacity-40 cursor-not-allowed";
                                   }
@@ -597,7 +624,7 @@ const QuickViewModal = () => {
                                     <button
                                       key={i}
                                       type="button"
-                                      disabled={isOutOfStock || (!directVariantMatch && !anyVariantWithVal)}
+                                      disabled={!directVariantMatch && !anyVariantWithVal}
                                       onClick={() => handleSelectAttribute(groupKey, val)}
                                       className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all border cursor-pointer ${btnStyle}`}
                                       title={isOutOfStock ? `${val} — Out of stock` : (!directVariantMatch && anyVariantWithVal ? `Click to select variant with ${groupKey}: ${val}` : `${groupKey}: ${val}`)}
@@ -681,14 +708,46 @@ const QuickViewModal = () => {
                       </button>
                     </div>
                   ) : (
-                    <button
-                      onClick={handleNotifyMe}
-                      className="bg-neutral-950 hover:bg-neutral-800 text-white text-xs font-bold tracking-widest uppercase py-3.5 px-4 rounded-xl w-full flex items-center justify-center gap-2 transition-all duration-200 shadow-md cursor-pointer overflow-hidden"
-                      id={`quickview-notify-${product.id}`}
-                    >
-                      <Zap size={15} className="shrink-0 text-amber-400" />
-                      <span>Notify Me</span>
-                    </button>
+                    <div className="bg-amber-50/60 p-3 rounded-xl border border-amber-200/80 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-neutral-900 flex items-center gap-1.5">
+                          <Mail size={14} className="text-amber-600" /> Out of Stock
+                        </span>
+                        <span className="text-[10px] font-semibold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200">
+                          Restock Alert
+                        </span>
+                      </div>
+                      {!notifySuccess ? (
+                        <form onSubmit={handleNotifySubmit} className="space-y-2">
+                          <p className="text-[11px] text-neutral-600 font-medium">Enter your email to get notified immediately when restocked:</p>
+                          <div className="flex gap-2">
+                            <input
+                              type="email"
+                              required
+                              placeholder="Enter your email"
+                              value={notifyEmail}
+                              onChange={e => setNotifyEmail(e.target.value)}
+                              className="flex-1 bg-white border border-neutral-300 rounded-lg px-3 py-2 text-xs text-neutral-900 focus:outline-none focus:border-amber-500 shadow-xs"
+                            />
+                            <button
+                              type="submit"
+                              disabled={submittingNotify}
+                              className="bg-neutral-950 hover:bg-neutral-800 disabled:opacity-50 text-amber-400 px-3.5 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-colors cursor-pointer flex items-center gap-1 shrink-0"
+                            >
+                              {submittingNotify ? 'Saving...' : 'Notify Me'}
+                            </button>
+                          </div>
+                        </form>
+                      ) : (
+                        <div className="bg-emerald-50 text-emerald-800 p-2.5 rounded-lg border border-emerald-200 text-xs flex items-center gap-2">
+                          <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+                          <div>
+                            <p className="font-bold">Subscription Active!</p>
+                            <p className="text-[11px] text-emerald-700">We will email <span className="font-semibold">{notifyEmail}</span> as soon as this item is restocked.</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   )}
                   <Link
                     to={`/products/${product.slug}`}

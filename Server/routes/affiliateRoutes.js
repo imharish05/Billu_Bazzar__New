@@ -7,8 +7,8 @@ const upload = require('../middleware/upload');
 router.get('/track', trackClick);
 router.get('/', getAll);
 router.get('/:id', getOne);
-router.post('/', verifyAdmin, upload.single('avatar'), create);
-router.put('/:id', verifyAdmin, upload.single('avatar'), update);
+router.post('/', verifyAdmin, upload.single('documentProof'), create);
+router.put('/:id', verifyAdmin, upload.single('documentProof'), update);
 router.delete('/:id', verifyAdmin, remove);
 router.get('/:id/orders', verifyAdmin, getOrders);
 

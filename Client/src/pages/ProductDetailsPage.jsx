@@ -1,8 +1,8 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ShoppingBag, Heart, Star, ChevronRight, ChevronLeft, Share2, Shield, Truck, RotateCcw, ZoomIn, Play, Mail, CheckCircle2, X, Tag, Copy } from 'lucide-react';
+import { ShoppingBag, Heart, Star, ChevronRight, ChevronLeft, Share2, Shield, Truck, RotateCcw, ZoomIn, Play, Mail, CheckCircle2, X, Tag, Copy, Edit3, Trash2 } from 'lucide-react';
 import { fetchProduct, fetchProducts } from '../redux/slices/productsSlice';
 import { addLocal, openCart, setBuyNowItem } from '../redux/slices/cartSlice';
 import { toggleItem } from '../redux/slices/wishlistSlice';
@@ -26,8 +26,8 @@ const COLOR_MAP = {
   orange: '#f97316', coral: '#ff6b6b', salmon: '#fa8072', peach: '#ffcba4',
   purple: '#9333ea', lavender: '#c4b5fd', violet: '#7c3aed', indigo: '#6366f1', mauve: '#9f8fba', plum: '#8b008b', lilac: '#c8a2c8', burgundy: '#800020',
   brown: '#92400e', tan: '#d2b48c', beige: '#f5f5dc', caramel: '#c68642', chocolate: '#7b3f00', coffee: '#6f4e37',
-  black: '#111111', charcoal: '#374151', grey: '#9ca3af', gray: '#9ca3af', silver: '#c0c0c0', ash: '#b2beb5',
-  white: '#f9fafb', cream: '#fffdd0', ivory: '#fffff0', off: '#faf9f6',
+  black: '#111111', charcoal: '#374151', grey: '#9ca3af', gray: '#9ca3af', silver: '#c0c0c0', ash: '#b2beb5', steel: '#4682b4', neutral: '#d1d5db',
+  white: '#f9fafb', cream: '#fffdd0', ivory: '#fffff0', off: '#faf9f6', clear: 'linear-gradient(135deg,#e2e8f0 0%,#cbd5e1 100%)', 'pastel blue': '#90caf9',
   multicolor: 'linear-gradient(135deg,#e53e3e 0%,#f59e0b 25%,#22c55e 50%,#3b82f6 75%,#9333ea 100%)',
   multi: 'linear-gradient(135deg,#e53e3e 0%,#f59e0b 25%,#22c55e 50%,#3b82f6 75%,#9333ea 100%)',
   printed: 'linear-gradient(135deg,#f687b3 0%,#f59e0b 33%,#38bdf8 66%,#22c55e 100%)',
@@ -69,6 +69,8 @@ const ProductDetailsPage = () => {
   const videoRef = useRef(null);
   const [videoSpeed, setVideoSpeed] = useState(0.8);
 
+  const [searchParams] = useSearchParams();
+  const { isAuthenticated } = useSelector(s => s.auth || {});
   const reviewsState = useSelector(s => s.reviews);
 
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
@@ -77,12 +79,24 @@ const ProductDetailsPage = () => {
   const [reviewBody, setReviewBody] = useState('');
   const [editingReviewId, setEditingReviewId] = useState(null);
 
-
   useEffect(() => {
     if (product && product.id) {
       dispatch(fetchProductReviews(product.id));
     }
   }, [product?.id, dispatch]);
+
+  useEffect(() => {
+    if (searchParams.get('writeReview') === 'true') {
+      setActiveTab('reviews');
+      setTimeout(() => {
+        const reviewsEl = document.getElementById('reviews');
+        if (reviewsEl) reviewsEl.scrollIntoView({ behavior: 'smooth' });
+      }, 150);
+      if (reviewsState.userCanReview) {
+        setReviewModalOpen(true);
+      }
+    }
+  }, [searchParams, reviewsState.userCanReview]);
 
   const handleOpenWriteReview = () => {
     if (reviewsState.userReview) {
@@ -509,11 +523,21 @@ const ProductDetailsPage = () => {
 
 
 
-  const handleNotifySubmit = (e) => {
+  const handleNotifySubmit = async (e) => {
     e.preventDefault();
     if (!notifyEmail.trim()) return;
-    setNotifySuccess(true);
-    toast.success('Restock notification alert activated!');
+    try {
+      await api.post('/stock-alerts', {
+        productId: product.id,
+        variantId: selectedVariant ? selectedVariant.id : null,
+        selectedVariant: currentSelectedAttrs,
+        email: notifyEmail.trim()
+      });
+      setNotifySuccess(true);
+      toast.success(`Restock notification alert registered for ${notifyEmail.trim()}!`);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to register restock alert.');
+    }
   };
 
   return (
@@ -723,10 +747,10 @@ const ProductDetailsPage = () => {
                           <button
                             key={val}
                             type="button"
-                            disabled={isOutOfStock || (!directVariantMatch && !anyVariantWithVal)}
+                            disabled={!directVariantMatch && !anyVariantWithVal}
                             onClick={() => handleSelectAttribute(key, val)}
                             title={isOutOfStock ? `${val} — Out of stock` : (!directVariantMatch && anyVariantWithVal ? `Click to select variant with ${key}: ${val}` : val)}
-                            className="relative group focus-visible:outline-none"
+                            className="relative group focus-visible:outline-none cursor-pointer"
                             aria-label={`Select ${key} ${val}`}
                           >
                             <span
@@ -738,7 +762,7 @@ const ProductDetailsPage = () => {
                             >
                               <span
                                 className={`w-full h-full rounded-full flex items-center justify-center shadow-md relative overflow-hidden ${
-                                  isOutOfStock ? 'opacity-40' : ''
+                                  isOutOfStock && !isSelected ? 'opacity-40' : ''
                                 }`}
                                 style={isGradient ? { background: cssColor } : { backgroundColor: cssColor }}
                               >
@@ -752,7 +776,7 @@ const ProductDetailsPage = () => {
                                     />
                                   </span>
                                 )}
-                                {isSelected && !isOutOfStock && (
+                                {isSelected && (
                                   <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                                     <path
                                       d="M2.5 7L5.5 10L11.5 4"
@@ -786,13 +810,17 @@ const ProductDetailsPage = () => {
                           : (anyVariantWithVal && anyVariantWithVal.stock !== undefined ? parseInt(anyVariantWithVal.stock, 10) <= 0 : false);
                         const isSelected = String(currentVal || '').toLowerCase() === String(val).toLowerCase();
 
-                        let btnStyle = "bg-white text-neutral-900 border border-neutral-300 hover:border-neutral-400";
+                        let btnStyle = "bg-white text-neutral-900 border border-neutral-300 hover:border-neutral-400 cursor-pointer";
                         if (isSelected) {
-                          btnStyle = "bg-black text-[#F5B800] border-black shadow-md font-extrabold";
+                          if (isOutOfStock) {
+                            btnStyle = "bg-neutral-950 text-amber-400 border-neutral-950 shadow-md font-extrabold line-through opacity-85 cursor-pointer ring-2 ring-amber-400/40";
+                          } else {
+                            btnStyle = "bg-black text-[#F5B800] border-black shadow-md font-extrabold cursor-pointer";
+                          }
                         } else if (isOutOfStock) {
-                          btnStyle = "bg-neutral-100 text-neutral-400 border border-neutral-300 line-through opacity-50 cursor-not-allowed";
+                          btnStyle = "bg-neutral-100 text-neutral-400 border border-neutral-300 line-through opacity-60 hover:opacity-85 cursor-pointer";
                         } else if (!directVariantMatch && anyVariantWithVal) {
-                          btnStyle = "bg-amber-50/40 text-neutral-800 border border-dashed border-amber-300 hover:border-amber-500 hover:bg-amber-100/50";
+                          btnStyle = "bg-amber-50/40 text-neutral-800 border border-dashed border-amber-300 hover:border-amber-500 hover:bg-amber-100/50 cursor-pointer";
                         } else if (!anyVariantWithVal) {
                           btnStyle = "bg-neutral-100 text-neutral-400 border border-dashed border-neutral-200 line-through opacity-40 cursor-not-allowed";
                         }
@@ -801,7 +829,7 @@ const ProductDetailsPage = () => {
                           <button
                             key={val}
                             type="button"
-                            disabled={isOutOfStock || (!directVariantMatch && !anyVariantWithVal)}
+                            disabled={!directVariantMatch && !anyVariantWithVal}
                             onClick={() => handleSelectAttribute(key, val)}
                             className={`px-5 py-2.5 min-w-[80px] rounded-2xl text-sm font-extrabold transition-all duration-150 focus-visible:outline-none ${btnStyle}`}
                             title={isOutOfStock ? `${val} — Out of stock` : (!directVariantMatch && anyVariantWithVal ? `Click to select variant with ${key}: ${val}` : `${key}: ${val}`)}
@@ -894,7 +922,7 @@ const ProductDetailsPage = () => {
               </button>
 
               {/* Restock Notification Form */}
-              {product.stock === 0 && !notifySuccess && (
+              {displayStock <= 0 && !notifySuccess && (
                 <motion.form
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: 'auto' }}
@@ -918,7 +946,7 @@ const ProductDetailsPage = () => {
                 </motion.form>
               )}
 
-              {product.stock === 0 && notifySuccess && (
+              {displayStock <= 0 && notifySuccess && (
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
@@ -998,23 +1026,63 @@ const ProductDetailsPage = () => {
                 {/* Summary & Rating Breakdown Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
                   {/* Review Summary Card */}
-                  <div className="bg-neutral-50 p-6 rounded-lg border border-neutral-200/60 flex flex-col justify-center">
-                    <h3 className="font-playfair text-xl font-bold text-neutral-900 mb-2">Customer Reviews</h3>
-                    {reviewsState.totalCount > 0 ? (
-                      <div className="flex items-center gap-4">
-                        <span className="text-4xl font-bold text-brand-gold">{parseFloat(reviewsState.averageRating).toFixed(1)}</span>
-                        <div>
-                          <div className="flex gap-0.5 mb-1">
-                            {[1, 2, 3, 4, 5].map(s => (
-                              <Star key={s} size={16} className={s <= Math.round(reviewsState.averageRating) ? 'fill-brand-gold text-brand-gold' : 'fill-brand-light text-brand-light'} />
-                            ))}
+                  <div className="bg-neutral-50 p-6 rounded-lg border border-neutral-200/60 flex flex-col justify-between">
+                    <div>
+                      <h3 className="font-playfair text-xl font-bold text-neutral-900 mb-2">Customer Reviews</h3>
+                      {reviewsState.totalCount > 0 ? (
+                        <div className="flex items-center gap-4">
+                          <span className="text-4xl font-bold text-brand-gold">{parseFloat(reviewsState.averageRating).toFixed(1)}</span>
+                          <div>
+                            <div className="flex gap-0.5 mb-1">
+                              {[1, 2, 3, 4, 5].map(s => (
+                                <Star key={s} size={16} className={s <= Math.round(reviewsState.averageRating) ? 'fill-brand-gold text-brand-gold' : 'fill-brand-light text-brand-light'} />
+                              ))}
+                            </div>
+                            <span className="text-xs text-neutral-500">Based on {reviewsState.totalCount} {reviewsState.totalCount === 1 ? 'review' : 'reviews'}</span>
                           </div>
-                          <span className="text-xs text-neutral-500">Based on {reviewsState.totalCount} {reviewsState.totalCount === 1 ? 'review' : 'reviews'}</span>
                         </div>
-                      </div>
-                    ) : (
-                      <p className="text-xs text-neutral-500">No reviews yet for this product.</p>
-                    )}
+                      ) : (
+                        <p className="text-xs text-neutral-500">No reviews yet for this product.</p>
+                      )}
+                    </div>
+
+                    <div className="mt-4 pt-4 border-t border-neutral-200/60 flex items-center justify-between gap-3 flex-wrap">
+                      {reviewsState.userCanReview ? (
+                        reviewsState.userReview ? (
+                          <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
+                            <button
+                              onClick={handleOpenWriteReview}
+                              className="px-4 py-2 bg-amber-400 hover:bg-amber-500 text-white text-xs font-semibold rounded-lg shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                            >
+                              <Edit3 size={14} /> Edit Your Review
+                            </button>
+                            <button
+                              onClick={() => handleDeleteReview(reviewsState.userReview.id)}
+                              className="px-3 py-2 bg-red-50 text-red-600 hover:bg-red-100 text-xs font-semibold rounded-lg border border-red-200 transition-colors flex items-center gap-1.5 cursor-pointer"
+                            >
+                              <Trash2 size={14} /> Delete
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={handleOpenWriteReview}
+                            className="px-5 py-2.5 bg-amber-400 hover:bg-amber-500 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors flex items-center gap-2 cursor-pointer"
+                          >
+                            <Star size={15} /> Write a Review
+                          </button>
+                        )
+                      ) : (
+                        <p className="text-xs text-neutral-500 italic">
+                          {isAuthenticated ? (
+                            'Customers who buy this product will be able to review it after delivery!'
+                          ) : (
+                            <span>
+                              <Link to="/login" className="text-amber-600 font-semibold hover:underline">Sign in</Link> & purchase this item to leave a review after delivery.
+                            </span>
+                          )}
+                        </p>
+                      )}
+                    </div>
                   </div>
 
                   {/* Star Breakdown */}

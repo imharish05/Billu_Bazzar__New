@@ -6,8 +6,15 @@ export const fetchAdminOrders = createAsyncThunk('adminOrders/fetch', async (par
   catch (err) { return rejectWithValue(err.response?.data?.message); }
 });
 export const updateOrderStatus = createAsyncThunk('adminOrders/updateStatus', async ({ id, status, paymentStatus }, { rejectWithValue }) => {
-  try { const res = await api.patch(`/orders/${id}/status`, { status, paymentStatus }); return res.data.order; }
-  catch (err) { return rejectWithValue(err.response?.data?.message); }
+  try {
+    const res = await api.patch(`/orders/${id}/status`, { status, paymentStatus });
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('adminOrderStatusChanged', { detail: { id, status } }));
+    }
+    return res.data.order;
+  } catch (err) {
+    return rejectWithValue(err.response?.data?.message);
+  }
 });
 
 const ordersSlice = createSlice({

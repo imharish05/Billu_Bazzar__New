@@ -26,6 +26,13 @@ const syncWarehouseStock = async (productId, variantId, stockQty, reorderLevel =
       targetWhId = primaryWh.id;
     }
 
+    if (variantId) {
+      const variant = await ProductVariant.findByPk(variantId);
+      if (variant && (!variant.warehouseId || variant.warehouseId !== targetWhId)) {
+        await variant.update({ warehouseId: targetWhId });
+      }
+    }
+
     // Destroy duplicate/outdated stock in other warehouses for this product variant
     await WarehouseStock.destroy({
       where: {
@@ -68,6 +75,9 @@ const syncProductVariants = async (productId) => {
     const variants = await ProductVariant.findAll({ where: { productId } });
 
     if (variants.length > 0) {
+      // Clean up any orphan parent-level stock entries so they don't double count
+      await WarehouseStock.destroy({ where: { productId, variantId: null } });
+
       // Find the lowest active price, or the first variant price
       const price = parseFloat(variants[0].price) || product.price;
       const stock = variants.reduce((sum, v) => sum + (parseInt(v.stock, 10) || 0), 0);
@@ -85,11 +95,27 @@ const getAll = async (req, res) => {
     const variants = await ProductVariant.findAll({
       include: [
         { model: Product, as: 'product', attributes: ['id', 'name', 'slug'] },
-        { model: Warehouse, as: 'warehouse', attributes: ['id', 'name'] }
+        { model: Warehouse, as: 'warehouse', attributes: ['id', 'name', 'city'] },
+        {
+          model: WarehouseStock,
+          as: 'stocks',
+          include: [{ model: Warehouse, as: 'warehouse', attributes: ['id', 'name', 'city'] }]
+        }
       ],
       order: [['createdAt', 'DESC']],
     });
-    res.json({ success: true, variants });
+
+    const primaryWh = await Warehouse.findOne({ where: { isFulfillment: true, isActive: true } });
+
+    const formattedVariants = variants.map(v => {
+      const vJson = v.toJSON();
+      if (!vJson.warehouse) {
+        vJson.warehouse = vJson.stocks?.[0]?.warehouse || (primaryWh ? { id: primaryWh.id, name: primaryWh.name, city: primaryWh.city } : null);
+      }
+      return vJson;
+    });
+
+    res.json({ success: true, variants: formattedVariants });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

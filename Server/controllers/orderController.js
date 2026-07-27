@@ -2,6 +2,7 @@
 const { sequelize, Order, OrderItem, Product, ProductVariant, Customer, Coupon, Affiliate, Cart, CartItem, InventoryMovementLog, Warehouse, WarehouseStock, SiteSetting, LoyaltyLedger } = require('../models');
 const { Op } = require('sequelize');
 const { v4: uuidv4 } = require('uuid');
+const { sendOrderStatusNotification } = require('../services/emailService');
 
 // Helper to push order details to Shiprocket shipping API
 const pushToShiprocket = async (orderId) => {
@@ -300,9 +301,6 @@ const placeOrder = async (req, res) => {
       if (resolvedAffiliate) affiliateId = resolvedAffiliate.id;
     }
 
-    const shippingAmount = subtotal > 1499 ? 0 : 99;
-    const taxAmount = subtotal * 0.05;
-
     // --- Loyalty Points & Mutual Exclusivity (Best Single Discount) ---
     let loyaltyDiscount = 0;
     let earnedPoints = 0;
@@ -352,7 +350,10 @@ const placeOrder = async (req, res) => {
       }
     }
 
-    const totalAmount = subtotal - discountAmount - loyaltyDiscount + shippingAmount + taxAmount;
+    const shippingAmount = subtotal >= 1499 ? 0 : 99;
+    const taxableSubtotal = Math.max(0, subtotal - discountAmount - loyaltyDiscount);
+    const taxAmount = Math.round(taxableSubtotal * 0.05 * 100) / 100;
+    const totalAmount = Math.round((taxableSubtotal + shippingAmount + taxAmount) * 100) / 100;
 
     // Guard: Enforce currency uniformity and resolve correct currency code
     let orderCurrency = 'INR';
@@ -415,10 +416,14 @@ const placeOrder = async (req, res) => {
       quantity: item.quantity,
       unitPrice: item.price,
       totalPrice: item.price * item.quantity,
-      // Store the full variant attributes snapshot (e.g. { color: 'Red', size: 'L' })
-      selectedVariant: item.selectedVariant && Object.keys(item.selectedVariant).length > 0
-        ? item.selectedVariant
-        : {}
+      // Store clean variant attributes snapshot without double JSON stringification
+      selectedVariant: (() => {
+        let sv = item.selectedVariant;
+        if (typeof sv === 'string') {
+          try { sv = JSON.parse(sv); } catch (e) {}
+        }
+        return (sv && typeof sv === 'object' && Object.keys(sv).length > 0) ? JSON.stringify(sv) : null;
+      })()
     }));
 
     for (const snapItem of orderItemsPayload) {
@@ -617,6 +622,19 @@ const updateStatus = async (req, res) => {
     }, { transaction });
 
     await transaction.commit();
+
+    // Fetch full order with items and customer details for email notification
+    Order.findByPk(order.id, {
+      include: [
+        { model: OrderItem, as: 'items' },
+        { model: Customer, as: 'customer', attributes: ['id', 'name', 'email'] }
+      ]
+    }).then(fullOrder => {
+      if (fullOrder) {
+        sendOrderStatusNotification(fullOrder, status).catch(err => console.error('[orderController] Error sending status email:', err.message));
+      }
+    }).catch(console.error);
+
     res.json({ success: true, order });
   } catch (err) {
     await transaction.rollback();
@@ -670,7 +688,6 @@ const getStatusCounts = async (req, res) => {
       OUT_FOR_DELIVERY: 0,
       DELIVERED: 0,
       CANCELLED: 0,
-      RTO: 0,
       RETURNED: 0
     };
 

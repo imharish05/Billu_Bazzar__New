@@ -18,6 +18,8 @@ const Affiliate = sequelize.define('Affiliate', {
   followers: { type: DataTypes.STRING(50), allowNull: true, defaultValue: '0' },
   handle: { type: DataTypes.STRING(100), allowNull: true },
   productsCurated: { type: DataTypes.INTEGER, defaultValue: 0 },
+  socialMedia: { type: DataTypes.JSON, defaultValue: [] },
+  documentProof: { type: DataTypes.STRING(500), allowNull: true },
 });
 
 module.exports = Affiliate;

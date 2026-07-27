@@ -126,10 +126,10 @@ const VendorsAdminPage = () => {
 
       if (editing) {
         await api.put(`/vendors/${editing.id}`, payload);
-        toast.success('Vendor supplier updated successfully.');
+        toast.success('Vendor updated successfully.');
       } else {
         await api.post('/vendors', payload);
-        toast.success('Vendor supplier created successfully.');
+        toast.success('Vendor created successfully.');
       }
 
       setModalOpen(false);
@@ -138,6 +138,18 @@ const VendorsAdminPage = () => {
       setError(err.response?.data?.message || err.message || 'Failed to save vendor details');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleToggleStatus = async (vendor) => {
+    const updatedStatus = !vendor.isActive;
+    setVendors(prev => prev.map(v => v.id === vendor.id ? { ...v, isActive: updatedStatus } : v));
+    try {
+      await api.put(`/vendors/${vendor.id}`, { isActive: updatedStatus });
+      toast.success(`Vendor status updated to ${updatedStatus ? 'Active' : 'Inactive'}.`);
+    } catch (err) {
+      setVendors(prev => prev.map(v => v.id === vendor.id ? { ...v, isActive: vendor.isActive } : v));
+      toast.error(err.response?.data?.message || 'Failed to update vendor status');
     }
   };
 
@@ -153,38 +165,38 @@ const VendorsAdminPage = () => {
 
   const handleDelete = (id, name) => {
     toast((t) => (
-      <div className="flex flex-col gap-2 p-1">
+      <div className="flex flex-col items-center text-center gap-2 p-1">
         <p className="text-sm font-semibold text-neutral-800">Confirm Deletion</p>
-        <p className="text-xs text-neutral-600">
-          Are you sure you want to permanently delete vendor supplier <strong>{name}</strong>?
+        <p className="text-xs text-neutral-600 max-w-xs">
+          Are you sure you want to permanently delete vendor <strong>{name}</strong>?
         </p>
-        <div className="flex justify-end gap-2 mt-2">
+        <div className="flex justify-center items-center gap-3 mt-2 w-full">
           <button
             onClick={() => { toast.dismiss(t.id); executeDelete(id); }}
-            className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold uppercase tracking-wider transition-colors rounded shadow-sm"
+            className="px-3.5 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold uppercase tracking-wider transition-colors rounded shadow-sm"
           >
             Yes, Delete
           </button>
           <button
             onClick={() => toast.dismiss(t.id)}
-            className="px-3 py-1.5 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 text-xs font-semibold uppercase tracking-wider transition-colors rounded border border-neutral-200"
+            className="px-3.5 py-1.5 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 text-xs font-semibold uppercase tracking-wider transition-colors rounded border border-neutral-200"
           >
             Cancel
           </button>
         </div>
       </div>
-    ), { duration: 10000, position: 'top-center', style: { minWidth: '350px' } });
+    ), { duration: 6000, position: 'top-center', style: { minWidth: '350px' } });
   };
 
   return (
-    <AdminLayout title="Vendors & Suppliers">
+    <AdminLayout title="Vendors">
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="font-playfair text-2xl font-bold">Procurement Vendors & Suppliers</h1>
-          <p className="text-sm text-brand-grey">Internal supplier registry for product sourcing (Hidden from customer store).</p>
+          <h1 className="font-playfair text-2xl font-bold">Procurement Vendors</h1>
+          <p className="text-sm text-brand-grey">Internal vendor registry for product sourcing (Hidden from customer store).</p>
         </div>
         <button onClick={() => openModal()} className="btn-primary flex items-center gap-2" id="add-vendor-btn">
-          <Plus size={16} /> Add Vendor Supplier
+          <Plus size={16} /> Add Vendor
         </button>
       </div>
 
@@ -205,7 +217,7 @@ const VendorsAdminPage = () => {
         ) : vendors.length === 0 ? (
           <div className="p-12 text-center">
             <Store size={48} className="mx-auto text-brand-grey/50 mb-3" />
-            <p className="font-playfair text-xl text-brand-grey">No vendor suppliers registered yet</p>
+            <p className="font-playfair text-xl text-brand-grey">No vendors registered yet</p>
             <button onClick={() => openModal()} className="btn-primary mt-4" id="add-first-vendor">Add First Vendor</button>
           </div>
         ) : (
@@ -272,11 +284,16 @@ const VendorsAdminPage = () => {
                         </div>
                       </td>
                       <td className="px-5 py-4">
-                        <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full ${
-                          v.isActive ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-gray-50 text-gray-500 border border-gray-200'
-                        }`}>
-                          {v.isActive ? 'Active Supplier' : 'Inactive'}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <Switch
+                            checked={v.isActive}
+                            onChange={() => handleToggleStatus(v)}
+                            id={`toggle-vendor-${v.id}`}
+                          />
+                          <span className={`text-xs font-semibold ${v.isActive ? 'text-green-700' : 'text-neutral-500'}`}>
+                            {v.isActive ? 'Active' : 'Inactive'}
+                          </span>
+                        </div>
                       </td>
                       <td className="px-5 py-4 text-right">
                         <div className="flex justify-end gap-1.5">
@@ -308,7 +325,7 @@ const VendorsAdminPage = () => {
           <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={e => e.target === e.currentTarget && !saving && setModalOpen(false)}>
             <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.96 }} className="bg-white rounded-xl w-full max-w-xl shadow-xl overflow-hidden max-h-[90vh] flex flex-col">
               <div className="flex items-center justify-between px-6 py-4 border-b border-brand-light flex-shrink-0 bg-brand-light/20">
-                <h2 className="font-playfair text-lg font-semibold">{editing ? 'Edit Vendor Supplier' : 'Add Vendor Supplier'}</h2>
+                <h2 className="font-playfair text-lg font-semibold">{editing ? 'Edit Vendor' : 'Add Vendor'}</h2>
                 <button onClick={() => !saving && setModalOpen(false)} className="p-1.5 hover:text-brand-gold focus-visible:outline-brand-gold transition-colors"><X size={18} /></button>
               </div>
               
@@ -341,7 +358,7 @@ const VendorsAdminPage = () => {
 
                   <div className="col-span-2">
                     <label className="block text-xs font-semibold text-brand-text mb-1" htmlFor="vendor-email">Email Address *</label>
-                    <input id="vendor-email" type="email" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} required className="w-full border border-brand-light px-3 py-2 text-sm focus:outline-none focus:border-brand-gold transition-colors rounded-sm" placeholder="contact@supplier.com" />
+                    <input id="vendor-email" type="email" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} required className="w-full border border-brand-light px-3 py-2 text-sm focus:outline-none focus:border-brand-gold transition-colors rounded-sm" placeholder="contact@vendor.com" />
                   </div>
                 </div>
 
@@ -376,7 +393,7 @@ const VendorsAdminPage = () => {
 
                 <div className="flex items-center gap-2 pt-2 border-t border-brand-light">
                   <Switch checked={form.isActive} onChange={e => setForm(p => ({ ...p, isActive: e.target.checked }))} id="vendor-active" />
-                  <label className="text-xs font-semibold text-brand-text cursor-pointer select-none" htmlFor="vendor-active">Active Supplier Status</label>
+                  <label className="text-xs font-semibold text-brand-text cursor-pointer select-none" htmlFor="vendor-active">Active Status</label>
                 </div>
 
                 <div className="flex gap-3 pt-4 border-t border-brand-light flex-shrink-0">

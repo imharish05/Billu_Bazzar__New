@@ -21,8 +21,8 @@ const COLOR_MAP = {
   orange: '#f97316', coral: '#ff6b6b', salmon: '#fa8072', peach: '#ffcba4',
   purple: '#9333ea', lavender: '#c4b5fd', violet: '#7c3aed', indigo: '#6366f1', mauve: '#9f8fba', plum: '#8b008b', lilac: '#c8a2c8', burgundy: '#800020',
   brown: '#92400e', tan: '#d2b48c', beige: '#f5f5dc', caramel: '#c68642', chocolate: '#7b3f00', coffee: '#6f4e37',
-  black: '#111111', charcoal: '#374151', grey: '#9ca3af', gray: '#9ca3af', silver: '#c0c0c0', ash: '#b2beb5',
-  white: '#ffffff', cream: '#fffdd0', ivory: '#fffff0', off: '#faf9f6',
+  black: '#111111', charcoal: '#374151', grey: '#9ca3af', gray: '#9ca3af', silver: '#c0c0c0', ash: '#b2beb5', steel: '#4682b4', neutral: '#d1d5db',
+  white: '#ffffff', cream: '#fffdd0', ivory: '#fffff0', off: '#faf9f6', clear: 'linear-gradient(135deg,#e2e8f0 0%,#cbd5e1 100%)', 'pastel blue': '#90caf9',
   multicolor: 'linear-gradient(135deg,#e53e3e 0%,#f59e0b 25%,#22c55e 50%,#3b82f6 75%,#9333ea 100%)',
   multi: 'linear-gradient(135deg,#e53e3e 0%,#f59e0b 25%,#22c55e 50%,#3b82f6 75%,#9333ea 100%)',
 };
@@ -37,15 +37,120 @@ const resolveColor = (name = '') => {
   return lower;
 };
 
-const PRESET_OPTION_NAMES = ['Size', 'Color', 'Material', 'Fabric', 'Style', 'Metal Purity', 'Pattern', 'Weight'];
+const PRESET_OPTION_NAMES = [
+  'Size',
+  'Color',
+  'Storage',
+  'RAM',
+  'Processor',
+  'Connectivity',
+  'Resolution',
+  'Refresh Rate',
+  'Capacity',
+  'Type',
+  'Wattage',
+  'Band Color',
+  'Band Material',
+  'Case Size',
+  'Fit',
+  'Material',
+  'Metal Type',
+  'Width',
+  'Age / Size',
+  'Age Range',
+  'Finish',
+  'Style',
+  'Skin Type',
+  'SPF',
+  'Shade',
+  'Hair Type',
+  'Concentration',
+  'Scent',
+  'Weight',
+  'Resistance Level',
+  'Temp Rating',
+  'Frame Size',
+  'Wheel Size',
+  'Helmet Size',
+  'Piece Count',
+  'Player Count',
+  'Platform',
+  'Edition',
+  'Format',
+  'Language',
+];
 
 const PRESET_VALUES_BY_OPTION = {
-  Size: ['FREE SIZE', 'XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL'],
-  Color: ['Red', 'Blue', 'Black', 'Green', 'Maroon', 'Pink', 'Gold', 'Purple', 'Navy', 'Yellow', 'White', 'Orange', 'Teal', 'Grey', 'Emerald', 'Burgundy', 'Beige', 'Lavender', 'Peach', 'Olive'],
-  Material: ['Silk', 'Cotton', 'Denim', 'Leather', 'Wool', 'Linen', 'Velvet'],
-  Fabric: ['Georgette', 'Chiffon', 'Organza', 'Satin', 'Crepe', 'Rayon'],
-  Style: ['Casual', 'Ethnic', 'Party', 'Formal', 'Boho'],
-  'Metal Purity': ['24K Gold', '22K Gold', '18K Gold', '925 Silver', 'Platinum'],
+  Size: ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL', 'FREE SIZE'],
+  Color: ['Black', 'White', 'Red', 'Blue', 'Green', 'Gray', 'Navy', 'Pink', 'Gold', 'Brown'],
+  'Band Color': ['Black', 'White', 'Pink', 'Green', 'Blue'],
+  Storage: ['128GB', '256GB', '512GB', '1TB', '2TB'],
+  RAM: ['4GB', '6GB', '8GB', '12GB', '16GB', '32GB', '64GB'],
+  Processor: ['i5', 'i7', 'i9', 'Ryzen 5', 'Ryzen 7', 'M2', 'M3'],
+  Connectivity: ['Wired', 'Bluetooth', 'Wi-Fi', 'Zigbee', 'Matter'],
+  Resolution: ['1080p', '1440p', '4K'],
+  'Refresh Rate': ['60Hz', '120Hz', '144Hz', '240Hz'],
+  Capacity: ['8GB', '16GB', '256GB', '512GB', '1TB', '10000mAh', '20000mAh'],
+  Type: ['DDR4', 'DDR5', 'SATA', 'NVMe', 'Indoor', 'Outdoor'],
+  Wattage: ['20W', '30W', '65W', '100W', '1800W'],
+  'Band Material': ['Silicone', 'Leather', 'Metal', 'Nylon'],
+  'Case Size': ['40mm', '42mm', '44mm', '45mm'],
+  Fit: ['Slim', 'Regular', 'Relaxed', 'Oversized'],
+  Material: ['Cotton', 'Polyester', 'Denim', 'Leather', 'Wood', 'Stainless Steel'],
+  'Metal Type': ['Gold', 'Silver', 'Rose Gold', 'Stainless Steel'],
+  Width: ['Regular', 'Wide'],
+  'Age / Size': ['0-3M', '3-6M', '6-12M', '2T', '3T', '4T', '5-6Y', '7-8Y'],
+  'Age Range': ['0-2Y', '3-5Y', '6-8Y', '9+'],
+  Finish: ['Matte', 'Dewy', 'Glossy', 'Oak', 'Walnut'],
+  Style: ['Modern', 'Boho', 'Minimalist', 'Casual', 'Formal'],
+  'Skin Type': ['Oily', 'Dry', 'Combination', 'Sensitive'],
+  SPF: ['SPF 15', 'SPF 30', 'SPF 50'],
+  Shade: ['Fair', 'Light', 'Medium', 'Tan', 'Deep'],
+  'Hair Type': ['Curly', 'Straight', 'Color-treated', 'Oily'],
+  Concentration: ['EDT', 'EDP', 'Parfum'],
+  Scent: ['Fresh', 'Unscented', 'Citrus', 'Musk'],
+  Weight: ['5lb', '10lb', '20lb', '50lb'],
+  'Resistance Level': ['Light', 'Medium', 'Heavy'],
+  'Temp Rating': ['20°F', '0°F', '32°F'],
+  'Frame Size': ['S', 'M', 'L', 'XL'],
+  'Wheel Size': ['26"', '27.5"', '29"'],
+  'Helmet Size': ['S', 'M', 'L'],
+  'Piece Count': ['100pc', '500pc', '1000pc'],
+  'Player Count': ['1-2', '2-4', '4-6'],
+  Platform: ['PS5', 'Xbox Series X', 'Switch', 'PC'],
+  Edition: ['Standard', 'Deluxe', "Collector's"],
+  Format: ['Hardcover', 'Paperback', 'E-book', 'Audiobook'],
+  Language: ['English', 'Spanish', 'French', 'Hindi'],
+};
+
+const resolvePresetValues = (optName = '') => {
+  if (!optName || !String(optName).trim()) return [];
+  const raw = String(optName).trim();
+
+  // 1. Direct match
+  if (PRESET_VALUES_BY_OPTION[raw]) {
+    return PRESET_VALUES_BY_OPTION[raw].slice(0, 8);
+  }
+
+  // 2. Case-insensitive exact match
+  const lower = raw.toLowerCase();
+  for (const [key, val] of Object.entries(PRESET_VALUES_BY_OPTION)) {
+    if (key.toLowerCase() === lower) return val.slice(0, 8);
+  }
+
+  // 3. Normalized match (strip trailing 's')
+  const norm = lower.replace(/s$/, '');
+  for (const [key, val] of Object.entries(PRESET_VALUES_BY_OPTION)) {
+    if (key.toLowerCase().replace(/s$/, '') === norm) return val.slice(0, 8);
+  }
+
+  // 4. Substring match
+  for (const [key, val] of Object.entries(PRESET_VALUES_BY_OPTION)) {
+    if (lower.includes(key.toLowerCase()) || key.toLowerCase().includes(lower)) return val.slice(0, 8);
+  }
+
+  // For unselected or custom unrecognized options, return empty array!
+  return [];
 };
 
 // ── Custom Searchable Combobox Dropdown for Option Type ─────────────────────
@@ -168,7 +273,6 @@ const OptionTypeSelect = ({ value, onChange, usedOptions = [] }) => {
 const EMPTY_FORM = {
   name: '', slug: '', shortDescription: '', description: '', price: '', comparePrice: '',
   stock: '', sku: '', categoryId: '', subCategoryId: '', subSubCategoryId: '', vendorId: '', warehouseId: '',
-  weight: '', length: '', width: '', height: '',
   isFeatured: false, isNewArrival: false, isBestSeller: false, hasAuthenticityBadge: false, isActive: true,
   has360View: false, hasVideo: false, videoUrl: '', defaultProductImage: null,
 };
@@ -429,18 +533,7 @@ const ProductLivePreviewModal = ({ product, onClose }) => {
                   </div>
                 )}
 
-                {/* Shipping & Specs */}
-                {(product.weight || product.dimensions) && (
-                  <div className="bg-white p-3 border border-neutral-200 rounded space-y-1 text-xs">
-                    <h4 className="font-bold text-neutral-800">Shipping Specs</h4>
-                    {product.weight && <p className="text-neutral-600">Weight: <span className="font-semibold text-neutral-900">{product.weight} kg</span></p>}
-                    {product.dimensions && (
-                      <p className="text-neutral-600">Dimensions: <span className="font-semibold text-neutral-900">
-                        {typeof product.dimensions === 'string' ? product.dimensions : `${product.dimensions.length || 0} x ${product.dimensions.width || 0} x ${product.dimensions.height || 0} cm`}
-                      </span></p>
-                    )}
-                  </div>
-                )}
+
 
                 <div className="flex items-center gap-3 text-xs pt-2">
                   <span className={`px-2.5 py-1 rounded font-bold ${product.stock > 0 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
@@ -477,10 +570,6 @@ const ProductModal = ({ product, onClose, onSave }) => {
     subSubCategoryId: product.subSubCategoryId || '',
     vendorId: product.vendorId || '',
     warehouseId: product.warehouseId || '',
-    weight: product.weight || '',
-    length: product.dimensions?.length || '',
-    width: product.dimensions?.width || product.dimensions?.breadth || '',
-    height: product.dimensions?.height || '',
     isFeatured: Boolean(product.isFeatured),
     isNewArrival: Boolean(product.isNewArrival),
     isBestSeller: Boolean(product.isBestSeller),
@@ -745,7 +834,16 @@ const ProductModal = ({ product, onClose, onSave }) => {
         setSubCategories(subRes.data.subCategories || []);
         setSubSubCategories(subSubRes.data.subSubCategories || []);
         setVendors(venRes.data.vendors || (venRes.data.success ? venRes.data.vendors : []));
-        setWarehouses(whRes.data.warehouses || []);
+        const whList = whRes.data.warehouses || [];
+        setWarehouses(whList);
+        
+        // Auto select fulfillment warehouse if none selected
+        if (!form.warehouseId && whList.length > 0) {
+          const defaultWh = whList.find(w => w.isFulfillment) || whList[0];
+          if (defaultWh) {
+            setForm(p => ({ ...p, warehouseId: defaultWh.id }));
+          }
+        }
       } catch (err) {
         console.error('Error fetching metadata', err);
       }
@@ -886,14 +984,11 @@ const ProductModal = ({ product, onClose, onSave }) => {
 
   // Option Row Handlers
   const addOptionRow = () => {
-    const existingNames = optionRows.map(r => r.optionName.trim().toLowerCase());
-    const firstUnused = PRESET_OPTION_NAMES.find(name => !existingNames.includes(name.toLowerCase()));
-    if (!firstUnused && optionRows.length >= PRESET_OPTION_NAMES.length + 5) {
+    if (optionRows.length >= PRESET_OPTION_NAMES.length + 5) {
       toast.error('Maximum variant options reached');
       return;
     }
-    const defaultName = firstUnused || '';
-    setOptionRows(prev => [...prev, { id: Date.now(), optionName: defaultName, optionValue: '', colorHex: '#8B0000' }]);
+    setOptionRows(prev => [...prev, { id: Date.now(), optionName: '', optionValue: '', colorHex: '#8B0000' }]);
   };
 
   const removeOptionRow = (id) => {
@@ -1099,16 +1194,7 @@ const ProductModal = ({ product, onClose, onSave }) => {
     fd.append('subSubCategoryId', finalSubSubCategoryId || '');
     fd.append('vendorId', form.vendorId || '');
     fd.append('warehouseId', form.warehouseId || '');
-    fd.append('weight', form.weight || '');
 
-    if (form.length || form.width || form.height) {
-      fd.append('dimensions', JSON.stringify({
-        length: form.length || '0',
-        width: form.width || '0',
-        height: form.height || '0',
-        unit: 'cm'
-      }));
-    }
 
     fd.append('isFeatured', String(form.isFeatured));
     fd.append('isNewArrival', String(form.isNewArrival));
@@ -1137,6 +1223,7 @@ const ProductModal = ({ product, onClose, onSave }) => {
         stock: v.stock,
         attributes: v.attributes,
         existingImages: v.existingImages || [],
+        warehouseId: v.warehouseId || form.warehouseId || null,
       }))));
 
       productVariants.forEach((v, vIdx) => {
@@ -1183,7 +1270,6 @@ const ProductModal = ({ product, onClose, onSave }) => {
       return acc;
     }, {}),
     category: categories.find(c => String(c.id) === String(form.categoryId)),
-    dimensions: { length: form.length, width: form.width, height: form.height },
   };
 
   return (
@@ -1272,7 +1358,11 @@ const ProductModal = ({ product, onClose, onSave }) => {
                 <label className="block text-xs font-semibold text-neutral-700 mb-1">Warehouse Location</label>
                 <select
                   value={form.warehouseId}
-                  onChange={e => set('warehouseId', e.target.value)}
+                  onChange={e => {
+                    const val = e.target.value;
+                    setForm(p => ({ ...p, warehouseId: val }));
+                    setProductVariants(prev => prev.map(v => ({ ...v, warehouseId: val })));
+                  }}
                   className="w-full border border-brand-light bg-white px-3 py-2 text-sm focus:outline-none focus:border-brand-gold rounded-sm"
                 >
                   <option value="">Select Warehouse</option>
@@ -1480,64 +1570,9 @@ const ProductModal = ({ product, onClose, onSave }) => {
             </div>
           </div>
 
-          {/* SECTION 3: SHIPPING SPECS & PACKAGE DIMENSIONS */}
+          {/* SECTION 3: PRODUCT IMAGE & GALLERY */}
           <div className="bg-neutral-50 p-5 rounded-lg border border-brand-light space-y-4">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-brand-gold border-b border-neutral-200 pb-2">3. Shipping Specs & Package Dimensions</h3>
-
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-neutral-700 mb-1">Weight (kg)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={form.weight}
-                  onChange={e => set('weight', e.target.value)}
-                  placeholder="e.g. 1.25"
-                  className="w-full border border-brand-light px-3 py-2 text-sm focus:outline-none focus:border-brand-gold rounded-sm bg-white font-mono"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-neutral-700 mb-1">Length (cm)</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  value={form.length}
-                  onChange={e => set('length', e.target.value)}
-                  placeholder="e.g. 30"
-                  className="w-full border border-brand-light px-3 py-2 text-sm focus:outline-none focus:border-brand-gold rounded-sm bg-white font-mono"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-neutral-700 mb-1">Breadth / Width (cm)</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  value={form.width}
-                  onChange={e => set('width', e.target.value)}
-                  placeholder="e.g. 20"
-                  className="w-full border border-brand-light px-3 py-2 text-sm focus:outline-none focus:border-brand-gold rounded-sm bg-white font-mono"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-neutral-700 mb-1">Height (cm)</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  value={form.height}
-                  onChange={e => set('height', e.target.value)}
-                  placeholder="e.g. 10"
-                  className="w-full border border-brand-light px-3 py-2 text-sm focus:outline-none focus:border-brand-gold rounded-sm bg-white font-mono"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* SECTION 4: PRODUCT IMAGE & GALLERY */}
-          <div className="bg-neutral-50 p-5 rounded-lg border border-brand-light space-y-4">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-brand-gold border-b border-neutral-200 pb-2">4. Product Image & Gallery</h3>
+            <h3 className="text-xs font-bold uppercase tracking-wider text-brand-gold border-b border-neutral-200 pb-2">3. Product Image & Gallery</h3>
 
             <div className="space-y-1.5">
               <label className="block text-xs font-semibold text-neutral-700">
@@ -1568,11 +1603,11 @@ const ProductModal = ({ product, onClose, onSave }) => {
             </div>
           </div>
 
-          {/* SECTION 5: VARIANT OPTIONS & COLOR PICKER */}
+          {/* SECTION 4: VARIANT OPTIONS & COLOR PICKER */}
           <div className="bg-neutral-50 p-5 rounded-lg border border-brand-light space-y-4">
             <div className="flex items-center justify-between border-b border-neutral-200 pb-2">
               <div>
-                <h3 className="text-xs font-bold uppercase tracking-wider text-brand-gold">5. Variant Options & Color Picker</h3>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-brand-gold">4. Variant Options & Color Picker</h3>
                 <p className="text-[11px] text-neutral-500">Select pre-determined options (Color, Size, Material) or type custom specs.</p>
               </div>
               <span className="text-xs font-bold text-neutral-600 bg-neutral-200 px-2 py-0.5 rounded">{optionRows.length} Options</span>
@@ -1585,7 +1620,7 @@ const ProductModal = ({ product, onClose, onSave }) => {
                 const selectedValue = Array.isArray(row.optionValue)
                   ? row.optionValue.join(', ').trim()
                   : String(row.optionValue || '').trim();
-                const presets = PRESET_VALUES_BY_OPTION[optName] || PRESET_VALUES_BY_OPTION['Size'];
+                const presets = resolvePresetValues(optName);
 
                 const toggleValue = (valToToggle) => {
                   const nextValue = selectedValue === valToToggle ? '' : valToToggle;
@@ -1935,9 +1970,9 @@ const ProductModal = ({ product, onClose, onSave }) => {
             )}
           </div>
 
-          {/* SECTION 6: 360° INTERACTIVE VIEW & VIDEO SHOWCASE */}
+          {/* SECTION 5: 360° INTERACTIVE VIEW & VIDEO SHOWCASE */}
           <div className="bg-neutral-50 p-5 rounded-lg border border-brand-light space-y-4">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-brand-gold border-b border-neutral-200 pb-2">6. 360° Interactive View & Video Showcase</h3>
+            <h3 className="text-xs font-bold uppercase tracking-wider text-brand-gold border-b border-neutral-200 pb-2">5. 360° Interactive View & Video Showcase</h3>
 
             <div className="grid sm:grid-cols-2 gap-6">
               {/* 360° View Toggle & Reordering Grid */}
@@ -2041,9 +2076,9 @@ const ProductModal = ({ product, onClose, onSave }) => {
             </div>
           </div>
 
-          {/* SECTION 7: STATUS & STOREFRONT TOGGLES */}
+          {/* SECTION 6: STATUS & STOREFRONT TOGGLES */}
           <div className="bg-neutral-50 p-5 rounded-lg border border-brand-light space-y-4">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-brand-gold border-b border-neutral-200 pb-2">7. Status & Storefront Toggles</h3>
+            <h3 className="text-xs font-bold uppercase tracking-wider text-brand-gold border-b border-neutral-200 pb-2">6. Status & Storefront Toggles</h3>
 
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
               <label className="flex items-center justify-between bg-white p-3 border border-brand-light rounded-sm cursor-pointer">
@@ -2162,29 +2197,29 @@ const ProductsAdminPage = () => {
 
   const handleDelete = (id) => {
     toast((t) => (
-      <div className="flex flex-col gap-2 p-1">
-        <p className="text-sm font-semibold text-neutral-800">Confirm Deactivation</p>
-        <p className="text-xs text-neutral-600">Are you sure you want to deleted this product?</p>
-        <div className="flex justify-center gap-2 mt-2">
+      <div className="flex flex-col items-center text-center gap-2 p-1">
+        <p className="text-sm font-semibold text-neutral-800">Confirm Deletion</p>
+        <p className="text-xs text-neutral-600 max-w-xs">Are you sure you want to delete this product?</p>
+        <div className="flex justify-center items-center gap-3 mt-2 w-full">
           <button
             onClick={() => {
               toast.dismiss(t.id);
               executeDelete(id);
             }}
-            className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold uppercase tracking-wider transition-colors rounded shadow-sm"
+            className="px-3.5 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold uppercase tracking-wider transition-colors rounded shadow-sm"
           >
-            Yes, Deleted
+            Yes, Delete
           </button>
           <button
             onClick={() => toast.dismiss(t.id)}
-            className="px-3 py-1.5 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 text-xs font-semibold uppercase tracking-wider transition-colors rounded border border-neutral-200"
+            className="px-3.5 py-1.5 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 text-xs font-semibold uppercase tracking-wider transition-colors rounded border border-neutral-200"
           >
             Cancel
           </button>
         </div>
       </div>
     ), {
-      duration: 10000,
+      duration: 6000,
       position: 'top-center'
     });
   };

@@ -67,8 +67,25 @@ const getProductReviews = async (req, res) => {
     let eligibleOrderId = null;
 
     if (customerId) {
-      // Find customer's existing review for this product
-      userReview = reviews.find((r) => r.customerId === customerId) || null;
+      // Find customer's existing review for this product (approved or pending)
+      const ownReview = await Review.findOne({
+        where: { productId, customerId },
+      });
+
+      if (ownReview) {
+        userReview = {
+          id: ownReview.id,
+          productId: ownReview.productId,
+          orderId: ownReview.orderId,
+          rating: ownReview.rating,
+          title: ownReview.title,
+          body: ownReview.body,
+          isVerifiedPurchase: ownReview.isVerifiedPurchase,
+          isApproved: ownReview.isApproved,
+          createdAt: ownReview.createdAt,
+          updatedAt: ownReview.updatedAt,
+        };
+      }
 
       // Find if customer has a delivered order for this product
       const deliveredOrder = await Order.findOne({
@@ -145,12 +162,13 @@ const getMyDeliveredItems = async (req, res) => {
     const reviewMap = new Map();
     userReviews.forEach((rev) => {
       reviewMap.set(`${rev.orderId}-${rev.productId}`, rev);
+      reviewMap.set(`p-${rev.productId}`, rev);
     });
 
     const deliveredItems = [];
     deliveredOrders.forEach((order) => {
       (order.items || []).forEach((item) => {
-        const existingReview = reviewMap.get(`${order.id}-${item.productId}`) || null;
+        const existingReview = reviewMap.get(`${order.id}-${item.productId}`) || reviewMap.get(`p-${item.productId}`) || null;
         deliveredItems.push({
           orderId: order.id,
           orderNumber: order.orderNumber,

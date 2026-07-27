@@ -78,8 +78,23 @@ const create = async (req, res) => {
     if (req.file) {
       const normalizedPath = req.file.path.replace(/\\/g, '/');
       const uploadsIndex = normalizedPath.indexOf('uploads');
-      data.avatar = '/' + normalizedPath.substring(uploadsIndex);
+      data.documentProof = '/' + normalizedPath.substring(uploadsIndex);
+    } else if (req.files?.documentProof?.[0]) {
+      const normalizedPath = req.files.documentProof[0].path.replace(/\\/g, '/');
+      const uploadsIndex = normalizedPath.indexOf('uploads');
+      data.documentProof = '/' + normalizedPath.substring(uploadsIndex);
     }
+
+    if (data.socialMedia) {
+      if (typeof data.socialMedia === 'string') {
+        try {
+          data.socialMedia = JSON.parse(data.socialMedia);
+        } catch (e) {
+          data.socialMedia = [];
+        }
+      }
+    }
+
     if (data.isActive !== undefined) {
       data.isActive = data.isActive === 'true' || data.isActive === true;
     }
@@ -132,11 +147,27 @@ const update = async (req, res) => {
     }
 
     if (req.file) {
-      deleteLocalFile(affiliate.avatar);
+      deleteLocalFile(affiliate.documentProof);
       const normalizedPath = req.file.path.replace(/\\/g, '/');
       const uploadsIndex = normalizedPath.indexOf('uploads');
-      data.avatar = '/' + normalizedPath.substring(uploadsIndex);
+      data.documentProof = '/' + normalizedPath.substring(uploadsIndex);
+    } else if (req.files?.documentProof?.[0]) {
+      deleteLocalFile(affiliate.documentProof);
+      const normalizedPath = req.files.documentProof[0].path.replace(/\\/g, '/');
+      const uploadsIndex = normalizedPath.indexOf('uploads');
+      data.documentProof = '/' + normalizedPath.substring(uploadsIndex);
     }
+
+    if (data.socialMedia) {
+      if (typeof data.socialMedia === 'string') {
+        try {
+          data.socialMedia = JSON.parse(data.socialMedia);
+        } catch (e) {
+          data.socialMedia = [];
+        }
+      }
+    }
+
     if (data.isActive !== undefined) {
       data.isActive = data.isActive === 'true' || data.isActive === true;
     }
@@ -156,7 +187,7 @@ const remove = async (req, res) => {
     const affiliate = await Affiliate.findByPk(req.params.id);
     if (!affiliate) return res.status(404).json({ success: false, message: 'Affiliate not found' });
     
-    deleteLocalFile(affiliate.avatar);
+    deleteLocalFile(affiliate.documentProof);
     await affiliate.destroy();
     res.json({ success: true, message: 'Affiliate permanently deleted' });
   } catch (err) {
@@ -184,9 +215,12 @@ const trackClick = async (req, res) => {
     if (!ref) {
       return res.status(400).json({ success: false, message: 'Referral code is required' });
     }
-    const affiliate = await Affiliate.findOne({ where: { referralCode: ref.toUpperCase(), isActive: true } });
+    const affiliate = await Affiliate.findOne({ where: { referralCode: ref.toUpperCase() } });
     if (!affiliate) {
-      return res.status(404).json({ success: false, message: 'Active affiliate not found' });
+      return res.status(404).json({ success: false, message: 'Referral link not found' });
+    }
+    if (!affiliate.isActive) {
+      return res.status(403).json({ success: false, disabled: true, message: 'This affiliate link is currently inactive' });
     }
     await affiliate.increment('totalClicks');
     res.json({ success: true, message: 'Click tracked successfully', currentClicks: affiliate.totalClicks + 1 });

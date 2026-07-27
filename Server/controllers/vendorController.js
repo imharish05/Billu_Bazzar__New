@@ -45,6 +45,7 @@ const getAll = async (req, res) => {
         where,
         order: [['createdAt', 'DESC']],
         include: [{ model: Product, as: 'products', attributes: ['id', 'name', 'slug', 'stock'] }],
+        distinct: true,
         limit: l,
         offset: (p - 1) * l
       });

@@ -369,10 +369,10 @@ const BannersAdminPage = () => {
 
   const handleDelete = (id) => {
     toast((t) => (
-      <div className="flex flex-col gap-2 p-1">
+      <div className="flex flex-col items-center text-center gap-2 p-1">
         <p className="text-sm font-semibold text-neutral-800">Confirm Deletion</p>
         <p className="text-xs text-neutral-600">Are you sure you want to delete this banner?</p>
-        <div className="flex justify-end gap-2 mt-2">
+        <div className="flex justify-center items-center gap-3 mt-2 w-full">
           <button
             onClick={() => {
               toast.dismiss(t.id);
@@ -390,7 +390,17 @@ const BannersAdminPage = () => {
           </button>
         </div>
       </div>
-    ), { duration: 10000, position: 'top-center' });
+    ), {
+      duration: 5000,
+      position: 'top-center',
+      style: {
+        borderRadius: '12px',
+        background: '#fff',
+        color: '#333',
+        border: '1px solid #E5E5E5',
+        boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1)',
+      },
+    });
   };
 
   const handleToggle = async (b) => {

@@ -67,30 +67,30 @@ const CouponsAdminPage = () => {
 
   const handleDelete = (id) => {
     toast((t) => (
-      <div className="flex flex-col gap-2 p-1">
+      <div className="flex flex-col items-center text-center gap-2 p-1">
         <p className="text-sm font-semibold text-neutral-800">Confirm Deletion</p>
-        <p className="text-xs text-neutral-600">
+        <p className="text-xs text-neutral-600 max-w-xs">
           Are you sure you want to permanently delete this coupon? This action cannot be undone.
         </p>
-        <div className="flex justify-end gap-2 mt-2">
+        <div className="flex justify-center items-center gap-3 mt-2 w-full">
           <button
             onClick={() => {
               toast.dismiss(t.id);
               executeDelete(id);
             }}
-            className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold uppercase tracking-wider transition-colors rounded shadow-sm"
+            className="px-3.5 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold uppercase tracking-wider transition-colors rounded shadow-sm"
           >
             Yes, Delete
           </button>
           <button
             onClick={() => toast.dismiss(t.id)}
-            className="px-3 py-1.5 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 text-xs font-semibold uppercase tracking-wider transition-colors rounded border border-neutral-200"
+            className="px-3.5 py-1.5 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 text-xs font-semibold uppercase tracking-wider transition-colors rounded border border-neutral-200"
           >
             Cancel
           </button>
         </div>
       </div>
-    ), { duration: 10000, position: 'top-center', style: { minWidth: '350px' } });
+    ), { duration: 6000, position: 'top-center', style: { minWidth: '350px' } });
   };
 
   const handleSave = async (e) => {
