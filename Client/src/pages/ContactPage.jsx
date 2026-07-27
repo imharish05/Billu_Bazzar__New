@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Mail, Phone, MapPin, Clock, Send, Globe, Star } from 'lucide-react';
 import { toast } from 'react-hot-toast';
+import api from '../services/api';
 import Footer from '../components/Footer';
 
 const ContactPage = () => {
@@ -27,30 +28,39 @@ const ContactPage = () => {
     }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    setIsSubmitting(true);
+    if (!formData.name.trim() || !formData.email.trim() || !formData.message.trim()) {
+      return toast.error('Please fill in all required fields.');
+    }
 
-    // Simulate API request
-    setTimeout(() => {
+    try {
+      setIsSubmitting(true);
+      const res = await api.post('/contact-enquiries', formData);
+      if (res.data?.success) {
+        toast.success(res.data.message || 'Thank you! Your message has been sent successfully.', {
+          duration: 5000,
+          style: {
+            border: '1px solid #C58837',
+            padding: '16px',
+            color: '#111111',
+            fontFamily: 'Montserrat, sans-serif',
+          },
+        });
+        setFormData({
+          name: '',
+          email: '',
+          phone: '',
+          subject: 'General Inquiry',
+          message: ''
+        });
+      }
+    } catch (err) {
+      console.error('Contact submit error:', err);
+      toast.error(err.response?.data?.message || 'Failed to send message. Please try again.');
+    } finally {
       setIsSubmitting(false);
-      toast.success('Thank you! Your message has been sent successfully.', {
-        duration: 5000,
-        style: {
-          border: '1px solid #C58837',
-          padding: '16px',
-          color: '#111111',
-          fontFamily: 'Montserrat, sans-serif',
-        },
-      });
-      setFormData({
-        name: '',
-        email: '',
-        phone: '',
-        subject: 'General Inquiry',
-        message: ''
-      });
-    }, 1500);
+    }
   };
 
   return (

@@ -24,6 +24,7 @@ import SliderMessagesAdminPage from './pages/SliderMessagesAdminPage';
 import ReviewsAdminPage from './pages/ReviewsAdminPage';
 import StockAlertsAdminPage from './pages/StockAlertsAdminPage';
 import DeliveryZonesAdminPage from './pages/DeliveryZonesAdminPage';
+import ContactEnquiriesAdminPage from './pages/ContactEnquiriesAdminPage';
 import NotFoundAdminPage from './pages/NotFoundAdminPage';
 
 /* Protected route — redirect to /login if no admin token */
@@ -50,6 +51,7 @@ const App = () => (
       <Route path="/sub-sub-categories" element={<Protected><SubSubCategoriesAdminPage /></Protected>} />
       <Route path="/orders"      element={<Protected><OrdersAdminPage /></Protected>} />
       <Route path="/customers"   element={<Protected><CustomersAdminPage /></Protected>} />
+      <Route path="/contact-enquiries" element={<Protected><ContactEnquiriesAdminPage /></Protected>} />
       <Route path="/abandoned-carts" element={<Protected><AbandonedCartsAdminPage /></Protected>} />
       <Route path="/slider-messages" element={<Protected><SliderMessagesAdminPage /></Protected>} />
       <Route path="/banners"     element={<Protected><BannersAdminPage /></Protected>} />

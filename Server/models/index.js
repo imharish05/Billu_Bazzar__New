@@ -157,6 +157,7 @@ SupportTicket.belongsTo(Order,     { foreignKey: 'orderId', as: 'order' });
 
 // ── Exports ───────────────────────────────────────────────────────────────────
 const DeliveryZone     = require('./DeliveryZone');
+const ContactEnquiry   = require('./ContactEnquiry');
 
 module.exports = {
   sequelize,
@@ -170,4 +171,5 @@ module.exports = {
   SupportTicket, Banner,
   Review, StockAlert, MarketingMessage, SearchKeyword, TrendingCache, SiteSetting, InventoryMovementLog,
   DeliveryZone,
+  ContactEnquiry,
 };

@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Package, Tag, ShoppingBag, Users, Image, Ticket,
   Warehouse, UserCheck, BarChart3, Settings, LogOut, Menu, X,
   Store, CreditCard, Gift, MessageSquare, Globe, Bell, ShoppingCart, Star, Trash2,
-  ChevronDown, ChevronRight, Truck, XCircle, MapPin
+  ChevronDown, ChevronRight, Truck, XCircle, MapPin, Mail
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Logo from './Logo';
@@ -138,6 +138,7 @@ const NAV_SECTIONS = [
     heading: 'Customers',
     items: [
       { to: '/customers', label: 'Customers', icon: Users },
+      { to: '/contact-enquiries', label: 'Contact Enquiries', icon: Mail },
     ],
   },
   {

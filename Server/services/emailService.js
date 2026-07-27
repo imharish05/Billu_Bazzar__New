@@ -609,15 +609,18 @@ const sendOrderStatusNotification = async (order, statusTypeOverride = null) => 
       </html>
     `;
 
+    const adminEmail = (process.env.ADMIN_EMAIL || 'harish05082004@gmail.com').trim();
+    const recipients = [toEmail, adminEmail].filter((val, idx, self) => val && self.indexOf(val) === idx);
+
     const mailOptions = {
       from: `"Billu Bazaar Orders" <${process.env.EMAIL_USER}>`,
-      to: toEmail,
-      subject: config.subject,
+      to: recipients.join(', '),
+      subject: `${['CONFIRMED', 'PAID', 'PENDING'].includes(currentStatus) ? '🛒 [NEW ORDER ALERT] ' : ''}${config.subject}`,
       html: htmlContent,
     };
 
     const info = await transporter.sendMail(mailOptions);
-    console.log(`✅ Order status email [${currentStatus}] sent to ${toEmail} for Order #${order.orderNumber} — MsgID: ${info.messageId}`);
+    console.log(`✅ Order status email [${currentStatus}] sent to [${recipients.join(', ')}] for Order #${order.orderNumber} — MsgID: ${info.messageId}`);
     return info;
   } catch (err) {
     console.error(`❌ Failed to send order status email for Order #${order.orderNumber}:`, err.message);
@@ -759,5 +762,139 @@ const sendRestockAlertEmail = async (toEmail, productName, productSlug, image) =
   }
 };
 
-module.exports = { sendOtpEmail, sendFraudOtpEmail, sendOrderStatusNotification, sendRestockAlertEmail };
+/**
+ * Sends HTML Email Notification to Admin when a customer submits a Contact Inquiry.
+ */
+const sendContactEnquiryAdminNotification = async (enquiryData) => {
+  try {
+    const adminEmail = process.env.ADMIN_EMAIL || 'harish05082004@gmail.com';
+    const transporter = createTransporter();
+
+    const { name, email, phone, subject, message, createdAt } = enquiryData;
+    const dateFormatted = new Date(createdAt || Date.now()).toLocaleString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      dateStyle: 'medium',
+      timeStyle: 'short'
+    });
+
+    const mailOptions = {
+      from: `"Billu Bazaar Concierge" <${process.env.EMAIL_USER}>`,
+      to: adminEmail,
+      replyTo: email,
+      subject: `📩 New Contact Enquiry: ${subject || 'General Inquiry'} - ${name}`,
+      html: `
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+          <meta charset="UTF-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+          <title>New Contact Enquiry Alert</title>
+        </head>
+        <body style="margin:0;padding:0;background-color:#FAF9F6;font-family:${SANS_SERIF_FONT};-webkit-font-smoothing:antialiased;">
+          <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#FAF9F6;padding:40px 0;">
+            <tr>
+              <td align="center">
+                <table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border:1px solid #EAEAEA;border-radius:12px;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,0.06);">
+                  
+                  <!-- Header -->
+                  <tr>
+                    <td style="background-color:#111111;padding:30px 40px;text-align:center;">
+                      <p style="margin:0;font-size:24px;font-weight:700;color:#ffffff;letter-spacing:0.12em;">
+                        BILLU <span style="color:#C9A24B;">BAZAAR</span>
+                      </p>
+                      <p style="margin:6px 0 0;font-size:11px;color:#A1A1A1;letter-spacing:0.18em;text-transform:uppercase;">
+                        Concierge & Contact Enquiry Alert
+                      </p>
+                    </td>
+                  </tr>
+
+                  <!-- Alert Banner -->
+                  <tr>
+                    <td style="background-color:#FFFBEB;border-bottom:1px solid #FCD34D;padding:14px 40px;text-align:center;">
+                      <p style="margin:0;font-size:13px;font-weight:600;color:#92400E;">
+                        📩 You received a new inquiry from your website contact form.
+                      </p>
+                    </td>
+                  </tr>
+
+                  <!-- Content Body -->
+                  <tr>
+                    <td style="padding:36px 40px;">
+                      
+                      <h2 style="margin:0 0 20px;font-size:18px;font-weight:700;color:#111111;border-bottom:2px solid #C9A24B;padding-bottom:10px;display:inline-block;">
+                        Customer Details
+                      </h2>
+
+                      <table width="100%" cellpadding="8" cellspacing="0" style="border-collapse:collapse;font-size:14px;margin-bottom:24px;">
+                        <tr style="border-bottom:1px solid #F3F4F6;">
+                          <td width="35%" style="color:#6B7280;font-weight:600;">Customer Name:</td>
+                          <td style="color:#111111;font-weight:700;">${name}</td>
+                        </tr>
+                        <tr style="border-bottom:1px solid #F3F4F6;">
+                          <td style="color:#6B7280;font-weight:600;">Email Address:</td>
+                          <td style="color:#111111;"><a href="mailto:${email}" style="color:#C9A24B;text-decoration:none;font-weight:600;">${email}</a></td>
+                        </tr>
+                        <tr style="border-bottom:1px solid #F3F4F6;">
+                          <td style="color:#6B7280;font-weight:600;">Phone Number:</td>
+                          <td style="color:#111111;">${phone ? `<a href="tel:${phone}" style="color:#111111;text-decoration:none;">${phone}</a>` : '<em style="color:#9CA3AF;">Not provided</em>'}</td>
+                        </tr>
+                        <tr style="border-bottom:1px solid #F3F4F6;">
+                          <td style="color:#6B7280;font-weight:600;">Inquiry Subject:</td>
+                          <td style="color:#111111;"><span style="background-color:#F3F4F6;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:600;color:#374151;">${subject || 'General Inquiry'}</span></td>
+                        </tr>
+                        <tr>
+                          <td style="color:#6B7280;font-weight:600;">Submitted At:</td>
+                          <td style="color:#6B7280;font-size:13px;">${dateFormatted}</td>
+                        </tr>
+                      </table>
+
+                      <h2 style="margin:20px 0 12px;font-size:16px;font-weight:700;color:#111111;">
+                        Message Content:
+                      </h2>
+
+                      <div style="background-color:#F9FAFB;border-left:4px solid #C9A24B;padding:20px;border-radius:0 8px 8px 0;font-size:14px;color:#1F2937;line-height:1.7;white-space:pre-wrap;">${message}</div>
+
+                      <!-- Action Button -->
+                      <div style="margin-top:32px;text-align:center;">
+                        <a href="mailto:${email}?subject=Re: ${encodeURIComponent(subject || 'Inquiry Response')}" style="background-color:#C9A24B;color:#ffffff;padding:12px 28px;text-decoration:none;border-radius:6px;font-size:13px;font-weight:700;display:inline-block;letter-spacing:0.05em;text-transform:uppercase;">
+                          Reply via Email
+                        </a>
+                      </div>
+
+                    </td>
+                  </tr>
+
+                  <!-- Footer -->
+                  <tr>
+                    <td style="background-color:#FAF9F6;padding:20px 40px;text-align:center;color:#888888;font-size:11px;border-top:1px solid #EAEAEA;">
+                      <p style="margin:0 0 4px;color:#C9A24B;font-weight:700;letter-spacing:0.1em;font-size:12px;">BILLU BAZAAR ADMIN CONCIERGE</p>
+                      <p style="margin:0;color:#9CA3AF;">© ${new Date().getFullYear()} Billu Bazaar. All rights reserved.</p>
+                    </td>
+                  </tr>
+
+                </table>
+              </td>
+            </tr>
+          </table>
+        </body>
+        </html>
+      `
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    console.log(`✅ Contact enquiry admin notification email sent to ${adminEmail} — MsgID: ${info.messageId}`);
+    return info;
+  } catch (err) {
+    console.error(`❌ Failed to send contact enquiry admin email:`, err.message);
+    // Don't re-throw so user form submission still succeeds
+  }
+};
+
+module.exports = {
+  sendOtpEmail,
+  sendFraudOtpEmail,
+  sendOrderStatusNotification,
+  sendRestockAlertEmail,
+  sendContactEnquiryAdminNotification,
+};
 
