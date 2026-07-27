@@ -412,7 +412,7 @@ const OrderDetailPage = () => {
             <span>{shippingAmount === 0 ? 'FREE' : formatPrice(shippingAmount, currency)}</span>
           </div>
           <div className="flex justify-between">
-            <span>Estimated Taxes (GST)</span>
+            <span>GST (5% Included)</span>
             <span>{formatPrice(taxAmount, currency)}</span>
           </div>
           <div className="flex justify-between items-center pt-4 border-t border-neutral-200 text-neutral-900 font-bold text-base">

@@ -1,5 +1,5 @@
 'use strict';
-const { sequelize, Order, OrderItem, Product, ProductVariant, Customer, Coupon, Affiliate, Cart, CartItem, InventoryMovementLog, Warehouse, WarehouseStock, SiteSetting, LoyaltyLedger } = require('../models');
+const { sequelize, Order, OrderItem, Product, ProductVariant, Customer, Coupon, Affiliate, Cart, CartItem, InventoryMovementLog, Warehouse, WarehouseStock, SiteSetting, LoyaltyLedger, DeliveryZone } = require('../models');
 const { Op } = require('sequelize');
 const { v4: uuidv4 } = require('uuid');
 const { sendOrderStatusNotification } = require('../services/emailService');
@@ -350,10 +350,22 @@ const placeOrder = async (req, res) => {
       }
     }
 
-    const shippingAmount = subtotal >= 1499 ? 0 : 99;
+    // Dynamic Delivery Charge based on Shipping Pincode
+    let shippingAmount = subtotal >= 1499 ? 0 : 99; // Default fallback
+    const rawPincode = (shippingAddress?.pincode || shippingAddress?.zipCode || shippingAddress?.zip_code || shippingAddress?.zip || '').toString().trim();
+    if (rawPincode) {
+      const zone = await DeliveryZone.findOne({ where: { pincode: rawPincode, isActive: true }, transaction });
+      if (zone) {
+        if (zone.minOrderAmountForFreeDelivery !== null && subtotal >= parseFloat(zone.minOrderAmountForFreeDelivery)) {
+          shippingAmount = 0;
+        } else {
+          shippingAmount = parseFloat(zone.deliveryCharge || 0);
+        }
+      }
+    }
     const taxableSubtotal = Math.max(0, subtotal - discountAmount - loyaltyDiscount);
-    const taxAmount = Math.round(taxableSubtotal * 0.05 * 100) / 100;
-    const totalAmount = Math.round((taxableSubtotal + shippingAmount + taxAmount) * 100) / 100;
+    const taxAmount = Math.round((taxableSubtotal * 5) / 105);
+    const totalAmount = taxableSubtotal + shippingAmount;
 
     // Guard: Enforce currency uniformity and resolve correct currency code
     let orderCurrency = 'INR';

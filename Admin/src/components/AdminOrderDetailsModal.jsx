@@ -280,7 +280,7 @@ const AdminOrderDetailsModal = ({ order, onClose, onStatusUpdate }) => {
             </div>
             {Number(order.taxAmount) > 0 && (
               <div className="flex justify-between">
-                <span>GST Tax</span>
+                <span>GST Tax (5% Included)</span>
                 <span>{fmt(order.taxAmount, currency)}</span>
               </div>
             )}

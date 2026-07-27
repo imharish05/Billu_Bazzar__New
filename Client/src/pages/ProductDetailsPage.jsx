@@ -704,6 +704,7 @@ const ProductDetailsPage = () => {
               {discount && (
                 <span className="text-brand-gold font-semibold text-xs sm:text-sm bg-brand-gold/10 px-2.5 py-0.5 rounded-sm whitespace-nowrap">Save {discount}%</span>
               )}
+              <span className="text-xs text-neutral-500 font-normal self-center whitespace-nowrap ml-1">(Incl. of all taxes)</span>
             </motion.div>
 
             <p className="text-brand-grey text-sm leading-relaxed">{product.shortDescription}</p>

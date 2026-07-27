@@ -252,6 +252,34 @@ const CheckoutPage = () => {
     }
   }, [billingAddress.country, address.country, deliverySameAsBilling, currencyCode, dispatch]);
 
+  // Delivery Zone Pincode Lookup for Dynamic Shipping Charge
+  const [pincodeZoneData, setPincodeZoneData] = useState(null);
+  const activePincode = (deliverySameAsBilling ? billingAddress.pincode : address.pincode || '').toString().trim();
+
+  useEffect(() => {
+    if (!activePincode || activePincode.length < 3) {
+      setPincodeZoneData(null);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        const res = await api.get(`/delivery-zones/check/${activePincode}`);
+        if (res.data && res.data.success && res.data.deliverable) {
+          setPincodeZoneData(res.data);
+        } else if (res.data && res.data.deliverable === false) {
+          setPincodeZoneData({ deliverable: false, message: res.data.message });
+        } else {
+          setPincodeZoneData(null);
+        }
+      } catch (err) {
+        setPincodeZoneData(null);
+      }
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [activePincode]);
+
   // Guard: don't let an empty cart sit on checkout (unless order was just completed and navigating to confirmation)
   useEffect(() => {
     if (items.length === 0 && !orderCompletedRef.current) {
@@ -383,11 +411,32 @@ const CheckoutPage = () => {
 
   const isGiftWrap = Boolean(location.state?.giftWrap);
   const giftWrapPrice = isGiftWrap ? Number(location.state?.giftWrapPrice || 99) : 0;
-  const shipping = subtotal >= 1499 ? 0 : 99;
-  const taxableSubtotal = Math.max(0, subtotal - (couponDiscount + loyaltyDiscountVal));
-  const tax = taxableSubtotal * 0.05;
+  let shipping = 0;
+  let shippingStatus = 'PENDING'; // 'PENDING' | 'DELIVERABLE' | 'NOT_DELIVERABLE'
 
-  const total = taxableSubtotal + shipping + tax + giftWrapPrice;
+  if (!activePincode || activePincode.trim().length < 3) {
+    shippingStatus = 'PENDING';
+    shipping = 0;
+  } else if (pincodeZoneData) {
+    if (pincodeZoneData.deliverable) {
+      shippingStatus = 'DELIVERABLE';
+      if (pincodeZoneData.minOrderAmountForFreeDelivery !== null && pincodeZoneData.minOrderAmountForFreeDelivery !== undefined && subtotal >= pincodeZoneData.minOrderAmountForFreeDelivery) {
+        shipping = 0;
+      } else {
+        shipping = parseFloat(pincodeZoneData.deliveryCharge || 0);
+      }
+    } else {
+      shippingStatus = 'NOT_DELIVERABLE';
+      shipping = 0;
+    }
+  } else {
+    shippingStatus = 'PENDING';
+    shipping = 0;
+  }
+  const taxableSubtotal = Math.max(0, subtotal - (couponDiscount + loyaltyDiscountVal));
+  const tax = Math.round((taxableSubtotal * 5) / 105);
+
+  const total = taxableSubtotal + shipping + giftWrapPrice;
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -845,10 +894,29 @@ const CheckoutPage = () => {
                         <input id="pincode" type="text" value={billingAddress.pincode}
                           onChange={e => setBillingAddress(p => ({ ...p, pincode: e.target.value }))}
                           placeholder="Postal / Zip code" className={inputCls} required />
-                        {billingAddress.pincode.length === 6 && (
-                          <p className="text-[11px] text-brand-gold mt-1 font-semibold">
-                            🚚 Est. Delivery: {getEstimatedDeliveryRange(billingAddress.pincode)}
+                        {(!billingAddress.pincode || billingAddress.pincode.trim().length < 3) && deliverySameAsBilling && (
+                          <p className="text-[11px] text-neutral-400 mt-1 italic">
+                            Enter pincode to calculate shipping charge
                           </p>
+                        )}
+                        {pincodeZoneData && deliverySameAsBilling && billingAddress.pincode.trim().length >= 3 && (
+                          pincodeZoneData.deliverable ? (
+                            <p className="text-[12px] text-emerald-600 mt-1 font-semibold flex items-center gap-1">
+                              📍 Delivery Available ({pincodeZoneData.zoneName}) — {
+                                shipping === 0 ? (
+                                  pincodeZoneData.minOrderAmountForFreeDelivery !== null
+                                    ? `FREE Delivery (Order above ₹${pincodeZoneData.minOrderAmountForFreeDelivery})!`
+                                    : 'FREE Delivery!'
+                                ) : (
+                                  `Shipping Fee: ₹${shipping}${pincodeZoneData.minOrderAmountForFreeDelivery !== null ? ` (Free on orders above ₹${pincodeZoneData.minOrderAmountForFreeDelivery})` : ''}`
+                                )
+                              }
+                            </p>
+                          ) : (
+                            <p className="text-[12px] text-red-500 mt-1 font-semibold">
+                              ⚠️ {pincodeZoneData.message || 'Delivery not available for this pincode'}
+                            </p>
+                          )
                         )}
                       </div>
 
@@ -914,8 +982,29 @@ const CheckoutPage = () => {
                             <div>
                               <label className={labelCls} htmlFor="d-pincode">Pincode / Zipcode *</label>
                               <input id="d-pincode" type="text" value={address.pincode} onChange={e => setAddress(p => ({...p, pincode: e.target.value}))} placeholder="Postal / Zip code" className={inputCls} />
-                              {address.pincode.length === 6 && (
-                                <p className="text-[11px] text-brand-gold mt-1 font-semibold">🚚 Est. Delivery: {getEstimatedDeliveryRange(address.pincode)}</p>
+                              {(!address.pincode || address.pincode.trim().length < 3) && !deliverySameAsBilling && (
+                                <p className="text-[11px] text-neutral-400 mt-1 italic">
+                                  Enter pincode to calculate shipping charge
+                                </p>
+                              )}
+                              {pincodeZoneData && !deliverySameAsBilling && address.pincode.trim().length >= 3 && (
+                                pincodeZoneData.deliverable ? (
+                                  <p className="text-[12px] text-emerald-600 mt-1 font-semibold flex items-center gap-1">
+                                    📍 Delivery Available ({pincodeZoneData.zoneName}) — {
+                                      shipping === 0 ? (
+                                        pincodeZoneData.minOrderAmountForFreeDelivery !== null
+                                          ? `FREE Delivery (Order above ₹${pincodeZoneData.minOrderAmountForFreeDelivery})!`
+                                          : 'FREE Delivery!'
+                                      ) : (
+                                        `Shipping Fee: ₹${shipping}${pincodeZoneData.minOrderAmountForFreeDelivery !== null ? ` (Free on orders above ₹${pincodeZoneData.minOrderAmountForFreeDelivery})` : ''}`
+                                      )
+                                    }
+                                  </p>
+                                ) : (
+                                  <p className="text-[12px] text-red-500 mt-1 font-semibold">
+                                    ⚠️ {pincodeZoneData.message || 'Delivery not available for this pincode'}
+                                  </p>
+                                )
                               )}
                             </div>
                             <div>
@@ -1202,8 +1291,25 @@ const CheckoutPage = () => {
                   <span>{fmt(giftWrapPrice)}</span>
                 </div>
               )}
-              <div className="flex justify-between"><span className="text-brand-grey">Shipping</span><span>{shipping === 0 ? <span className="text-green-600">Free</span> : fmt(shipping)}</span></div>
-              <div className="flex justify-between"><span className="text-brand-grey">GST (5%)</span><span>{fmt(tax)}</span></div>
+              <div className="flex justify-between items-center">
+                <span className="text-brand-grey">Shipping</span>
+                <span>
+                  {shippingStatus === 'PENDING' ? (
+                    <span className="text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200/80 text-xs font-medium">
+                      Enter Pincode
+                    </span>
+                  ) : shippingStatus === 'NOT_DELIVERABLE' ? (
+                    <span className="text-red-600 font-semibold text-xs bg-red-50 px-2 py-0.5 rounded border border-red-200/80">
+                      Not Deliverable
+                    </span>
+                  ) : shipping === 0 ? (
+                    <span className="text-green-600 font-bold">Free</span>
+                  ) : (
+                    fmt(shipping)
+                  )}
+                </span>
+              </div>
+              <div className="flex justify-between"><span className="text-brand-grey">GST (5% Included)</span><span>{fmt(tax)}</span></div>
               <div className="border-t border-neutral-100 pt-3 flex justify-between font-bold text-base">
                 <span>Total</span><span className="text-brand-gold">{fmt(total)}</span>
               </div>

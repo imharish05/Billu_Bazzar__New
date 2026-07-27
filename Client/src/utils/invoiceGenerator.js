@@ -28,8 +28,8 @@ export const generateInvoiceHTML = (order) => {
   const subtotal = Number(order.subtotal) || items.reduce((acc, i) => acc + (Number(i.unitPrice || i.price) * Number(i.quantity || i.qty || 1)), 0);
   const discountAmount = Number(order.discountAmount) || 0;
   const shippingAmount = Number(order.shippingAmount) || 0;
-  const taxAmount = Number(order.taxAmount) || (subtotal * 0.05);
-  const totalAmount = Number(order.totalAmount) || (subtotal - discountAmount + shippingAmount + taxAmount);
+  const taxAmount = Number(order.taxAmount) !== undefined && order.taxAmount !== null ? Number(order.taxAmount) : Math.round((Math.max(0, subtotal - discountAmount) * 5) / 105);
+  const totalAmount = Number(order.totalAmount) || (subtotal - discountAmount + shippingAmount);
 
   return `
 <!DOCTYPE html>
@@ -326,7 +326,7 @@ export const generateInvoiceHTML = (order) => {
           <span>${shippingAmount === 0 ? 'FREE' : fmt(shippingAmount)}</span>
         </div>
         <div class="summary-row">
-          <span>GST / VAT (5%)</span>
+          <span>GST / VAT (5% Included)</span>
           <span>${fmt(taxAmount)}</span>
         </div>
         <div class="summary-total">

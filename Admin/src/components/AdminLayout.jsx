@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Package, Tag, ShoppingBag, Users, Image, Ticket,
   Warehouse, UserCheck, BarChart3, Settings, LogOut, Menu, X,
   Store, CreditCard, Gift, MessageSquare, Globe, Bell, ShoppingCart, Star, Trash2,
-  ChevronDown, ChevronRight, Truck, XCircle
+  ChevronDown, ChevronRight, Truck, XCircle, MapPin
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Logo from './Logo';
@@ -118,6 +118,7 @@ const NAV_SECTIONS = [
     items: [
       { to: '/vendors', label: 'Vendors', icon: Store },
       { to: '/warehouses', label: 'Warehouses', icon: Warehouse },
+      { to: '/delivery-zones', label: 'Delivery Zones', icon: MapPin },
     ],
   },
   {

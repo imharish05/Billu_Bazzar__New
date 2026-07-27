@@ -23,6 +23,7 @@ import SiteSettingsAdminPage from './pages/SiteSettingsAdminPage';
 import SliderMessagesAdminPage from './pages/SliderMessagesAdminPage';
 import ReviewsAdminPage from './pages/ReviewsAdminPage';
 import StockAlertsAdminPage from './pages/StockAlertsAdminPage';
+import DeliveryZonesAdminPage from './pages/DeliveryZonesAdminPage';
 import NotFoundAdminPage from './pages/NotFoundAdminPage';
 
 /* Protected route — redirect to /login if no admin token */
@@ -54,6 +55,7 @@ const App = () => (
       <Route path="/banners"     element={<Protected><BannersAdminPage /></Protected>} />
       <Route path="/vendors"     element={<Protected><VendorsAdminPage /></Protected>} />
       <Route path="/warehouses"  element={<Protected><WarehousesAdminPage /></Protected>} />
+      <Route path="/delivery-zones" element={<Protected><DeliveryZonesAdminPage /></Protected>} />
       <Route path="/coupons"     element={<Protected><CouponsAdminPage /></Protected>} />
       <Route path="/gift-services" element={<Protected><GiftServicesAdminPage /></Protected>} />
       <Route path="/affiliates"  element={<Protected><AffiliatesAdminPage /></Protected>} />

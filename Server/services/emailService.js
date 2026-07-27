@@ -417,7 +417,7 @@ const sendOrderStatusNotification = async (order, statusTypeOverride = null) => 
     const shipping = parseFloat(order.shippingAmount || 0);
     const tax = parseFloat(order.taxAmount || 0);
     const discount = parseFloat(order.discountAmount || 0);
-    const grandTotal = parseFloat(order.totalAmount || (subtotal + shipping + tax - discount));
+    const grandTotal = parseFloat(order.totalAmount || (subtotal + shipping - discount));
 
     const htmlContent = `
       <!DOCTYPE html>
@@ -526,7 +526,7 @@ const sendOrderStatusNotification = async (order, statusTypeOverride = null) => 
                       </tr>
                       ${tax > 0 ? `
                       <tr>
-                        <td style="padding:4px 0;font-size:13px;color:#6B7280;">Tax (GST)</td>
+                        <td style="padding:4px 0;font-size:13px;color:#6B7280;">GST (5% Included)</td>
                         <td style="padding:4px 0;font-size:13px;color:#1F2937;text-align:right;">${currencySymbol}${tax.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                       </tr>` : ''}
                       <tr>

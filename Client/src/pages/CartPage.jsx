@@ -15,44 +15,15 @@ const CartPage = () => {
   const dispatch = useDispatch();
   const { items, subtotal } = useSelector(s => s.cart);
   const { code: currencyCode, rate: currencyRate } = useSelector(s => s.currency);
-  const { isAuthenticated, customer } = useSelector(s => s.auth || {});
 
   const [giftWrap, setGiftWrap] = useState(false);
   const [giftMessage, setGiftMessage] = useState('');
-  const [redeemPoints, setRedeemPoints] = useState(Boolean(customer && customer.loyaltyPoints > 0));
   const [giftService, setGiftService] = useState(null);
-
-  // Auto-apply loyalty points if customer has available points
-  useEffect(() => {
-    if (customer && customer.loyaltyPoints > 0) {
-      setRedeemPoints(true);
-    }
-  }, [customer]);
-  
-  const [loyaltySettings, setLoyaltySettings] = useState({
-    earnRate: 20,
-    redeemRate: 0.2,
-    maxRedeemAmount: 500
-  });
 
   const fmt = (v) => formatPrice(v, currencyCode, currencyRate);
 
-
-
   const isGiftServiceActive = giftService ? giftService.isActive !== false : true;
   const giftWrapAmount = giftService ? Number(giftService.amount || 0) : 99;
-  const giftWrapVal = (giftWrap && isGiftServiceActive) ? giftWrapAmount : 0;
-
-  const shipping = subtotal >= FREE_SHIP ? 0 : 99;
-  const couponDiscountVal = 0;
-  
-  let loyaltyDiscountVal = 0;
-  if (redeemPoints && customer && customer.loyaltyPoints > 0) {
-    const possibleDiscount = Number(customer.loyaltyPoints) * Number(loyaltySettings.redeemRate);
-    loyaltyDiscountVal = Math.min(possibleDiscount, Number(loyaltySettings.maxRedeemAmount), subtotal);
-  }
-  
-  const total = subtotal - loyaltyDiscountVal + giftWrapVal + shipping;
 
   useEffect(() => { 
     document.title = 'Your Cart — Billu Bazaar'; 
@@ -67,18 +38,6 @@ const CartPage = () => {
         }
       })
       .catch(() => {});
-      
-    api.get('/site-settings/loyalty')
-      .then(res => {
-        if (res.data?.success && res.data?.data) {
-          setLoyaltySettings({
-            earnRate: Number(res.data.data.earnRate) || 20,
-            redeemRate: Number(res.data.data.redeemRate) || 0.2,
-            maxRedeemAmount: Number(res.data.data.maxRedeemAmount) || 500
-          });
-        }
-      })
-      .catch(err => console.warn('Failed to fetch loyalty settings', err));
   }, []);
 
 
@@ -274,61 +233,22 @@ const CartPage = () => {
             <div className="bg-white shadow-sm p-6 border border-brand-light">
               <h2 className="font-playfair text-xl font-semibold mb-5">Order Summary</h2>
               <div className="space-y-3 text-sm">
-                <div className="flex justify-between"><span className="text-brand-grey">Subtotal</span><span>{fmt(subtotal)}</span></div>
-                {loyaltyDiscountVal > 0 && <div className="flex justify-between text-green-600"><span>Loyalty Discount</span><span>−{fmt(loyaltyDiscountVal)}</span></div>}
-                {giftWrap && isGiftServiceActive && <div className="flex justify-between text-brand-text"><span>Gift Wrapping</span><span>{fmt(giftWrapAmount)}</span></div>}
-                <div className="flex justify-between"><span className="text-brand-grey">Shipping</span><span>{shipping === 0 ? <span className="text-green-600">Free</span> : fmt(shipping)}</span></div>
+                <div className="flex justify-between"><span className="text-brand-grey">Subtotal</span><span className="font-medium text-brand-text">{fmt(subtotal)}</span></div>
                 <div className="border-t border-brand-light pt-3 flex justify-between font-semibold text-base">
-                  <span>Total</span><span className="text-brand-gold">{fmt(total)}</span>
+                  <span>Total</span><span className="text-brand-gold">{fmt(subtotal)}</span>
                 </div>
               </div>
+              <p className="text-xs text-brand-grey mt-4 pt-3 border-t border-brand-light/40 italic">
+                * Taxes, shipping, and discounts will be calculated at checkout.
+              </p>
 
-              <Link to="/checkout" state={{ giftWrap: giftWrap && isGiftServiceActive, giftMessage, giftWrapPrice: giftWrapAmount, redeemPoints }} className="btn-primary w-full text-center block mt-6" id="cart-checkout">
+              <Link to="/checkout" state={{ giftWrap: giftWrap && isGiftServiceActive, giftMessage, giftWrapPrice: giftWrapAmount }} className="btn-primary w-full text-center block mt-6" id="cart-checkout">
                 Proceed to Checkout
               </Link>
               <Link to="/products" className="btn-outline w-full text-center block mt-3" id="cart-continue">
                 Continue Shopping
               </Link>
             </div>
-
-            {/* Loyalty points block */}
-            {isAuthenticated && customer && (
-              <div className="bg-white shadow-sm p-6 border border-brand-light">
-                <h3 className="font-playfair text-base font-semibold flex items-center gap-2 mb-3">
-                  👑 Loyalty Reward Points
-                </h3>
-                <div className="text-xs text-brand-grey space-y-2">
-                  <p>You have <strong className="text-brand-text font-bold">{customer.loyaltyPoints || 0}</strong> points available.</p>
-                  {customer.loyaltyPoints > 0 ? (
-                    <div className="pt-2">
-                      <label className="flex items-center gap-2.5 cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          checked={redeemPoints}
-                          onChange={(e) => setRedeemPoints(e.target.checked)}
-                          className="w-4 h-4 accent-brand-gold rounded border-brand-light"
-                        />
-                        <span className="text-xs text-brand-text font-medium">
-                          Redeem points for discount of <strong>{fmt(Math.min(customer.loyaltyPoints * loyaltySettings.redeemRate, loyaltySettings.maxRedeemAmount, subtotal))}</strong>
-                        </span>
-                      </label>
-                      <p className="text-[10px] text-brand-grey/80 mt-1">* {1 / loyaltySettings.redeemRate} points = {fmt(1)}. Max redemption caps at {fmt(loyaltySettings.maxRedeemAmount)} per order.</p>
-                    </div>
-                  ) : (
-                    <p className="text-[11px] text-brand-grey/80">Shop more to accumulate loyalty points and unlock exclusive rewards!</p>
-                  )}
-                </div>
-              </div>
-            )}
-            {!isAuthenticated && (
-              <div className="bg-white shadow-sm p-6 border border-brand-light text-center rounded-sm">
-                <p className="text-xs text-brand-grey">
-                  <Link to="/account" className="text-brand-gold font-medium underline hover:text-[#a8712a]">Sign in</Link> to view and redeem your Loyalty Points for extra discounts.
-                </p>
-              </div>
-            )}
-
-
           </div>
         </div>
       </div>
