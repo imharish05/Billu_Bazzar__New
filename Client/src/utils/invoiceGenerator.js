@@ -22,7 +22,10 @@ export const generateInvoiceHTML = (order) => {
     year: 'numeric',
   });
 
-  const billing = order.shippingAddress || order.address || {};
+  let billing = order.shippingAddress || order.address || {};
+  if (typeof billing === 'string') {
+    try { billing = JSON.parse(billing); } catch (e) { billing = {}; }
+  }
   const items = order.items || order.OrderItems || [];
 
   const subtotal = Number(order.subtotal) || items.reduce((acc, i) => acc + (Number(i.unitPrice || i.price) * Number(i.quantity || i.qty || 1)), 0);
@@ -30,6 +33,9 @@ export const generateInvoiceHTML = (order) => {
   const shippingAmount = Number(order.shippingAmount) || 0;
   const taxAmount = Number(order.taxAmount) !== undefined && order.taxAmount !== null ? Number(order.taxAmount) : Math.round((Math.max(0, subtotal - discountAmount) * 5) / 105);
   const totalAmount = Number(order.totalAmount) || (subtotal - discountAmount + shippingAmount);
+
+  const supportEmail = import.meta.env.VITE_SUPPORT_EMAIL || 'support@billubazaar.com';
+  const supportPhone = import.meta.env.VITE_SUPPORT_PHONE || '+91 98765 43210';
 
   return `
 <!DOCTYPE html>
@@ -225,8 +231,7 @@ export const generateInvoiceHTML = (order) => {
       <div>
         <div class="brand-title">BILLU BAZAAR</div>
         <div class="brand-subtitle">Luxury Shopping Experience</div>
-        <p style="margin-top: 6px; font-size: 11px; color: #6b7280;">GSTIN / TRN: 27AAACZ1234A1Z5</p>
-        <p style="font-size: 11px; color: #6b7280;">Support: support@billubazaar.com | +91 98765 43210</p>
+        <p style="margin-top: 6px; font-size: 11px; color: #6b7280;">Support: ${supportEmail} | ${supportPhone}</p>
       </div>
       <div class="invoice-title">
         <h1>TAX INVOICE</h1>
@@ -257,10 +262,9 @@ export const generateInvoiceHTML = (order) => {
       </div>
       <div class="section-box">
         <div class="section-heading">Payment & Shipping Summary</div>
-        <p><strong>Payment Method:</strong> ${order.paymentMethod || 'Credit/Debit Card'}</p>
-        <p><strong>Transaction Ref:</strong> ${order.paymentGatewayRef || 'N/A'}</p>
+        <p><strong>Payment Method:</strong> ${order.paymentMethod || 'Credit / Debit Card'}</p>
+        <p><strong>Transaction Ref:</strong> ${order.paymentGatewayRef || order.razorpay_payment_id || 'N/A'}</p>
         <p><strong>Order Date:</strong> ${orderDate}</p>
-        <p><strong>Fulfillment Mode:</strong> Standard Express Delivery</p>
         ${order.trackingNumber ? `<p><strong>AWB Tracking:</strong> ${order.trackingNumber}</p>` : ''}
       </div>
     </div>
@@ -303,13 +307,7 @@ export const generateInvoiceHTML = (order) => {
       </tbody>
     </table>
 
-    <div class="summary-container">
-      <div class="notes-box">
-        <p style="font-weight: 600; color: #374151; margin-bottom: 4px;">Terms & Conditions:</p>
-        <p>1. This is a computer-generated invoice and requires no physical signature.</p>
-        <p>2. Returns / exchanges are subject to the Billu Bazaar Return Policy within 7 days.</p>
-        <p>3. All disputes are subject to Mumbai / UAE jurisdiction.</p>
-      </div>
+    <div class="summary-container" style="justify-content: flex-end;">
       <div class="summary-table">
         <div class="summary-row">
           <span>Subtotal</span>
@@ -324,10 +322,6 @@ export const generateInvoiceHTML = (order) => {
         <div class="summary-row">
           <span>Shipping Fee</span>
           <span>${shippingAmount === 0 ? 'FREE' : fmt(shippingAmount)}</span>
-        </div>
-        <div class="summary-row">
-          <span>GST / VAT (5% Included)</span>
-          <span>${fmt(taxAmount)}</span>
         </div>
         <div class="summary-total">
           <span>Grand Total</span>

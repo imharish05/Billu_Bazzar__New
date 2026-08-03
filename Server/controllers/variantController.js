@@ -81,8 +81,9 @@ const syncProductVariants = async (productId) => {
       // Find the lowest active price, or the first variant price
       const price = parseFloat(variants[0].price) || product.price;
       const stock = variants.reduce((sum, v) => sum + (parseInt(v.stock, 10) || 0), 0);
+      const gstRate = variants[0].gstRate || product.gstRate || '0%';
 
-      await product.update({ price, stock });
+      await product.update({ price, stock, gstRate });
     }
   } catch (err) {
     console.error('[syncProductVariants] Error:', err.message);
@@ -200,7 +201,7 @@ const add = async (req, res) => {
       mrp: mrp === '' || mrp === undefined ? null : parseFloat(mrp),
       stock: stock === '' || stock === undefined ? 0 : parseInt(stock, 10),
       lowStockThreshold: lowStockThreshold ? parseInt(lowStockThreshold, 10) : 10,
-      gstRate: gstRate || '18%',
+      gstRate: (gstRate !== undefined && gstRate !== null && gstRate !== '') ? gstRate : '0%',
       attributes: parsedAttributes,
       image: mainVarImg,
       images: allImages.slice(0, 5),

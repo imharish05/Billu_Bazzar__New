@@ -34,6 +34,7 @@ import ReturnsPage from './pages/ReturnsPage';
 import api from './services/api';
 import { fetchProfile } from './redux/slices/authSlice';
 import { fetchWishlist } from './redux/slices/wishlistSlice';
+import { setRate } from './redux/slices/currencySlice';
 import { getAccessToken } from './utils/tokenStorage';
 
 const App = () => {
@@ -80,6 +81,23 @@ const App = () => {
     }
   }, [dispatch]);
 
+  // ── Bootstrap: fetch live AED exchange rate once on app load ────────────────
+  // The server caches the rate for 6 hours — this call is near-zero cost.
+  useEffect(() => {
+    api.get('/currency/rate')
+      .then(res => {
+        if (res.data?.success && res.data.rate > 0) {
+          dispatch(setRate(res.data.rate));
+          console.log(`[Currency] Live rate loaded: 1 AED = ${res.data.rate} INR`);
+        }
+      })
+      .catch(() => {
+        // Silently keep using the default rate from currencySlice
+        console.warn('[Currency] Could not fetch live rate, using default.');
+      });
+  }, [dispatch]);
+
+
   const trackedRef = useRef(null);
 
   useEffect(() => {
@@ -123,7 +141,7 @@ const App = () => {
     <>
       <ScrollToTop />
       <Navbar />
-      <CartDrawer />
+      {/* <CartDrawer /> */}
       <QuickViewModal />
       <RegisterPopup />
       <Toaster

@@ -97,6 +97,12 @@ const WarehousesAdminPage = () => {
   const handleSelectWarehouse = (wh) => {
     setSelectedWarehouse(wh);
     loadWarehouseStock(wh.id);
+    setTimeout(() => {
+      const el = document.getElementById('stock-details-section');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 150);
   };
 
   // Open Add/Edit warehouse modal
@@ -245,7 +251,8 @@ const WarehousesAdminPage = () => {
       if (res.data.success) {
         toast.success('Stock adjusted successfully');
         setAdjustModalOpen(false);
-        loadWarehouseStock(selectedWarehouse.id);
+        await loadWarehouseStock(selectedWarehouse.id);
+        await loadWarehouses();
       }
     } catch (err) {
       toast.error(err.response?.data?.message || err.message || 'Failed to adjust stock');
@@ -478,7 +485,7 @@ const WarehousesAdminPage = () => {
 
       {/* Selected Warehouse Stock Details */}
       {selectedWarehouse && (
-        <div className="bg-white border border-neutral-200 p-6 mb-8 transition-all">
+        <div id="stock-details-section" className="bg-white border border-neutral-200 p-6 mb-8 transition-all">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 pb-4 border-b border-brand-light">
             <div>
               <h3 className="text-base font-semibold text-neutral-950 flex items-center gap-2">
@@ -620,20 +627,20 @@ const WarehousesAdminPage = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
+            className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4 overflow-y-auto"
             onClick={e => e.target === e.currentTarget && setModalOpen(false)}
           >
             <motion.div
               initial={{ opacity: 0, scale: 0.96 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.96 }}
-              className="bg-white border border-neutral-200 w-full max-w-xl shadow-xl overflow-hidden"
+              className="bg-white border border-neutral-200 w-full max-w-xl shadow-xl max-h-[90vh] flex flex-col my-auto"
             >
-              <div className="flex items-center justify-between px-6 py-4 border-b border-brand-light bg-neutral-50">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-brand-light bg-neutral-50 shrink-0">
                 <h3 className="font-playfair text-base font-semibold">{editingWarehouse ? 'Edit Warehouse Details' : 'Register New Warehouse'}</h3>
                 <button onClick={() => setModalOpen(false)} className="text-brand-grey hover:text-brand-gold transition-colors"><X size={18} /></button>
               </div>
-              <form onSubmit={handleSaveWarehouse} className="p-6 space-y-4">
+              <form onSubmit={handleSaveWarehouse} className="p-6 space-y-4 overflow-y-auto flex-1">
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-[11px] uppercase tracking-wider font-semibold text-brand-grey mb-1">Warehouse Name *</label>
@@ -796,63 +803,97 @@ const WarehousesAdminPage = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
+            className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4 overflow-y-auto"
             onClick={e => e.target === e.currentTarget && setAdjustModalOpen(false)}
           >
             <motion.div
               initial={{ opacity: 0, scale: 0.96 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.96 }}
-              className="bg-white border border-neutral-200 w-full max-w-md shadow-xl overflow-hidden"
+              className="bg-white border border-neutral-200 w-full max-w-md shadow-xl max-h-[90vh] flex flex-col my-auto"
             >
-              <div className="flex items-center justify-between px-6 py-4 border-b border-brand-light bg-neutral-50">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-brand-light bg-neutral-50 shrink-0">
                 <h3 className="font-playfair text-base font-semibold">Adjust Stock / Configure Alert</h3>
                 <button onClick={() => setAdjustModalOpen(false)} className="text-brand-grey hover:text-brand-gold transition-colors"><X size={18} /></button>
               </div>
-              <form onSubmit={handleAdjustStockSubmit} className="p-6 space-y-4">
-                <div className="bg-neutral-50 p-4 border border-brand-light text-xs space-y-1 text-brand-grey mb-2">
-                  <p className="font-semibold text-neutral-900">{selectedStockItem.product?.name}</p>
-                  {selectedStockItem.variantId && (
-                    <p>Variant: <span className="font-semibold">{renderAttributes(selectedStockItem.variant?.attributes)}</span></p>
-                  )}
-                  <p>SKU: <span className="font-mono">{selectedStockItem.variant?.sku || selectedStockItem.product?.sku}</span></p>
-                  <p className="pt-2 text-neutral-900 font-semibold text-sm">Current Warehouse Stock: <span className="text-brand-gold">{selectedStockItem.quantity} units</span></p>
-                </div>
+              <form onSubmit={handleAdjustStockSubmit} className="p-6 space-y-4 overflow-y-auto flex-1">
+                {(() => {
+                  const currentWhStock = Number(selectedStockItem?.quantity || 0);
+                  const parsedQtyInput = Number(adjustQty || 0);
+                  let liveUpdatedStock = currentWhStock;
+                  if (adjustMode === 'add') {
+                    liveUpdatedStock = currentWhStock + (parsedQtyInput > 0 ? parsedQtyInput : 0);
+                  } else if (adjustMode === 'reduce') {
+                    liveUpdatedStock = Math.max(0, currentWhStock - (parsedQtyInput > 0 ? parsedQtyInput : 0));
+                  }
 
-                {/* Adjust Mode Selection */}
-                <div className="flex gap-2 mb-4">
-                  {['add', 'reduce', 'level'].map(mode => (
-                    <button
-                      key={mode}
-                      type="button"
-                      onClick={() => setAdjustMode(mode)}
-                      className={`flex-1 py-2 text-[10px] font-bold uppercase tracking-wider text-center border transition-all ${
-                        adjustMode === mode
-                          ? 'border-brand-gold bg-brand-gold/10 text-brand-gold'
-                          : 'border-neutral-200 text-brand-grey hover:bg-neutral-50'
-                      }`}
-                    >
-                      {mode === 'add' ? '＋ Receive / Add' : mode === 'reduce' ? '－ Deduct' : '⚙️ Reorder level'}
-                    </button>
-                  ))}
-                </div>
+                  return (
+                    <>
+                      <div className="bg-neutral-50 p-4 border border-brand-light text-xs space-y-1 text-brand-grey mb-2">
+                        <p className="font-semibold text-neutral-900">{selectedStockItem.product?.name}</p>
+                        {selectedStockItem.variantId && (
+                          <p>Variant: <span className="font-semibold">{renderAttributes(selectedStockItem.variant?.attributes)}</span></p>
+                        )}
+                        <p>SKU: <span className="font-mono">{selectedStockItem.variant?.sku || selectedStockItem.product?.sku}</span></p>
+                        <div className="pt-2 border-t border-neutral-200 mt-2 flex items-center justify-between flex-wrap gap-2 text-sm">
+                          <span className="text-neutral-900 font-semibold">
+                            Current Warehouse Stock: <span className="text-brand-gold">{currentWhStock} units</span>
+                          </span>
+                          {adjustMode !== 'level' && parsedQtyInput > 0 && (
+                            <span className="text-emerald-700 font-bold bg-emerald-50 px-2.5 py-0.5 rounded border border-emerald-200 text-xs">
+                              Updated Stock: {liveUpdatedStock} units
+                            </span>
+                          )}
+                        </div>
+                      </div>
 
-                {adjustMode !== 'level' ? (
-                  <div>
-                    <label className="block text-[11px] uppercase tracking-wider font-semibold text-brand-grey mb-1">
-                      {adjustMode === 'add' ? 'Quantity to add *' : 'Quantity to subtract *'}
-                    </label>
-                    <input
-                      type="number"
-                      required
-                      min="1"
-                      value={adjustQty}
-                      onChange={e => setAdjustQty(e.target.value)}
-                      className="w-full border border-brand-light px-3 py-2 text-xs focus:outline-none focus:border-brand-gold rounded-none"
-                      placeholder="e.g. 50"
-                    />
-                  </div>
-                ) : null}
+                      {/* Adjust Mode Selection */}
+                      <div className="flex gap-2 mb-4">
+                        {['add', 'reduce', 'level'].map(mode => (
+                          <button
+                            key={mode}
+                            type="button"
+                            onClick={() => setAdjustMode(mode)}
+                            className={`flex-1 py-2 text-[10px] font-bold uppercase tracking-wider text-center border transition-all ${
+                              adjustMode === mode
+                                ? 'border-brand-gold bg-brand-gold/10 text-brand-gold'
+                                : 'border-neutral-200 text-brand-grey hover:bg-neutral-50'
+                            }`}
+                          >
+                            {mode === 'add' ? '＋ Receive / Add' : mode === 'reduce' ? '－ Deduct' : '⚙️ Reorder level'}
+                          </button>
+                        ))}
+                      </div>
+
+                      {adjustMode !== 'level' ? (
+                        <div>
+                          <label className="block text-[11px] uppercase tracking-wider font-semibold text-brand-grey mb-1">
+                            {adjustMode === 'add' ? 'Quantity to add *' : 'Quantity to subtract *'}
+                          </label>
+                          <input
+                            type="number"
+                            required
+                            min="1"
+                            value={adjustQty}
+                            onChange={e => setAdjustQty(e.target.value)}
+                            className="w-full border border-brand-light px-3 py-2 text-xs focus:outline-none focus:border-brand-gold rounded-none"
+                            placeholder="e.g. 50"
+                          />
+                          {parsedQtyInput > 0 && (
+                            <div className="mt-2 p-2.5 bg-emerald-50 border border-emerald-200 rounded text-xs flex justify-between items-center">
+                              <span className="font-semibold text-emerald-800">
+                                {adjustMode === 'add' ? `Adding ${parsedQtyInput} to current ${currentWhStock}` : `Deducting ${parsedQtyInput} from current ${currentWhStock}`}:
+                              </span>
+                              <span className="font-bold text-emerald-900 text-sm">
+                                Updated Stock: {liveUpdatedStock} units
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      ) : null}
+                    </>
+                  );
+                })()}
 
                 <div>
                   <label className="block text-[11px] uppercase tracking-wider font-semibold text-brand-grey mb-1">

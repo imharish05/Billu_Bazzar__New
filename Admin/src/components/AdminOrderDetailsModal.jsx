@@ -104,22 +104,6 @@ const AdminOrderDetailsModal = ({ order, onClose, onStatusUpdate }) => {
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Quick Status Updater */}
-            {onStatusUpdate && (
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs font-semibold text-neutral-500">Status:</span>
-                <select
-                  value={order.status}
-                  onChange={e => onStatusUpdate(order.id, e.target.value)}
-                  className="text-xs px-2.5 py-1.5 rounded-lg border border-neutral-300 font-medium focus:border-brand-gold focus:outline-none bg-neutral-50 cursor-pointer"
-                >
-                  {['PENDING','CONFIRMED','PROCESSING','SHIPPED','OUT_FOR_DELIVERY','DELIVERED','CANCELLED','RETURNED'].map(s => (
-                    <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-
             <button
               onClick={handlePrintInvoice}
               className="btn-outline flex items-center gap-1 text-xs py-1.5 px-3 rounded hover:bg-neutral-50"
@@ -280,7 +264,7 @@ const AdminOrderDetailsModal = ({ order, onClose, onStatusUpdate }) => {
             </div>
             {Number(order.taxAmount) > 0 && (
               <div className="flex justify-between">
-                <span>GST Tax (5% Included)</span>
+                <span>GST Tax ({order.taxRate ? Number(order.taxRate) : 'Included'}% Included)</span>
                 <span>{fmt(order.taxAmount, currency)}</span>
               </div>
             )}

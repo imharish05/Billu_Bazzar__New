@@ -20,7 +20,7 @@ const Product = sequelize.define('Product', {
   showAuthenticity: { type: DataTypes.BOOLEAN, defaultValue: false, allowNull: false },
   warehouseId: { type: DataTypes.INTEGER, allowNull: true },
   lowStockThreshold: { type: DataTypes.INTEGER, defaultValue: 10, allowNull: true },
-  gstRate: { type: DataTypes.STRING(20), defaultValue: '18%', allowNull: true },
+  gstRate: { type: DataTypes.STRING(20), defaultValue: '0%', allowNull: true },
   defaultProductImage: {
     type: DataTypes.STRING(500),
     allowNull: true,

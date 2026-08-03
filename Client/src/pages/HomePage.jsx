@@ -59,10 +59,10 @@ const ScrollReveal = ({ children, delay = 0, className = '' }) => {
 /* ── Countdown Unit ──────────────────────────────────────────────────────── */
 const CountUnit = ({ value, label }) => (
   <div className="flex flex-col items-center">
-    <div className="w-16 h-16 md:w-20 md:h-20 bg-brand-text flex items-center justify-center">
-      <span className="font-playfair text-2xl md:text-3xl font-bold text-white">{String(value).padStart(2,'0')}</span>
+    <div className="w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16 lg:w-20 lg:h-20 bg-neutral-900 border border-white/10 flex items-center justify-center rounded-lg shadow-inner">
+      <span className="font-playfair text-base sm:text-xl md:text-2xl lg:text-3xl font-bold text-white">{String(value).padStart(2,'0')}</span>
     </div>
-    <span className="text-xs text-brand-grey mt-2 uppercase tracking-widest">{label}</span>
+    <span className="text-[9px] sm:text-[11px] md:text-xs text-brand-grey mt-1.5 uppercase tracking-widest font-semibold">{label}</span>
   </div>
 );
 
@@ -450,56 +450,58 @@ const HomePage = () => {
 
       {/* ── SECTION 3: Countdown / Deal of the Month Banner ────────────── */}
       {countdownBanner && !isExpired && (
-        <section className="bg-brand-text py-10 overflow-hidden" aria-label="Deal of the month countdown">
-          <div className="max-w-site mx-auto px-6 md:px-8 flex flex-col md:flex-row items-center justify-between gap-8">
-            <div className="text-center md:text-left">
+        <section className="bg-gradient-to-r from-neutral-950 via-neutral-900 to-neutral-950 py-10 md:py-14 overflow-hidden border-y border-white/10" aria-label="Deal of the month countdown">
+          <div className="max-w-site mx-auto px-4 sm:px-6 md:px-8 grid grid-cols-1 lg:grid-cols-3 gap-8 items-center justify-items-center">
+            {/* Text & Action */}
+            <div className="text-center lg:text-left flex flex-col items-center lg:items-start max-w-md">
               {countdownBanner.badgeText && (
-                <span className="bg-brand-gold text-white text-[10px] font-bold px-3 py-1 tracking-wider uppercase">
+                <span className="bg-brand-gold text-white text-[10px] sm:text-xs font-bold px-3.5 py-1 tracking-wider uppercase rounded-sm shadow-sm mb-3">
                   {countdownBanner.badgeText}
                 </span>
               )}
-              <h2 className="font-playfair text-3xl md:text-4xl font-bold text-white mt-3 mb-2">{countdownBanner.title}</h2>
+              <h2 className="font-playfair text-2xl sm:text-3xl lg:text-4xl font-bold text-white leading-tight mb-2">{countdownBanner.title}</h2>
               {countdownBanner.subtitle && (
-                <p className="text-white/70 text-base max-w-sm mb-6">
+                <p className="text-white/70 text-xs sm:text-sm lg:text-base max-w-sm mb-5">
                   {countdownBanner.subtitle}
                 </p>
               )}
               {isExpired ? (
                 <button
-                  className="mt-6 inline-flex items-center justify-center px-8 py-3 bg-neutral-800 text-neutral-500 font-semibold uppercase tracking-wider cursor-not-allowed border border-neutral-700/80"
+                  className="px-8 py-3 bg-neutral-800 text-neutral-500 font-semibold uppercase tracking-wider cursor-not-allowed border border-neutral-700/80 rounded"
                   disabled
                   id="deal-cta"
                 >
                   Deal Expired
                 </button>
               ) : (
-                <Link to={countdownBanner.ctaLink || '/products'} className="btn-primary mt-6 inline-block" id="deal-cta">
+                <Link to={countdownBanner.ctaLink || '/products'} className="btn-primary-hero inline-flex items-center gap-2" id="deal-cta">
                   {countdownBanner.ctaText || 'Grab the Deal'}
                 </Link>
               )}
             </div>
 
-            {/* Product Preview (Responsive across Mobile, Tablet & Desktop) */}
-            <div className="hidden md:block relative w-48 h-48 sm:w-56 sm:h-56 lg:w-60 lg:h-60 flex-shrink-0 rounded-xl overflow-hidden shadow-xl border border-white/20 bg-black my-2 md:my-0">
+            {/* Product Preview (Visible on all devices including iPad Air/Mini & Mobile) */}
+            <div className="relative w-44 h-44 sm:w-56 sm:h-56 lg:w-64 lg:h-64 flex-shrink-0 rounded-2xl overflow-hidden shadow-2xl border border-white/20 bg-neutral-900 group">
               <img
                 src={countdownBanner.image}
                 alt={countdownBanner.title || 'Deal of the week'}
-                className="w-full h-full object-cover rounded-xl"
+                className="w-full h-full object-cover rounded-2xl group-hover:scale-105 transition-transform duration-500"
               />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-80" />
             </div>
 
             {/* Countdown */}
-            <div className="flex flex-col items-center gap-4">
-              <p className="text-white/60 text-xs tracking-widest uppercase flex items-center gap-2">
-                <Clock size={14} /> Offer Ends In
+            <div className="flex flex-col items-center gap-3 sm:gap-4 w-full">
+              <p className="text-brand-gold text-[11px] sm:text-xs font-bold tracking-[0.2em] uppercase flex items-center gap-2">
+                <Clock size={14} className="animate-pulse text-brand-gold" /> Offer Ends In
               </p>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 sm:gap-3 justify-center">
                 <CountUnit value={countdown.d} label="Days" />
-                <span className="text-white text-3xl font-bold mb-6">:</span>
+                <span className="text-brand-gold text-xl sm:text-2xl font-bold mb-4">:</span>
                 <CountUnit value={countdown.h} label="Hours" />
-                <span className="text-white text-3xl font-bold mb-6">:</span>
+                <span className="text-brand-gold text-xl sm:text-2xl font-bold mb-4">:</span>
                 <CountUnit value={countdown.m} label="Min" />
-                <span className="text-white text-3xl font-bold mb-6">:</span>
+                <span className="text-brand-gold text-xl sm:text-2xl font-bold mb-4">:</span>
                 <CountUnit value={countdown.s} label="Sec" />
               </div>
             </div>

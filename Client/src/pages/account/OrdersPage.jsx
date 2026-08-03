@@ -42,6 +42,8 @@ const OrdersPage = () => {
     dispatch(fetchMyOrders());
   }, [dispatch]);
 
+  const sortedOrders = [...orders].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
       <div className="flex justify-between items-center mb-5">
@@ -49,19 +51,19 @@ const OrdersPage = () => {
         {loading && <RefreshCw size={16} className="animate-spin text-brand-gold" />}
       </div>
 
-      {loading && orders.length === 0 ? (
+      {loading && sortedOrders.length === 0 ? (
         <div className="bg-white shadow-sm p-12 text-center">
           <div className="h-8 w-8 border-2 border-brand-gold border-t-transparent rounded-full animate-spin mx-auto mb-3" />
           <p className="text-brand-grey text-sm">Fetching your orders from server...</p>
         </div>
-      ) : error && orders.length === 0 ? (
+      ) : error && sortedOrders.length === 0 ? (
         <div className="bg-white shadow-sm p-8 text-center border border-red-100">
           <p className="text-red-600 text-sm mb-3">{error}</p>
           <button onClick={() => dispatch(fetchMyOrders())} className="btn-outline text-xs px-4 py-2">
             Try Again
           </button>
         </div>
-      ) : orders.length === 0 ? (
+      ) : sortedOrders.length === 0 ? (
         <div className="bg-white shadow-sm p-12 text-center">
           <Package size={40} className="text-brand-light mx-auto mb-3" strokeWidth={1} />
           <p className="font-playfair text-xl mb-2">No orders yet</p>
@@ -70,7 +72,7 @@ const OrdersPage = () => {
         </div>
       ) : (
         <div className="space-y-4">
-          {orders.map(order => {
+          {sortedOrders.map(order => {
             const itemCount = (order.items || []).reduce((sum, item) => sum + (item.quantity || 1), 0);
             const firstItem = order.items && order.items[0];
 

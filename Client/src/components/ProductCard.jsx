@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { motion } from 'framer-motion';
 import { Heart, ShoppingBag, Eye, Star, RotateCcw } from 'lucide-react';
@@ -8,6 +8,7 @@ import { addLocal, openCart } from '../redux/slices/cartSlice';
 import { toggleItem } from '../redux/slices/wishlistSlice';
 import { formatPrice } from '../utils/currency';
 import { getPlaceholderSvg } from '../utils/placeholder';
+import { toast } from 'react-hot-toast';
 
 /** Map common color names → CSS color values for swatch display */
 const COLOR_MAP = {
@@ -43,7 +44,10 @@ const resolveColor = (name = '') => {
  */
 const ProductCard = ({ product, index = 0 }) => {
   const dispatch = useDispatch();
+  const navigate = useNavigate();
   const wishlist = useSelector(s => s.wishlist.items) || [];
+  const cartItems = useSelector(s => s.cart.items) || [];
+  const inCart = product ? cartItems.some(item => Number(item.productId || item.id) === Number(product.id)) : false;
   const { code: currencyCode, rate: currencyRate } = useSelector(s => s.currency);
   const [imgLoaded, setImgLoaded] = useState(false);
 
@@ -114,9 +118,25 @@ const ProductCard = ({ product, index = 0 }) => {
   const discount = (displayComparePrice && Number(displayComparePrice) > Number(displayPrice))
     ? Math.round(((Number(displayComparePrice) - Number(displayPrice)) / Number(displayComparePrice)) * 100)
     : null;
-
   const handleAddToCart = (e) => {
     e.preventDefault();
+    if (inCart) {
+      navigate('/cart');
+      return;
+    }
+    const availStock = resolvedDefault.stock ?? product.stock ?? 0;
+    if (availStock <= 0) {
+      toast.error('Item is out of stock.');
+      return;
+    }
+    const targetVariantId = resolvedDefault.variantId;
+    const existing = cartItems.find(i => Number(i.productId || i.id) === Number(product.id) && (targetVariantId ? Number(i.variantId) === Number(targetVariantId) : true));
+    const currentInCart = existing ? Number(existing.quantity || 0) : 0;
+    if (currentInCart >= availStock) {
+      toast.error(`Maximum available stock (${availStock} items) is already in your cart.`);
+      return;
+    }
+
     const cartPayload = {
       id: product.id,
       name: product.name,
@@ -124,7 +144,8 @@ const ProductCard = ({ product, index = 0 }) => {
       image: resolvedDefault.image || product.defaultProductImage || product.images?.[0] || '',
       price: displayPrice,
       comparePrice: displayComparePrice,
-      stock: product.stock,
+      stock: availStock,
+      gstRate: product.gstRate || '0%',
       variantId: resolvedDefault.variantId,
       selectedVariant: resolvedDefault.attributes,
       quantity: 1
@@ -219,10 +240,10 @@ const ProductCard = ({ product, index = 0 }) => {
           <button
             onClick={handleAddToCart}
             className="flex-1 flex items-center justify-center gap-1.5 lg:gap-2 py-3 text-white text-xs font-medium hover:bg-white/10 transition-colors focus-visible:outline-white"
-            aria-label={`Add ${product.name} to cart`}
+            aria-label={inCart ? `View ${product.name} in cart` : `Add ${product.name} to cart`}
             id={`add-cart-${product.id}`}
           >
-            <ShoppingBag size={14} /> <span className="hidden lg:inline">Add to Cart</span>
+            <ShoppingBag size={14} /> <span className="hidden lg:inline">{inCart ? 'View Cart' : 'Add to Cart'}</span>
           </button>
         </div>
       </Link>

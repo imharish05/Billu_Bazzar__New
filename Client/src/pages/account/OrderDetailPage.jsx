@@ -29,7 +29,7 @@ const STATUS_LABELS = {
   PENDING: 'Order Placed',
   CONFIRMED: 'Confirmed',
   PROCESSING: 'Processing',
-  SHIPPED: 'Shipped',
+  SHIPPED: 'Dispatched',
   OUT_FOR_DELIVERY: 'Out for Delivery',
   DELIVERED: 'Delivered',
   CANCELLED: 'Cancelled',
@@ -146,7 +146,7 @@ const OrderDetailPage = () => {
       { key: 'PENDING', label: 'Order Placed' },
       { key: 'CONFIRMED', label: 'Confirmed' },
       { key: 'PROCESSING', label: 'Processing' },
-      { key: 'SHIPPED', label: 'Shipped' },
+      { key: 'SHIPPED', label: 'Dispatched' },
       { key: 'OUT_FOR_DELIVERY', label: 'Out for Delivery' },
       { key: 'DELIVERED', label: 'Delivered' },
     ];
@@ -411,10 +411,12 @@ const OrderDetailPage = () => {
             <span>Shipping Fee</span>
             <span>{shippingAmount === 0 ? 'FREE' : formatPrice(shippingAmount, currency)}</span>
           </div>
-          <div className="flex justify-between">
-            <span>GST (5% Included)</span>
-            <span>{formatPrice(taxAmount, currency)}</span>
-          </div>
+          {taxAmount > 0 && (
+            <div className="flex justify-between">
+              <span>GST ({order?.taxRate ? `${Number(order.taxRate)}% Included` : 'Included'})</span>
+              <span>{formatPrice(taxAmount, currency)}</span>
+            </div>
+          )}
           <div className="flex justify-between items-center pt-4 border-t border-neutral-200 text-neutral-900 font-bold text-base">
             <span>Total Value</span>
             <span className="text-brand-gold">{formatPrice(totalAmount, currency)}</span>

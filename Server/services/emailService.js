@@ -526,7 +526,7 @@ const sendOrderStatusNotification = async (order, statusTypeOverride = null) => 
                       </tr>
                       ${tax > 0 ? `
                       <tr>
-                        <td style="padding:4px 0;font-size:13px;color:#6B7280;">GST (5% Included)</td>
+                        <td style="padding:4px 0;font-size:13px;color:#6B7280;">GST (${order.taxRate ? `${Number(order.taxRate)}% Included` : 'Included'})</td>
                         <td style="padding:4px 0;font-size:13px;color:#1F2937;text-align:right;">${currencySymbol}${tax.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                       </tr>` : ''}
                       <tr>
@@ -636,6 +636,31 @@ const sendRestockAlertEmail = async (toEmail, productName, productSlug, image) =
     const transporter = createTransporter();
     const productUrl = `${process.env.CLIENT_URL || 'http://localhost:5173'}/products/${productSlug || ''}`;
 
+    let resolvedImage = '';
+    if (image && typeof image === 'string') {
+      let trimmed = image.trim();
+      if (trimmed.startsWith('[')) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          if (Array.isArray(parsed) && parsed.length > 0) trimmed = String(parsed[0]).trim();
+        } catch (e) {}
+      }
+
+      if (trimmed.startsWith('data:') || trimmed.startsWith('<svg') || trimmed.includes('.svg')) {
+        resolvedImage = `https://placehold.co/300x300/111111/C9A24B/png?text=${encodeURIComponent((productName || 'Product').slice(0, 20))}`;
+      } else if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+        resolvedImage = trimmed;
+      } else if (trimmed.length > 0) {
+        const serverBase = (process.env.SERVER_URL || process.env.VITE_API_URL || process.env.CLIENT_URL || 'http://localhost:5000').replace(/\/$/, '');
+        const cleanPath = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+        resolvedImage = `${serverBase}${cleanPath}`;
+      }
+    }
+
+    if (!resolvedImage) {
+      resolvedImage = `https://placehold.co/300x300/111111/C9A24B/png?text=${encodeURIComponent((productName || 'Product').slice(0, 20))}`;
+    }
+
     const mailOptions = {
       from: `"Billu Bazaar Concierge" <${process.env.EMAIL_USER}>`,
       to: toEmail,
@@ -691,11 +716,11 @@ const sendRestockAlertEmail = async (toEmail, productName, productSlug, image) =
                   <tr>
                     <td style="padding:10px 40px 30px;">
                       <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#FAFAFA;border:1px solid #EEEEEE;border-radius:10px;padding:24px 20px;text-align:center;">
-                        ${image ? `
+                        ${resolvedImage ? `
                         <tr>
                           <td align="center" style="padding-bottom:16px;">
                             <a href="${productUrl}" target="_blank">
-                              <img src="${image}" alt="${productName}" style="max-width:220px;max-height:220px;width:auto;height:auto;object-fit:cover;border-radius:8px;border:1px solid #E5E7EB;box-shadow:0 4px 12px rgba(0,0,0,0.06);" />
+                              <img src="${resolvedImage}" alt="${productName}" style="max-width:220px;max-height:220px;width:auto;height:auto;object-fit:cover;border-radius:8px;border:1px solid #E5E7EB;box-shadow:0 4px 12px rgba(0,0,0,0.06);" />
                             </a>
                           </td>
                         </tr>

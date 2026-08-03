@@ -166,7 +166,14 @@ const notifyStockAlert = async (req, res) => {
     const { id } = req.params;
     const alert = await StockAlert.findByPk(id, {
       include: [
-        { model: Product, as: 'product', attributes: ['name', 'slug', 'defaultProductImage', 'images'] },
+        {
+          model: Product,
+          as: 'product',
+          attributes: ['id', 'name', 'slug', 'defaultProductImage', 'images'],
+          include: [
+            { model: ProductVariant, as: 'variants', attributes: ['id', 'sku', 'stock', 'price', 'attributes', 'image'] }
+          ]
+        },
         { model: ProductVariant, as: 'variant', attributes: ['id', 'sku', 'stock', 'price', 'attributes', 'image'] }
       ]
     });
@@ -175,10 +182,44 @@ const notifyStockAlert = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Stock alert not found.' });
     }
 
-    const prodImg = alert.variant?.image || alert.product?.defaultProductImage || (alert.product?.images && alert.product?.images[0]) || '';
+    let targetVariant = alert.variant;
+    if (!targetVariant && alert.product?.variants?.length > 0) {
+      let selAttrs = alert.selectedVariant;
+      if (selAttrs) {
+        if (typeof selAttrs === 'string') {
+          try { selAttrs = JSON.parse(selAttrs); } catch (e) { selAttrs = null; }
+        }
+      }
+      if (selAttrs && typeof selAttrs === 'object' && Object.keys(selAttrs).length > 0) {
+        targetVariant = alert.product.variants.find(v => {
+          let attrs = v.attributes;
+          if (typeof attrs === 'string') {
+            try { attrs = JSON.parse(attrs); } catch (e) { attrs = {}; }
+          }
+          if (!attrs) return false;
+          return Object.keys(selAttrs).every(k =>
+            String(attrs[k] || '').toLowerCase() === String(selAttrs[k] || '').toLowerCase()
+          );
+        });
+      }
+      if (!targetVariant) {
+        targetVariant = alert.product.variants[0];
+      }
+    }
+
+    let prodImg = targetVariant?.image || alert.product?.defaultProductImage;
+    if (!prodImg && alert.product?.images) {
+      let imgs = alert.product.images;
+      if (typeof imgs === 'string') {
+        try { imgs = JSON.parse(imgs); } catch (e) { imgs = []; }
+      }
+      if (Array.isArray(imgs) && imgs.length > 0) {
+        prodImg = imgs[0];
+      }
+    }
     
     let variantTitle = '';
-    let attrs = alert.variant?.attributes || alert.selectedVariant;
+    let attrs = targetVariant?.attributes || alert.selectedVariant;
     if (attrs) {
       if (typeof attrs === 'string') {
         try { attrs = JSON.parse(attrs); } catch (e) {}

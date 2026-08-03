@@ -28,7 +28,7 @@ const ProductVariant = sequelize.define('ProductVariant', {
   image: { type: DataTypes.STRING, allowNull: true },
   warehouseId: { type: DataTypes.INTEGER, allowNull: true },
   lowStockThreshold: { type: DataTypes.INTEGER, defaultValue: 10, allowNull: true },
-  gstRate: { type: DataTypes.STRING(20), defaultValue: '18%', allowNull: true },
+  gstRate: { type: DataTypes.STRING(20), defaultValue: '0%', allowNull: true },
   images: {
     type: DataTypes.JSON,
     defaultValue: [],

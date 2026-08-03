@@ -15,7 +15,7 @@ const generate7DayRevenue = () => {
 const dashboardSlice = createSlice({
   name: 'dashboard',
   initialState: {
-    stats: { totalOrders: 0, todayOrders: 0, monthOrders: 0, totalCustomers: 0, pendingOrders: 0, deliveredOrders: 0, totalRevenue: 0 },
+    stats: { totalOrders: 0, todayOrders: 0, monthOrders: 0, totalCustomers: 0, pendingOrders: 0, deliveredOrders: 0, totalRevenue: 0, totalRevenueAED: 0 },
     revenueChart: generate7DayRevenue(),
     loading: false, error: null,
   },

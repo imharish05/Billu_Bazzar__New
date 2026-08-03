@@ -3,7 +3,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Trash2, ShoppingBag, ChevronRight, Tag } from 'lucide-react';
-import { removeLocal, addLocal, clearLocal, openCart } from '../redux/slices/cartSlice';
+import { removeLocal, addLocal, clearLocal, openCart, fetchCart } from '../redux/slices/cartSlice';
 import Footer from '../components/Footer';
 import { formatPrice } from '../utils/currency';
 import api from '../services/api';
@@ -27,7 +27,8 @@ const CartPage = () => {
 
   useEffect(() => { 
     document.title = 'Your Cart — Billu Bazaar'; 
-  }, []);
+    dispatch(fetchCart());
+  }, [dispatch]);
 
   // Fetch gift service config
   useEffect(() => {
@@ -143,19 +144,33 @@ const CartPage = () => {
                         </button>
                       </div>
                       <div className="flex items-center justify-between mt-auto pt-3">
-                        <div className="flex items-center border border-brand-light">
-                          <button
-                            onClick={() => item.quantity <= 1 ? dispatch(removeLocal({ productId: item.productId || item.id, variantId: item.variantId, selectedVariant: item.selectedVariant })) : dispatch(addLocal({ ...item, quantity: -1 }))}
-                            className="w-9 h-9 flex items-center justify-center hover:bg-brand-light transition-colors focus-visible:outline-brand-gold"
-                            aria-label="Decrease"
-                          >−</button>
-                          <span className="w-10 text-center text-sm font-medium">{item.quantity}</span>
-                          <button
-                            onClick={() => dispatch(addLocal({ ...item, quantity: 1 }))}
-                            className="w-9 h-9 flex items-center justify-center hover:bg-brand-light transition-colors focus-visible:outline-brand-gold"
-                            aria-label="Increase"
-                          >+</button>
-                        </div>
+                        {(() => {
+                          const availStock = item.variant?.stock ?? item.product?.stock ?? item.availableStock ?? 9999;
+                          const isMax = item.quantity >= availStock;
+                          return (
+                            <div className="flex items-center border border-brand-light">
+                              <button
+                                onClick={() => item.quantity <= 1 ? dispatch(removeLocal({ productId: item.productId || item.id, variantId: item.variantId, selectedVariant: item.selectedVariant })) : dispatch(addLocal({ ...item, quantity: -1 }))}
+                                className="w-9 h-9 flex items-center justify-center hover:bg-brand-light transition-colors focus-visible:outline-brand-gold"
+                                aria-label="Decrease"
+                              >−</button>
+                              <span className="w-10 text-center text-sm font-medium">{item.quantity}</span>
+                              <button
+                                onClick={() => {
+                                  if (isMax) {
+                                    toast.error(`Maximum available stock reached (${availStock} items).`);
+                                  } else {
+                                    dispatch(addLocal({ ...item, quantity: 1 }));
+                                  }
+                                }}
+                                disabled={isMax}
+                                className={`w-9 h-9 flex items-center justify-center transition-colors focus-visible:outline-brand-gold ${isMax ? 'bg-neutral-100 text-neutral-300 cursor-not-allowed' : 'hover:bg-brand-light'}`}
+                                aria-label="Increase"
+                                title={isMax ? `Max stock available: ${availStock}` : 'Increase quantity'}
+                              >+</button>
+                            </div>
+                          );
+                        })()}
                         <p className="font-semibold text-brand-text">{fmt((item.priceAtAdd || item.price || 0) * item.quantity)}</p>
                       </div>
                     </div>

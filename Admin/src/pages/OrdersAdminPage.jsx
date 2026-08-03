@@ -14,6 +14,8 @@ const STATUS_TABS = ['All', 'PENDING', 'CONFIRMED', 'PROCESSING', 'SHIPPED', 'OU
 const STATUS_LABELS = {
   All: 'All',
   PENDING: 'New Orders',
+  PENDING_PAYMENT: 'Pending Payment',
+  PAID: 'Payment Received',
   CONFIRMED: 'Confirmed',
   PROCESSING: 'Packing',
   SHIPPED: 'Dispatched',
@@ -24,7 +26,9 @@ const STATUS_LABELS = {
 };
 const STATUS_COLORS = {
   PENDING: 'bg-amber-50 text-amber-800 font-medium',
-  CONFIRMED: 'bg-blue-50 text-blue-800 font-medium',
+  PENDING_PAYMENT: 'bg-yellow-50 text-yellow-800 font-medium border border-yellow-200',
+  PAID: 'bg-emerald-50 text-emerald-800 font-medium border border-emerald-200',
+  CONFIRMED: 'bg-blue-50 text-blue-800 font-medium border border-blue-200',
   PROCESSING: 'bg-yellow-50 text-yellow-800 font-medium',
   SHIPPED: 'bg-purple-50 text-purple-800 font-medium',
   OUT_FOR_DELIVERY: 'bg-sky-50 text-sky-800 font-medium',
@@ -66,7 +70,11 @@ const OrdersAdminPage = () => {
 
   const handleStatusUpdate = (id, status) => dispatch(updateOrderStatus({ id, status }));
 
-  const filtered = activeStatus === 'All' ? orders : orders.filter(o => o.status === activeStatus);
+  const filtered = activeStatus === 'All' 
+    ? orders 
+    : (activeStatus === 'PENDING' 
+        ? orders.filter(o => o.status === 'PENDING' || o.status === 'PAID') 
+        : orders.filter(o => o.status === activeStatus));
 
   return (
     <AdminLayout title="Orders">
@@ -123,7 +131,11 @@ const OrdersAdminPage = () => {
                     <p className="font-medium">{order.customer?.name || 'Customer'}</p>
                     <p className="text-xs text-brand-grey">{order.customer?.email}</p>
                   </td>
-                  <td className="px-4 py-3 text-center">{order.items?.length || '—'}</td>
+                  <td className="px-4 py-3 text-center font-medium">
+                    {order.items && order.items.length > 0
+                      ? order.items.reduce((sum, item) => sum + (Number(item.quantity) || 1), 0)
+                      : 1}
+                  </td>
                   <td className="px-4 py-3 font-semibold">{fmt(order.totalAmount)}</td>
                   <td className="px-4 py-3"><span className={`text-xs px-2 py-0.5 rounded-full ${PAY_COLORS[order.paymentStatus] || 'bg-gray-100'}`}>{order.paymentStatus}</span></td>
                   <td className="px-4 py-3">

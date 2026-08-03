@@ -252,7 +252,7 @@ const VariantModal = ({ variant, onClose, onSave, products, warehouses }) => {
   const [attributes, setAttributes] = useState(variant?.attributes || {});
   
   const [lowStockThreshold, setLowStockThreshold] = useState(variant?.lowStockThreshold !== undefined ? String(variant.lowStockThreshold) : '10');
-  const [gstRate, setGstRate] = useState(variant?.gstRate || '18%');
+  const [gstRate, setGstRate] = useState(variant?.gstRate || '0%');
   const [mainImageFile, setMainImageFile] = useState(null);
   const [mainImagePreview, setMainImagePreview] = useState(variant?.image || '');
 
@@ -620,11 +620,10 @@ const VariantModal = ({ variant, onClose, onSave, products, warehouses }) => {
                   onChange={e => setGstRate(e.target.value)}
                   className="w-full border border-brand-light bg-white px-3 py-2 text-sm focus:outline-none focus:border-brand-gold transition-colors rounded-md font-medium"
                 >
-                  <option value="0%">0% (Exempt)</option>
+                  <option value="0%">0% (Exempt / 0%)</option>
                   <option value="5%">5% (SGST 2.5% + CGST 2.5%)</option>
-                  <option value="12%">12% (SGST 6% + CGST 6%)</option>
                   <option value="18%">18% (SGST 9% + CGST 9%)</option>
-                  <option value="28%">28% (SGST 14% + CGST 14%)</option>
+                  <option value="40%">40% (SGST 20% + CGST 20%)</option>
                 </select>
               </div>
             </div>

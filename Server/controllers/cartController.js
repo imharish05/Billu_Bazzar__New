@@ -45,8 +45,8 @@ const getCart = async (req, res) => {
         model: CartItem,
         as: 'items',
         include: [
-          { model: Product, as: 'product', attributes: ['id', 'name', 'price', 'images', 'stock', 'slug'] },
-          { model: ProductVariant, as: 'variant', attributes: ['id', 'sku', 'price', 'stock', 'attributes'] }
+          { model: Product, as: 'product', attributes: ['id', 'name', 'price', 'images', 'stock', 'slug', 'gstRate'] },
+          { model: ProductVariant, as: 'variant', attributes: ['id', 'sku', 'price', 'stock', 'attributes', 'gstRate'] }
         ]
       }],
     });
@@ -93,9 +93,12 @@ const getCart = async (req, res) => {
         });
       }
 
+      const liveGstRate = item.variant?.gstRate ?? item.product?.gstRate ?? item.gstRate ?? '0%';
+
       auditedItems.push({
         ...item.toJSON(),
         quantity: currentQty,
+        gstRate: liveGstRate,
         stockStatus: status,
         availableStock: physicalStock
       });
@@ -366,9 +369,10 @@ const syncCart = async (req, res) => {
       let physicalStock = 0;
       let selectedVariantJson = item.selectedVariant || {};
       let itemPrice = product.price;
+      let variant = null;
 
       if (variantId) {
-        const variant = await ProductVariant.findOne({ where: { id: variantId, productId } });
+        variant = await ProductVariant.findOne({ where: { id: variantId, productId } });
         if (variant) {
           physicalStock = variant.stock;
           selectedVariantJson = variant.attributes;
@@ -403,6 +407,8 @@ const syncCart = async (req, res) => {
         });
         console.log(`[syncCart] Saved CartItem ID: ${createdItem.id} (Product ID ${productId}) to Cart ID ${cart.id}`);
         
+        const liveGstRate = (variantId && variant ? variant.gstRate : null) ?? product.gstRate ?? '0%';
+
         auditedItems.push({
           ...createdItem.toJSON(),
           product: {
@@ -411,8 +417,18 @@ const syncCart = async (req, res) => {
             price: product.price,
             images: product.images,
             stock: product.stock,
-            slug: product.slug
+            slug: product.slug,
+            gstRate: product.gstRate || '0%'
           },
+          variant: variantId && variant ? {
+            id: variant.id,
+            sku: variant.sku,
+            price: variant.price,
+            stock: variant.stock,
+            attributes: variant.attributes,
+            gstRate: variant.gstRate || '0%'
+          } : null,
+          gstRate: liveGstRate,
           stockStatus: status,
           availableStock: physicalStock
         });
@@ -448,8 +464,8 @@ const getAbandonedCarts = async (req, res) => {
           as: 'items',
           required: true, // Only fetch carts that currently contain items
           include: [
-            { model: Product, as: 'product', attributes: ['id', 'name', 'price', 'images', 'currency', 'stock'] },
-            { model: ProductVariant, as: 'variant', attributes: ['id', 'sku', 'price', 'stock', 'attributes'] }
+            { model: Product, as: 'product', attributes: ['id', 'name', 'price', 'images', 'currency', 'stock', 'gstRate'] },
+            { model: ProductVariant, as: 'variant', attributes: ['id', 'sku', 'price', 'stock', 'attributes', 'gstRate'] }
           ]
         },
         {
@@ -481,8 +497,8 @@ const sendAbandonedCartEmail = async (req, res) => {
           model: CartItem,
           as: 'items',
           include: [
-            { model: Product, as: 'product', attributes: ['id', 'name', 'price', 'images', 'currency', 'stock'] },
-            { model: ProductVariant, as: 'variant', attributes: ['id', 'sku', 'price', 'stock', 'attributes'] }
+            { model: Product, as: 'product', attributes: ['id', 'name', 'price', 'images', 'currency', 'stock', 'gstRate'] },
+            { model: ProductVariant, as: 'variant', attributes: ['id', 'sku', 'price', 'stock', 'attributes', 'gstRate'] }
           ]
         },
         {

@@ -14,9 +14,11 @@
   --color-light: #F0EEE8;
 }
 
-*, *::before, *::after { box-sizing: border-box; }
-body { font-family: 'Inter', system-ui, sans-serif; background: var(--color-bg); color: var(--color-text); -webkit-font-smoothing: antialiased; }
-h1,h2,h3,h4 { font-family: 'Cinzel', Georgia, serif; }
+*, *::before, *::after { box-sizing: border-box; font-variant-numeric: tabular-nums lining-nums normal; }
+body, h1, h2, h3, h4, h5, h6, input, select, textarea, button, td, th, span, p, div, .font-playfair { 
+  font-family: 'Inter', system-ui, sans-serif !important; 
+  font-variant-numeric: tabular-nums lining-nums normal;
+}
 
 .glass-nav {
   background: rgba(250,250,248,0.93);
@@ -53,9 +55,10 @@ h1,h2,h3,h4 { font-family: 'Cinzel', Georgia, serif; }
 .skeleton { background:linear-gradient(90deg,#e8e6e1 25%,#f5f3ee 50%,#e8e6e1 75%);background-size:200% 100%;animation:shimmer 1.5s infinite;border-radius:4px; }
 @keyframes shimmer { 0%{background-position:-200% 0} 100%{background-position:200% 0} }
 :focus-visible { outline:2px solid #C58837;outline-offset:2px; }
-::-webkit-scrollbar { width:5px; }
-::-webkit-scrollbar-track { background:#F0EEE8; }
-::-webkit-scrollbar-thumb { background:#C58837;border-radius:3px; }
+::-webkit-scrollbar { width:5px; height:5px; }
+::-webkit-scrollbar-track { background:#F0EEE8; border-radius:3px; }
+::-webkit-scrollbar-thumb { background:#C58837; border-radius:3px; }
+::-webkit-scrollbar-thumb:hover { background:#a8712a; }
 
 /* Custom toggle switch styling - Uiverse.io by WhiteNervosa (Extra Compact & Aligned) */
 .switch {

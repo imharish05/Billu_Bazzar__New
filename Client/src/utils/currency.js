@@ -1,6 +1,6 @@
 import currencyJs from 'currency.js';
 
-export const DEFAULT_AED_RATE = 22.7; // 1 AED = 22.7 INR
+export const DEFAULT_AED_RATE = 26.06; // 1 AED = 26.06 INR (updated Jul 2026)
 
 export const formatPrice = (value, currencyCode = 'INR', rate = DEFAULT_AED_RATE) => {
   const numVal = Number(value || 0);

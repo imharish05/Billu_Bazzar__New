@@ -60,6 +60,10 @@ app.use('/api/loyalty',       require('./routes/loyaltyRoutes'));
 app.use('/api/stock-alerts',  require('./routes/stockAlertRoutes'));
 app.use('/api/delivery-zones', require('./routes/deliveryZoneRoutes'));
 app.use('/api/contact-enquiries', require('./routes/contactEnquiryRoutes'));
+app.use('/api/currency',          require('./routes/currencyRoutes'));
+
+// ── Warm up exchange rate cache on startup (non-blocking) ────────────────────
+require('./services/currencyRateService').warmUp().catch(() => {});
 
 // ── Health Check ──────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));

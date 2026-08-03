@@ -1,8 +1,9 @@
 'use strict';
-const { sequelize, Order, OrderItem, Product, ProductVariant, Customer, Coupon, Affiliate, Cart, CartItem, InventoryMovementLog, Warehouse, WarehouseStock, SiteSetting, LoyaltyLedger, DeliveryZone } = require('../models');
+const { sequelize, Order, OrderItem, Product, ProductVariant, Customer, Coupon, Affiliate, Cart, CartItem, InventoryMovementLog, Warehouse, WarehouseStock, SiteSetting, LoyaltyLedger, DeliveryZone, Category } = require('../models');
 const { Op } = require('sequelize');
 const { v4: uuidv4 } = require('uuid');
 const { sendOrderStatusNotification } = require('../services/emailService');
+const currencyRateService = require('../services/currencyRateService');
 
 // Helper to push order details to Shiprocket shipping API
 const pushToShiprocket = async (orderId) => {
@@ -23,15 +24,25 @@ const getAll = async (req, res) => {
   try {
     const { page = 1, limit = 20, status, customerId, search } = req.query;
     const { Op } = require('sequelize');
+
     const where = {};
 
     if (status) {
-      where.status = status;
+      if (status === 'PENDING' || status === 'New Orders') {
+        where[Op.and] = [
+          { [Op.or]: [{ paymentStatus: 'PAID' }, { paymentMethod: 'COD' }] },
+          { status: { [Op.in]: ['PENDING', 'CONFIRMED', 'PROCESSING', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED'] } }
+        ];
+      } else {
+        where.status = status;
+        where[Op.or] = [{ paymentStatus: 'PAID' }, { paymentMethod: 'COD' }];
+      }
     } else {
-      // Exclude payment-initiated-but-not-completed orders from default listing
-      // PENDING_PAYMENT = Razorpay initiated but not paid/cancelled
-      // EXPIRED = Razorpay session timed out
-      where.status = { [Op.notIn]: ['PENDING_PAYMENT', 'EXPIRED'] };
+      // STRICT: ONLY list orders where payment is SUCCESS (PAID) or payment method is COD
+      where[Op.or] = [
+        { paymentStatus: 'PAID' },
+        { paymentMethod: 'COD' }
+      ];
     }
 
     if (customerId) where.customerId = customerId;
@@ -46,8 +57,21 @@ const getAll = async (req, res) => {
       where, limit: parseInt(limit), offset: (parseInt(page) - 1) * parseInt(limit),
       order: [['createdAt', 'DESC']],
       include: [
-        { model: Customer, as: 'customer', attributes: ['id', 'name', 'email', 'phone'] },
-        { model: OrderItem, as: 'items' },
+        { model: Customer, as: 'customer', attributes: ['id', 'name', 'email', 'phone'], required: false },
+        { 
+          model: OrderItem, 
+          as: 'items',
+          required: false,
+          include: [
+            { 
+              model: Product, 
+              as: 'product', 
+              attributes: ['id', 'name', 'categoryId'],
+              required: false,
+              include: [{ model: Category, as: 'category', attributes: ['id', 'name'], required: false }] 
+            }
+          ]
+        },
       ],
     });
     const p = Math.max(1, parseInt(page, 10));
@@ -61,11 +85,12 @@ const getAll = async (req, res) => {
 const getMyOrders = async (req, res) => {
   try {
     const { Op } = require('sequelize');
+
     const orders = await Order.findAll({
       where: {
         customerId: req.customer.id,
-        // Exclude incomplete/abandoned payment attempts
-        status: { [Op.notIn]: ['PENDING_PAYMENT', 'EXPIRED'] },
+        // Exclude only expired payment sessions
+        status: { [Op.ne]: 'EXPIRED' },
       },
       order: [['createdAt', 'DESC']],
       include: [{ model: OrderItem, as: 'items' }],
@@ -131,6 +156,31 @@ const getOne = async (req, res) => {
   }
 };
 
+const trackOrder = async (req, res) => {
+  try {
+    const { identifier } = req.params;
+    const isNum = !isNaN(identifier) && !isNaN(parseInt(identifier, 10)) && String(parseInt(identifier, 10)) === String(identifier).trim();
+
+    const whereClause = isNum
+      ? { [Op.or]: [{ id: parseInt(identifier, 10) }, { orderNumber: identifier }] }
+      : { orderNumber: identifier };
+
+    const order = await Order.findOne({
+      where: whereClause,
+      include: [
+        { model: Customer, as: 'customer', attributes: ['id', 'name', 'email', 'phone'] },
+        { model: OrderItem, as: 'items' },
+        { model: Coupon, as: 'coupon' },
+      ],
+    });
+
+    if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
+    res.json({ success: true, order });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
 const placeOrder = async (req, res) => {
   console.log('[placeOrder] --- Place Order Triggered ---');
   console.log('[placeOrder] Customer authenticated:', req.customer ? `Yes (ID: ${req.customer.id})` : 'No (Guest)');
@@ -140,7 +190,7 @@ const placeOrder = async (req, res) => {
     // 1. Force session lock wait timeout to protect against locking bottlenecks
     await sequelize.query('SET SESSION innodb_lock_wait_timeout = 5', { transaction });
 
-    const { shippingAddress, billingAddress, paymentMethod, couponCode, referralCode, redeemPoints } = req.body;
+    const { shippingAddress, billingAddress, paymentMethod, couponCode, referralCode, redeemPoints, requestedCurrency: reqCurrency, currencyRate: reqRate } = req.body;
 
     // 2. Fetch server-side cart based on customer or guest sessionId (NEVER trust req.body.items)
     let cartWhere = {};
@@ -179,7 +229,20 @@ const placeOrder = async (req, res) => {
     // 2. Validate Order Basics
     const isCod = paymentMethod === 'COD' || paymentMethod === 'Cash on Delivery (COD)' || paymentMethod?.includes('Cash on Delivery');
     if (!billingAddress || !shippingAddress) {
+      await transaction.rollback();
       return res.status(400).json({ success: false, message: 'Billing and shipping addresses are required' });
+    }
+
+    const reqPincode = (shippingAddress?.pincode || shippingAddress?.zipCode || '').trim();
+    if (reqPincode) {
+      const activeZone = await DeliveryZone.findOne({ where: { pincode: reqPincode, isActive: true }, transaction });
+      if (!activeZone) {
+        await transaction.rollback();
+        return res.status(400).json({
+          success: false,
+          message: `Delivery is not available for pincode ${reqPincode}. Please enter a pincode listed in our delivery zones.`
+        });
+      }
     }
 
     if (!cart || !cart.items || cart.items.length === 0) {
@@ -363,16 +426,42 @@ const placeOrder = async (req, res) => {
         }
       }
     }
-    const taxableSubtotal = Math.max(0, subtotal - discountAmount - loyaltyDiscount);
-    const taxAmount = Math.round((taxableSubtotal * 5) / 105);
-    const totalAmount = taxableSubtotal + shippingAmount;
+    let totalDiscount = discountAmount + loyaltyDiscount;
+    let taxableSubtotal = Math.max(0, subtotal - totalDiscount);
+
+    // Calculate tax per item using configured product / variant gstRate
+    let taxAmount = 0;
+    let weightedTaxSum = 0;
+    for (const item of itemsToLock) {
+      const itemLineTotal = item.price * item.quantity;
+      const itemDiscount = subtotal > 0 ? (totalDiscount * itemLineTotal) / subtotal : 0;
+      const itemTaxable = Math.max(0, itemLineTotal - itemDiscount);
+
+      const variantRec = item.variantId ? lockedStock[`v_${item.variantId}`] : null;
+      const productRec = lockedStock[`p_${item.productId}`];
+      const rawGst = variantRec?.gstRate ?? productRec?.gstRate ?? '0%';
+      const parsedRate = parseFloat(String(rawGst).replace(/[^0-9.]/g, ''));
+      const itemGstRate = !isNaN(parsedRate) ? parsedRate : 0;
+
+      const itemTax = Math.round((itemTaxable * itemGstRate) / (100 + itemGstRate));
+      taxAmount += itemTax;
+      weightedTaxSum += itemGstRate * itemLineTotal;
+    }
+
+    let taxRate = subtotal > 0 ? Math.round((weightedTaxSum / subtotal) * 10) / 10 : 0;
+    let totalAmount = taxableSubtotal + shippingAmount;
 
     // Guard: Enforce currency uniformity and resolve correct currency code
+    // Priority: 1) requestedCurrency from client (set by geo-detection), 2) shippingAddress country, 3) customer preference
     let orderCurrency = 'INR';
+    const requestedCurrency = (reqCurrency || '').toUpperCase();
     const shippingCountry = (shippingAddress?.country || '').trim().toLowerCase();
     const isUae = ['uae', 'united arab emirates', 'dubai', 'abu dhabi', 'sharjah'].includes(shippingCountry);
 
-    if (isUae) {
+    if (requestedCurrency === 'AED' || requestedCurrency === 'INR') {
+      // Trust the client's geo-detected currency (validated against known codes)
+      orderCurrency = requestedCurrency;
+    } else if (isUae) {
       orderCurrency = 'AED';
     } else if (req.customer) {
       const user = await Customer.findByPk(req.customer.id, { transaction });
@@ -381,6 +470,7 @@ const placeOrder = async (req, res) => {
       }
     }
 
+    // Validate for mixed-currency carts (products priced in different currencies)
     let cartCurrency = null;
     for (const item of cart.items) {
       const itemCurrency = item.product?.currency || 'INR';
@@ -391,10 +481,24 @@ const placeOrder = async (req, res) => {
         return res.status(400).json({ success: false, message: 'Mixed currency items are not allowed in the same cart/order.' });
       }
     }
+    // NOTE: cartCurrency (product.currency in DB) is intentionally NOT used to override orderCurrency.
+    // Products are stored with INR base price but displayed/charged in AED for UAE users via exchange rate.
 
-    // Cart items' currency takes final precedence to prevent mismatches
-    if (cartCurrency) {
-      orderCurrency = cartCurrency;
+    // If order is AED, convert all amounts from INR to AED using exchange rate
+    // The exchange rate is: 1 AED = X INR, so AED amount = INR amount / rate
+    // Use the live cached rate from currencyRateService (refreshed every 6h), fall back to client-sent rate
+    if (orderCurrency === 'AED') {
+      const liveRate = currencyRateService.getRate(); // cached, zero network overhead
+      const rate = liveRate > 0 ? liveRate : ((Number(reqRate) > 0) ? Number(reqRate) : currencyRateService.FALLBACK_RATE);
+      const toAed = (inr) => Math.round((inr / rate) * 100) / 100; // 2 decimal places
+      subtotal          = toAed(subtotal);
+      discountAmount    = toAed(discountAmount);
+      loyaltyDiscount   = toAed(loyaltyDiscount);
+      shippingAmount    = toAed(shippingAmount);
+      taxableSubtotal   = toAed(taxableSubtotal);
+      taxAmount         = toAed(taxAmount);
+      totalAmount       = taxableSubtotal + shippingAmount; // recalculate from converted values
+      console.log(`[placeOrder] Converted amounts to AED (rate: ${rate} INR/AED): totalAmount=${totalAmount} AED`);
     }
 
     // 7. Create Order record
@@ -411,6 +515,7 @@ const placeOrder = async (req, res) => {
       discountAmount: discountAmount + loyaltyDiscount,
       shippingAmount,
       taxAmount,
+      taxRate,
       totalAmount,
       currency: orderCurrency,
       shippingAddress,
@@ -442,41 +547,60 @@ const placeOrder = async (req, res) => {
       await OrderItem.create(snapItem, { transaction });
     }
 
-    // 9. Process stock deduction immediately if COD path
-    if (isCod) {
-      const fulfillmentWh = await Warehouse.findOne({ where: { isFulfillment: true, isActive: true }, transaction });
-      const whId = fulfillmentWh ? fulfillmentWh.id : null;
+const { syncStorefrontStock, resolveWarehouseIdForItem } = require('./warehouseController');
 
-      for (const item of itemsToLock) {
-        if (item.variantId) {
-          const varObj = lockedStock[`v_${item.variantId}`];
+    // 9. Process stock deduction immediately upon order placement for all orders
+    for (const item of itemsToLock) {
+      const whId = await resolveWarehouseIdForItem(item.productId, item.variantId, transaction);
+      let preDeductionStock = 0;
+
+      if (item.variantId) {
+        // Decrement variant stock
+        const varObj = lockedStock[`v_${item.variantId}`];
+        if (varObj) {
+          preDeductionStock = parseInt(varObj.stock, 10) || 0;
           await varObj.decrement('stock', { by: item.quantity, transaction });
-        } else {
-          const prodObj = lockedStock[`p_${item.productId}`];
+        }
+        // Also decrement parent product aggregate stock (locked separately since
+        // lockedStock only has p_ entries for non-variant items)
+        const parentProduct = await Product.findOne({
+          where: { id: item.productId },
+          lock: transaction.LOCK.UPDATE,
+          transaction
+        });
+        if (parentProduct) {
+          await parentProduct.decrement('stock', { by: item.quantity, transaction });
+        }
+      } else {
+        const prodObj = lockedStock[`p_${item.productId}`];
+        if (prodObj) {
+          preDeductionStock = parseInt(prodObj.stock, 10) || 0;
           await prodObj.decrement('stock', { by: item.quantity, transaction });
         }
-
-        if (whId) {
-          const [whStock] = await WarehouseStock.findOrCreate({
-            where: { warehouseId: whId, productId: item.productId, variantId: item.variantId || null },
-            defaults: { quantity: 0, reservedQty: 0 },
-            transaction
-          });
-          await whStock.decrement('quantity', { by: item.quantity, transaction });
-        }
-
-        // Log movement
-        await InventoryMovementLog.create({
-          productId: item.productId,
-          variantId: item.variantId,
-          warehouseId: whId,
-          orderId: order.id,
-          quantity: -item.quantity,
-          type: 'ORDER_DEDUCTION',
-          reason: `COD order placement: ${order.orderNumber}`
-        }, { transaction });
       }
+
+      if (whId) {
+        const [whStock] = await WarehouseStock.findOrCreate({
+          where: { warehouseId: whId, productId: item.productId, variantId: item.variantId || null },
+          defaults: { warehouseId: whId, productId: item.productId, variantId: item.variantId || null, quantity: preDeductionStock, reservedQty: 0 },
+          transaction
+        });
+        await whStock.decrement('quantity', { by: item.quantity, transaction });
+      }
+
+      // Log movement
+      await InventoryMovementLog.create({
+        productId: item.productId,
+        variantId: item.variantId || null,
+        warehouseId: whId,
+        orderId: order.id,
+        quantity: -item.quantity,
+        type: 'ORDER_DEDUCTION',
+        reason: `Order placement: ${order.orderNumber}`
+      }, { transaction });
     }
+
+    await order.update({ inventoryProcessed: true }, { transaction });
 
     // 10. Process Loyalty Ledger and Points Balance
     if (req.customer && req.customer.id) {
@@ -526,6 +650,10 @@ const placeOrder = async (req, res) => {
     await transaction.commit();
 
     // 11. Post-commit operations (Asynchronous)
+    for (const item of itemsToLock) {
+      syncStorefrontStock(item.productId, item.variantId || null).catch(console.error);
+    }
+
     if (isCod) {
       pushToShiprocket(order.id).catch(console.error);
     }
@@ -572,10 +700,6 @@ const updateStatus = async (req, res) => {
       previousProcessed === true;
 
     if (isRestockRequired) {
-      // Find fulfillment warehouse
-      const fulfillmentWh = await Warehouse.findOne({ where: { isFulfillment: true, isActive: true }, transaction });
-      const whId = fulfillmentWh ? fulfillmentWh.id : null;
-
       // Sort items to restock ascending to prevent deadlocks
       const sortedItems = [...order.items].sort((a, b) => {
         if (a.productId !== b.productId) return a.productId - b.productId;
@@ -583,6 +707,9 @@ const updateStatus = async (req, res) => {
       });
 
       for (const item of sortedItems) {
+        const whId = await resolveWarehouseIdForItem(item.productId, item.variantId, transaction);
+        let currentStock = 0;
+
         if (item.variantId) {
           const variant = await ProductVariant.findOne({
             where: { id: item.variantId },
@@ -590,23 +717,25 @@ const updateStatus = async (req, res) => {
             transaction
           });
           if (variant) {
+            currentStock = parseInt(variant.stock, 10) || 0;
             await variant.increment('stock', { by: item.quantity, transaction });
           }
-        } else {
-          const product = await Product.findOne({
-            where: { id: item.productId },
-            lock: transaction.LOCK.UPDATE,
-            transaction
-          });
-          if (product) {
-            await product.increment('stock', { by: item.quantity, transaction });
-          }
+        }
+        
+        const product = await Product.findOne({
+          where: { id: item.productId },
+          lock: transaction.LOCK.UPDATE,
+          transaction
+        });
+        if (product) {
+          if (!item.variantId) currentStock = parseInt(product.stock, 10) || 0;
+          await product.increment('stock', { by: item.quantity, transaction });
         }
 
         if (whId) {
           const [whStock] = await WarehouseStock.findOrCreate({
             where: { warehouseId: whId, productId: item.productId, variantId: item.variantId || null },
-            defaults: { quantity: 0, reservedQty: 0 },
+            defaults: { warehouseId: whId, productId: item.productId, variantId: item.variantId || null, quantity: currentStock, reservedQty: 0 },
             transaction
           });
           await whStock.increment('quantity', { by: item.quantity, transaction });
@@ -615,7 +744,7 @@ const updateStatus = async (req, res) => {
         // Log movement
         await InventoryMovementLog.create({
           productId: item.productId,
-          variantId: item.variantId,
+          variantId: item.variantId || null,
           warehouseId: whId,
           orderId: order.id,
           quantity: item.quantity,
@@ -634,6 +763,13 @@ const updateStatus = async (req, res) => {
     }, { transaction });
 
     await transaction.commit();
+
+    // Post-commit storefront stock sync
+    if (isRestockRequired) {
+      for (const item of order.items) {
+        syncStorefrontStock(item.productId, item.variantId || null).catch(console.error);
+      }
+    }
 
     // Fetch full order with items and customer details for email notification
     Order.findByPk(order.id, {
@@ -659,10 +795,17 @@ const getDashboardStats = async (req, res) => {
     const today = new Date(); today.setHours(0,0,0,0);
     const thisMonth = new Date(today.getFullYear(), today.getMonth(), 1);
 
+    const validOrderWhere = {
+      [Op.or]: [
+        { paymentStatus: 'PAID' },
+        { paymentMethod: 'COD' }
+      ]
+    };
+
     const [totalOrders, todayOrders, monthOrders, totalCustomers, pendingOrders, deliveredOrders] = await Promise.all([
-      Order.count(),
-      Order.count({ where: { createdAt: { [Op.gte]: today } } }),
-      Order.count({ where: { createdAt: { [Op.gte]: thisMonth } } }),
+      Order.count({ where: validOrderWhere }),
+      Order.count({ where: { ...validOrderWhere, createdAt: { [Op.gte]: today } } }),
+      Order.count({ where: { ...validOrderWhere, createdAt: { [Op.gte]: thisMonth } } }),
       Customer.count(),
       Order.count({ where: { status: 'PENDING' } }),
       Order.count({ where: { status: 'DELIVERED' } }),
@@ -670,13 +813,33 @@ const getDashboardStats = async (req, res) => {
 
     const revenueData = await Order.findAll({
       where: { paymentStatus: 'PAID' },
-      attributes: ['totalAmount'],
+      attributes: ['totalAmount', 'currency'],
     });
-    const totalRevenue = revenueData.reduce((sum, o) => sum + parseFloat(o.totalAmount), 0);
+    
+    let totalRevenueINR = 0;
+    let totalRevenueAED = 0;
+
+    revenueData.forEach(o => {
+      const amt = parseFloat(o.totalAmount) || 0;
+      if (o.currency === 'AED') {
+        totalRevenueAED += amt;
+      } else {
+        totalRevenueINR += amt;
+      }
+    });
 
     res.json({
       success: true,
-      stats: { totalOrders, todayOrders, monthOrders, totalCustomers, pendingOrders, deliveredOrders, totalRevenue: Math.round(totalRevenue) },
+      stats: { 
+        totalOrders, 
+        todayOrders, 
+        monthOrders, 
+        totalCustomers, 
+        pendingOrders, 
+        deliveredOrders, 
+        totalRevenue: Math.round(totalRevenueINR),
+        totalRevenueAED: Math.round(totalRevenueAED)
+      },
     });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -724,5 +887,5 @@ const getStatusCounts = async (req, res) => {
   }
 };
 
-module.exports = { getAll, getOne, getMyOrders, getMyOrderById, cancelMyOrder, placeOrder, updateStatus, getDashboardStats, getStatusCounts };
+module.exports = { getAll, getOne, getMyOrders, getMyOrderById, trackOrder, cancelMyOrder, placeOrder, updateStatus, getDashboardStats, getStatusCounts };
 

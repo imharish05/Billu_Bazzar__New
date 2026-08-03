@@ -12,10 +12,15 @@ export const fetchMyOrders = createAsyncThunk('orders/myOrders', async (_, { rej
 
 export const fetchOrderById = createAsyncThunk('orders/fetchById', async (id, { rejectWithValue }) => {
   try {
-    const res = await api.get(`/orders/my/${id}`);
+    const res = await api.get(`/orders/track/${id}`);
     return res.data.order;
   } catch (err) {
-    return rejectWithValue(err.response?.data?.message || 'Failed to fetch order details');
+    try {
+      const res = await api.get(`/orders/my/${id}`);
+      return res.data.order;
+    } catch (err2) {
+      return rejectWithValue(err2.response?.data?.message || err.response?.data?.message || 'Failed to fetch order details');
+    }
   }
 });
 

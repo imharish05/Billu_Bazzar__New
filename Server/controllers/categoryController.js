@@ -221,8 +221,10 @@ const remove = async (req, res) => {
     const productIds = products.map(p => p.id);
 
     if (productIds.length > 0) {
-      const { WarehouseStock, CartItem, Wishlist, Review, StockAlert, OrderItem } = require('../models');
+      const { WarehouseStock, CartItem, Wishlist, Review, StockAlert, OrderItem, InventoryMovementLog, ProductVariant } = require('../models');
 
+      if (InventoryMovementLog) await InventoryMovementLog.destroy({ where: { productId: productIds }, transaction });
+      if (ProductVariant) await ProductVariant.destroy({ where: { productId: productIds }, transaction });
       await WarehouseStock.destroy({ where: { productId: productIds }, transaction });
       await CartItem.destroy({ where: { productId: productIds }, transaction });
       await Wishlist.destroy({ where: { productId: productIds }, transaction });

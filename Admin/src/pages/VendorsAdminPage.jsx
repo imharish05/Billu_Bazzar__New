@@ -102,13 +102,21 @@ const VendorsAdminPage = () => {
 
   const handleSave = async (e) => {
     e.preventDefault();
-    setSaving(true);
-    setError(null);
+    const cleanGst = form.gstin.trim().toUpperCase();
+    if (cleanGst) {
+      if (cleanGst.length < 7 || cleanGst.length > 15 || !/^[0-9]{2}[A-Z0-9]{4,13}$/.test(cleanGst)) {
+        const msg = 'Invalid GST number format. Must start with 2 state code digits (e.g. 22AAAAA0000A1Z5 or 22A435HG).';
+        setError(msg);
+        toast.error(msg);
+        setSaving(false);
+        return;
+      }
+    }
 
     try {
       const payload = {
         name: form.name.trim(),
-        gstin: form.gstin.trim(),
+        gstin: cleanGst,
         contactPerson: form.contactPerson.trim(),
         phone: form.phone.trim(),
         email: form.email.trim(),
@@ -343,7 +351,7 @@ const VendorsAdminPage = () => {
 
                   <div className="col-span-2 sm:col-span-1">
                     <label className="block text-xs font-semibold text-brand-text mb-1" htmlFor="vendor-gstin">GST Number</label>
-                    <input id="vendor-gstin" type="text" value={form.gstin} onChange={e => setForm(p => ({ ...p, gstin: e.target.value }))} className="w-full border border-brand-light px-3 py-2 text-sm focus:outline-none focus:border-brand-gold transition-colors font-mono rounded-sm" placeholder="e.g. 27AAACZ1234A1Z5" />
+                    <input id="vendor-gstin" type="text" value={form.gstin} onChange={e => setForm(p => ({ ...p, gstin: e.target.value.toUpperCase() }))} maxLength={15} className="uppercase w-full border border-brand-light px-3 py-2 text-sm focus:outline-none focus:border-brand-gold transition-colors font-mono rounded-sm" placeholder="e.g. 22AAAAA0000A1Z5" />
                   </div>
 
                   <div className="col-span-2 sm:col-span-1">

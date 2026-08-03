@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { NavLink, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
+import toast from 'react-hot-toast';
 import {
   LayoutDashboard, Package, Tag, ShoppingBag, Users, Image, Ticket,
   Warehouse, UserCheck, BarChart3, Settings, LogOut, Menu, X,
@@ -11,6 +12,41 @@ import { motion, AnimatePresence } from 'framer-motion';
 import Logo from './Logo';
 import { logout } from '../redux/slices/authSlice';
 import api from '../services/api';
+
+const playNewOrderChime = () => {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const now = ctx.currentTime;
+    
+    // First tone (E5 - 659.25Hz)
+    const osc1 = ctx.createOscillator();
+    const gain1 = ctx.createGain();
+    osc1.type = 'sine';
+    osc1.frequency.setValueAtTime(659.25, now);
+    gain1.gain.setValueAtTime(0.15, now);
+    gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+    osc1.connect(gain1);
+    gain1.connect(ctx.destination);
+    osc1.start(now);
+    osc1.stop(now + 0.3);
+
+    // Second tone (B5 - 987.77Hz)
+    const osc2 = ctx.createOscillator();
+    const gain2 = ctx.createGain();
+    osc2.type = 'sine';
+    osc2.frequency.setValueAtTime(987.77, now + 0.15);
+    gain2.gain.setValueAtTime(0.2, now + 0.15);
+    gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.55);
+    osc2.connect(gain2);
+    gain2.connect(ctx.destination);
+    osc2.start(now + 0.15);
+    osc2.stop(now + 0.55);
+  } catch (err) {
+    console.warn('Audio chime error:', err);
+  }
+};
 
 const ORDER_SUB_ITEMS = [
   {
@@ -169,7 +205,7 @@ const AdminLayout = ({ children, title = '' }) => {
   const [notifications, setNotifications] = useState([]);
   const [dismissedIds, setDismissedIds] = useState(() => {
     try {
-      return new Set(JSON.parse(sessionStorage.getItem('admin_dismissed_notifs') || '[]'));
+      return new Set(JSON.parse(localStorage.getItem('admin_dismissed_notifs') || '[]'));
     } catch { return new Set(); }
   });
   const [orderCounts, setOrderCounts] = useState({});
@@ -178,6 +214,8 @@ const AdminLayout = ({ children, title = '' }) => {
   });
 
   const currentStatusParam = searchParams.get('status');
+
+  const lastMaxOrderIdRef = useRef(null);
 
   const loadNotifications = useCallback(async () => {
     try {
@@ -191,10 +229,14 @@ const AdminLayout = ({ children, title = '' }) => {
           time: `Stock: ${a.quantity} units`,
           read: false
         }));
-        // Filter out notifications the user has already dismissed this session
+        // Filter out notifications the user has already dismissed or marked read
         setDismissedIds(prev => {
           const filtered = stockAlerts.filter(n => !prev.has(n.id));
-          setNotifications(filtered);
+          setNotifications(prevNotifs => {
+            const orderNotifs = prevNotifs.filter(n => n.type === 'order' && !prev.has(n.id));
+            const merged = [...orderNotifs, ...filtered.filter(s => !orderNotifs.some(o => o.id === s.id))];
+            return merged;
+          });
           return prev;
         });
       }
@@ -214,19 +256,79 @@ const AdminLayout = ({ children, title = '' }) => {
     }
   }, []);
 
+  const checkNewOrders = useCallback(async () => {
+    try {
+      const res = await api.get('/orders?limit=10');
+      if (res.data.success && Array.isArray(res.data.orders) && res.data.orders.length > 0) {
+        const fetchedOrders = res.data.orders;
+        const highestId = Math.max(...fetchedOrders.map(o => o.id));
+
+        // Get live dismissed/read set from localStorage
+        let savedDismissed = new Set();
+        try {
+          savedDismissed = new Set(JSON.parse(localStorage.getItem('admin_dismissed_notifs') || '[]'));
+        } catch {}
+
+        if (lastMaxOrderIdRef.current === null) {
+          lastMaxOrderIdRef.current = highestId;
+        } else if (highestId > lastMaxOrderIdRef.current) {
+          const newOrders = fetchedOrders.filter(o => o.id > lastMaxOrderIdRef.current && !savedDismissed.has(`order-${o.id}`))
+            .sort((a, b) => b.id - a.id);
+          lastMaxOrderIdRef.current = highestId;
+
+          newOrders.forEach(o => {
+            playNewOrderChime();
+            toast.success(`🛒 New Order #${o.orderNumber || o.id} Received! (${o.customer?.name || o.shippingAddress?.fullName || 'Customer'} - ${o.currency || 'INR'} ${o.totalAmount})`, {
+              duration: 8000,
+            });
+
+            setNotifications(prev => {
+              const newNotif = {
+                id: `order-${o.id}`,
+                type: 'order',
+                orderId: o.id,
+                text: `🛒 New Order #${o.orderNumber || o.id} (${o.customer?.name || o.shippingAddress?.fullName || 'Customer'})`,
+                time: `${o.currency || 'INR'} ${o.totalAmount} · ${new Date(o.createdAt).toLocaleDateString()} ${new Date(o.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
+                read: false,
+              };
+              const filtered = prev.filter(item => item.id !== `order-${o.id}` && !savedDismissed.has(item.id));
+              const orders = [newNotif, ...filtered.filter(n => n.type === 'order')].sort((a, b) => Number(b.orderId || 0) - Number(a.orderId || 0));
+              const others = filtered.filter(n => n.type !== 'order');
+              return [...orders, ...others];
+            });
+          });
+
+          loadOrderCounts();
+        }
+      }
+    } catch (err) {
+      console.warn('Check new orders error:', err);
+    }
+  }, [loadOrderCounts]);
+
   useEffect(() => {
     loadNotifications();
     loadOrderCounts();
+    checkNewOrders();
+
+    // Poll every 8 seconds for real-time new order notifications
+    const interval = setInterval(() => {
+      checkNewOrders();
+      loadNotifications();
+    }, 8000);
 
     const handleOrderStatusChange = () => {
       loadOrderCounts();
+      checkNewOrders();
+      loadNotifications();
     };
 
     window.addEventListener('adminOrderStatusChanged', handleOrderStatusChange);
     return () => {
+      clearInterval(interval);
       window.removeEventListener('adminOrderStatusChanged', handleOrderStatusChange);
     };
-  }, [loadNotifications, loadOrderCounts]);
+  }, [loadNotifications, loadOrderCounts, checkNewOrders]);
 
   useEffect(() => {
     loadOrderCounts();
@@ -238,7 +340,17 @@ const AdminLayout = ({ children, title = '' }) => {
   const unreadCount = notifications.filter(n => !n.read).length;
 
   const markAllRead = () => {
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    setNotifications(prev => {
+      const allIds = prev.map(n => n.id);
+      setDismissedIds(existing => {
+        const updated = new Set([...existing, ...allIds]);
+        try {
+          localStorage.setItem('admin_dismissed_notifs', JSON.stringify([...updated]));
+        } catch {}
+        return updated;
+      });
+      return [];
+    });
   };
 
   const clearAllNotifications = () => {
@@ -247,7 +359,7 @@ const AdminLayout = ({ children, title = '' }) => {
       setDismissedIds(existingDismissed => {
         const updated = new Set([...existingDismissed, ...allIds]);
         try {
-          sessionStorage.setItem('admin_dismissed_notifs', JSON.stringify([...updated]));
+          localStorage.setItem('admin_dismissed_notifs', JSON.stringify([...updated]));
         } catch {}
         return updated;
       });
@@ -257,16 +369,17 @@ const AdminLayout = ({ children, title = '' }) => {
 
   const handleNotificationClick = (n) => {
     setNotificationsOpen(false);
-    // Dismiss (remove) clicked notification and remember it
     setDismissedIds(prev => {
       const updated = new Set([...prev, n.id]);
       try {
-        sessionStorage.setItem('admin_dismissed_notifs', JSON.stringify([...updated]));
+        localStorage.setItem('admin_dismissed_notifs', JSON.stringify([...updated]));
       } catch {}
       return updated;
     });
     setNotifications(prev => prev.filter(item => item.id !== n.id));
-    if (n.warehouseId) {
+    if (n.type === 'order' || n.orderId) {
+      navigate('/orders');
+    } else if (n.warehouseId) {
       navigate(`/warehouses?warehouseId=${n.warehouseId}&lowStock=true`);
     }
   };

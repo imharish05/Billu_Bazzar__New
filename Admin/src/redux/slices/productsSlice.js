@@ -2,9 +2,10 @@ import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import api from '../../services/api';
 
 export const fetchAdminProducts = createAsyncThunk('adminProducts/fetch', async (params = {}, { rejectWithValue }) => {
-  try { const res = await api.get('/products', { params: { page: 1, limit: 10, ...params } }); return res.data; }
+  try { const res = await api.get('/products', { params: { page: 1, limit: 10, admin: 'true', ...params } }); return res.data; }
   catch (err) { return rejectWithValue(err.response?.data?.message || err.message || 'Failed to fetch products'); }
 });
+
 export const createProduct = createAsyncThunk('adminProducts/create', async (data, { rejectWithValue }) => {
   try { const res = await api.post('/products', data); return res.data.product; }
   catch (err) { return rejectWithValue(err.response?.data?.message || err.message || 'Failed to create product'); }

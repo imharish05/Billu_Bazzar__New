@@ -230,24 +230,24 @@ const SubSubCategoriesAdminPage = () => {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="border-b border-brand-light bg-brand-light/20 text-brand-grey text-xs font-semibold uppercase tracking-wider">
-                  <th className="pl-3 pr-1 py-3 w-8"></th>
-                  <th className="px-5 py-3 w-12">#</th>
-                  <th className="px-5 py-3">Category</th>
-                  <th className="px-5 py-3">Sub-category</th>
-                  <th className="px-5 py-3">Sub-sub-category</th>
-                  <th className="px-5 py-3 w-28">Status</th>
-                  <th className="px-5 py-3 w-24 text-right">Actions</th>
-                </tr>
-              </thead>
-              <DndContext
-                sensors={sensors}
-                collisionDetection={closestCenter}
-                onDragEnd={handleDragEnd}
-                modifiers={[restrictToVerticalAxis]}
-              >
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+              modifiers={[restrictToVerticalAxis]}
+            >
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-brand-light bg-brand-light/20 text-brand-grey text-xs font-semibold uppercase tracking-wider">
+                    <th className="pl-3 pr-1 py-3 w-8"></th>
+                    <th className="px-5 py-3 w-12">#</th>
+                    <th className="px-5 py-3">Category</th>
+                    <th className="px-5 py-3">Sub-category</th>
+                    <th className="px-5 py-3">Sub-sub-category</th>
+                    <th className="px-5 py-3 w-28">Status</th>
+                    <th className="px-5 py-3 w-24 text-right">Actions</th>
+                  </tr>
+                </thead>
                 <SortableContext
                   items={subSubCategories.map(s => s.id)}
                   strategy={verticalListSortingStrategy}
@@ -286,8 +286,8 @@ const SubSubCategoriesAdminPage = () => {
                     })}
                   </tbody>
                 </SortableContext>
-              </DndContext>
-            </table>
+              </table>
+            </DndContext>
           </div>
         )}
         <PaginationBottom

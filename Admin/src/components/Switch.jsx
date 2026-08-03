@@ -1,12 +1,13 @@
 import React from 'react';
 
-const Switch = ({ checked, onChange, id }) => {
+const Switch = ({ checked, onChange, id, className, disabled }) => {
   return (
-    <label className="switch cursor-pointer">
+    <label className={`switch cursor-pointer ${disabled ? 'opacity-50 cursor-not-allowed' : ''} ${className || ''}`}>
       <input
         type="checkbox"
         checked={Boolean(checked)}
-        onChange={(e) => onChange && onChange(e.target.checked, e)}
+        disabled={disabled}
+        onChange={(e) => onChange && onChange(e)}
         id={id}
       />
       <span className="slider" />

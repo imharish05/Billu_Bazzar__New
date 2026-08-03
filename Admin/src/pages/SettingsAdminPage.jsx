@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Save, ShieldCheck, RefreshCw } from 'lucide-react';
+import { Save, ShieldCheck, RefreshCw, Percent } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
 import api from '../services/api';
 import toast from 'react-hot-toast';
@@ -24,6 +24,11 @@ const SettingsAdminPage = () => {
     globalLowStockThreshold: 10,
   });
 
+  // Dynamic Tax / GST Settings
+  const [taxSettings, setTaxSettings] = useState({
+    taxRate: 5,
+  });
+
   // Fetch settings on mount
   useEffect(() => {
     fetchSettings();
@@ -32,9 +37,10 @@ const SettingsAdminPage = () => {
   const fetchSettings = async () => {
     setLoading(true);
     try {
-      const [otpRes, invRes] = await Promise.all([
+      const [otpRes, invRes, taxRes] = await Promise.all([
         api.get('/settings/otp_threshold'),
-        api.get('/settings/inventory')
+        api.get('/settings/inventory'),
+        api.get('/settings/tax')
       ]);
 
       if (otpRes.data?.success && otpRes.data?.data) {
@@ -50,10 +56,34 @@ const SettingsAdminPage = () => {
           globalLowStockThreshold: invRes.data.data.globalLowStockThreshold ?? 10,
         });
       }
+
+      if (taxRes.data?.success && taxRes.data?.data) {
+        setTaxSettings({
+          taxRate: taxRes.data.data.taxRate ?? 5,
+        });
+      }
     } catch (err) {
       console.warn('Failed to load settings, using defaults:', err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSaveTaxSettings = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      const payload = {
+        taxRate: Number(taxSettings.taxRate) >= 0 ? Number(taxSettings.taxRate) : 5,
+      };
+      await api.post('/settings/tax', { data: payload });
+      toast.success('Tax / GST rate updated successfully!');
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to update tax settings');
+    } finally {
+      setSaving(false);
     }
   };
 

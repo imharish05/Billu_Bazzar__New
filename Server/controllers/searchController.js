@@ -58,24 +58,23 @@ const autocomplete = async (req, res) => {
 
 const trending = async (req, res) => {
   try {
-    // Try to load from cache first
-    const cached = await TrendingCache.findOne({ order: [['updatedAt', 'DESC']] });
-    if (cached && cached.data && Array.isArray(cached.data) && cached.data.length > 0) {
-      return res.json({ success: true, trending: cached.data });
-    }
-
-    // Fallback: calculate live if cache is empty
+    // Cron-free real-time database query for trending searches
     const topKeywords = await SearchKeyword.findAll({
       order: [
         ['is_trending', 'DESC'],
-        ['trending_score', 'DESC'],
+        ['search_count_today', 'DESC'],
         ['search_count', 'DESC']
       ],
       limit: 10,
       attributes: ['keyword']
     });
 
-    const list = topKeywords.map(k => k.keyword);
+    let list = topKeywords.map(k => k.keyword);
+
+    if (list.length === 0) {
+      list = ['Luxury Watches', 'Designer Shirts', 'Leather Jackets', 'Handbags', 'Sneakers'];
+    }
+
     res.json({ success: true, trending: list });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });

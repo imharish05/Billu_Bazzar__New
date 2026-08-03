@@ -69,6 +69,7 @@ const CheckoutPage = () => {
   const [placing, setPlacing] = useState(false);
   const [isVerified, setIsVerified] = useState(false);
   const [showAllItems, setShowAllItems] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState({});
 
   // Admin-configurable OTP threshold settings (Default: INR 20,000 / AED 800)
   const [otpSettings, setOtpSettings] = useState({
@@ -96,6 +97,9 @@ const CheckoutPage = () => {
     }
   }, [customer, location.state?.redeemPoints]);
 
+  // Dynamic Tax / GST Rate
+  const [taxRate, setTaxRate] = useState(5);
+
   useEffect(() => {
     api.get('/settings/otp_threshold')
       .then(res => {
@@ -122,6 +126,14 @@ const CheckoutPage = () => {
         }
       })
       .catch(err => console.warn('[Checkout] Failed to fetch loyalty settings', err));
+
+    api.get('/site-settings/tax')
+      .then(res => {
+        if (res.data?.success && res.data?.data && res.data.data.taxRate !== undefined) {
+          setTaxRate(Math.max(0, Number(res.data.data.taxRate)));
+        }
+      })
+      .catch(err => console.warn('[Checkout] Failed to fetch tax settings', err));
   }, []);
 
   const getItemDetails = (item) => {
@@ -233,28 +245,54 @@ const CheckoutPage = () => {
   };
 
   const [billingAddress, setBillingAddress] = useState({ ...emptyAddr });
-  const [deliverySameAsBilling, setDeliverySameAsBilling] = useState(true);
-  const [address, setAddress] = useState({ ...emptyAddr });
+  const [deliverySameAsBilling, setDeliverySameAsBilling] = useState(false); // Default to false for clear separate billing vs delivery
+  const [address, setAddress] = useState({ ...emptyAddr, country: 'India' });
   const [paymentMethod, setPaymentMethod] = useState('Credit / Debit Card');
+  const [geoBlocked, setGeoBlocked] = useState(false);
+  const [geoMessage, setGeoMessage] = useState('');
+
+  // Auto Geolocation detection on mount
+  useEffect(() => {
+    const geoQuery = location.search ? location.search : '';
+    api.get(`/payments/geo-detect${geoQuery}`)
+      .then(res => {
+        if (res.data?.success) {
+          if (!res.data.isAllowed) {
+            setGeoBlocked(true);
+            setGeoMessage(res.data.message || 'Payments and order placement are accepted strictly from UAE and India only.');
+          } else {
+            setGeoBlocked(false);
+            if (res.data.currency) {
+              dispatch(setCurrency(res.data.currency));
+            }
+          }
+        }
+      })
+      .catch(err => {
+        console.warn('[Checkout] Geo-detection fallback to default:', err.message);
+      });
+  }, [dispatch, location.search]);
+
 
   const handleToggleDeliverySame = (checked) => {
-    setDeliverySameAsBilling(checked);
-    if (!checked) setAddress({ ...billingAddress });
-  };
-
-  // Auto-suggest AED currency when UAE shipping country is entered
-  useEffect(() => {
-    const activeAddress = deliverySameAsBilling ? billingAddress : address;
-    const country = (activeAddress.country || '').trim().toLowerCase();
-    const isUaeCountry = ['uae', 'united arab emirates', 'dubai', 'abu dhabi', 'sharjah'].includes(country);
-    if (isUaeCountry && currencyCode !== 'AED') {
-      dispatch(setCurrency('AED'));
+    if (checked) {
+      const bCountry = (billingAddress.country || '').trim().toLowerCase();
+      const isIndiaBilling = ['india', 'in', 'ind'].includes(bCountry);
+      if (!isIndiaBilling && bCountry !== '') {
+        setDeliverySameAsBilling(false);
+        setAddress(p => ({ ...p, country: 'India' }));
+        toast.error('Delivery is strictly available within India only. Please fill in a valid Indian delivery address for your recipient.');
+        return;
+      }
     }
-  }, [billingAddress.country, address.country, deliverySameAsBilling, currencyCode, dispatch]);
+    setDeliverySameAsBilling(checked);
+    if (!checked) setAddress({ ...billingAddress, country: 'India' });
+  };
 
   // Delivery Zone Pincode Lookup for Dynamic Shipping Charge
   const [pincodeZoneData, setPincodeZoneData] = useState(null);
   const activePincode = (deliverySameAsBilling ? billingAddress.pincode : address.pincode || '').toString().trim();
+
 
   useEffect(() => {
     if (!activePincode || activePincode.length < 3) {
@@ -279,6 +317,11 @@ const CheckoutPage = () => {
 
     return () => clearTimeout(timer);
   }, [activePincode]);
+
+  // Fetch live cart on mount to ensure fresh stock and live GST rate
+  useEffect(() => {
+    dispatch(fetchCart());
+  }, [dispatch]);
 
   // Guard: don't let an empty cart sit on checkout (unless order was just completed and navigating to confirmation)
   useEffect(() => {
@@ -433,9 +476,31 @@ const CheckoutPage = () => {
     shippingStatus = 'PENDING';
     shipping = 0;
   }
-  const taxableSubtotal = Math.max(0, subtotal - (couponDiscount + loyaltyDiscountVal));
-  const tax = Math.round((taxableSubtotal * 5) / 105);
+  const totalDiscount = couponDiscount + loyaltyDiscountVal;
+  const taxableSubtotal = Math.max(0, subtotal - totalDiscount);
 
+  // Compute GST per item using product / variant gstRate
+  let tax = 0;
+  let weightedTaxSum = 0;
+  items.forEach(item => {
+    const price = Number(item.price || item.selectedVariant?.price || item.product?.price || 0);
+    const qty = Number(item.quantity || 1);
+    const itemLineTotal = price * qty;
+    const itemDiscount = subtotal > 0 ? (totalDiscount * itemLineTotal) / subtotal : 0;
+    const itemTaxable = Math.max(0, itemLineTotal - itemDiscount);
+
+    const rawGst = item.selectedVariant?.gstRate ?? item.variant?.gstRate ?? item.product?.gstRate ?? item.gstRate ?? '0%';
+    const parsedRate = parseFloat(String(rawGst).replace(/[^0-9.]/g, ''));
+    const itemGstRate = !isNaN(parsedRate) ? parsedRate : 0;
+
+    const itemTax = Math.round((itemTaxable * itemGstRate) / (100 + itemGstRate));
+    tax += itemTax;
+    weightedTaxSum += itemGstRate * itemLineTotal;
+  });
+
+  const effectiveTaxRate = subtotal > 0 ? Math.round((weightedTaxSum / subtotal) * 10) / 10 : 0;
+
+  // Total = taxableSubtotal (GST-inclusive) + shipping + giftWrap
   const total = taxableSubtotal + shipping + giftWrapPrice;
 
   const handleLogin = async (e) => {
@@ -520,6 +585,11 @@ const CheckoutPage = () => {
       navigate('/cart');
       return;
     }
+    if (shippingStatus === 'NOT_DELIVERABLE') {
+      toast.error('The selected delivery address / pincode is not deliverable. Please choose a deliverable address.');
+      setStep(1);
+      return;
+    }
     setPlacing(true);
     try {
       // 1. Sync the client's current cart list to the server database first (concurrency & tampering protection)
@@ -539,6 +609,8 @@ const CheckoutPage = () => {
         paymentMethod, referralCode,
         couponCode: effectiveRedeemPoints ? undefined : (appliedCoupon ? appliedCoupon.code : undefined),
         redeemPoints: effectiveRedeemPoints,
+        requestedCurrency: currencyCode,   // geo-detected currency (AED or INR)
+        currencyRate: currencyRate,         // exchange rate (1 AED = X INR), default 26.06
       })).unwrap();
 
       const finishOrderClear = () => {
@@ -580,6 +652,31 @@ const CheckoutPage = () => {
           toast.error('Failed to load Razorpay SDK. Please check your internet connection.');
           setPlacing(false);
           return;
+        }
+
+        const pmLower = (paymentMethod || '').toLowerCase();
+        let targetBlock = null;
+
+        if (pmLower.includes('net') || pmLower.includes('bank')) {
+          targetBlock = {
+            name: 'Net Banking',
+            instruments: [{ method: 'netbanking' }]
+          };
+        } else if (pmLower.includes('card') || pmLower.includes('credit') || pmLower.includes('debit')) {
+          targetBlock = {
+            name: 'Credit / Debit Card',
+            instruments: [{ method: 'card' }]
+          };
+        } else if (pmLower.includes('upi')) {
+          targetBlock = {
+            name: 'Pay via UPI',
+            instruments: [{ method: 'upi', flows: ['qr', 'collect', 'intent'] }]
+          };
+        } else if (pmLower.includes('wallet')) {
+          targetBlock = {
+            name: 'Wallets',
+            instruments: [{ method: 'wallet' }]
+          };
         }
 
         const options = {
@@ -628,6 +725,20 @@ const CheckoutPage = () => {
           }
         };
 
+        if (targetBlock) {
+          options.config = {
+            display: {
+              blocks: {
+                selected_method: targetBlock
+              },
+              sequence: ['block.selected_method'],
+              preferences: {
+                show_default_blocks: pmLower.includes('upi') ? true : false
+              }
+            }
+          };
+        }
+
         // Stop the main spinner — Razorpay overlay handles UI from here
         setPlacing(false);
         const rzp = new window.Razorpay(options);
@@ -646,63 +757,88 @@ const CheckoutPage = () => {
 
 
   const validateStep1 = () => {
-    if (!isAuthenticated) {
-      toast.error('Please log in to your account to continue to payment.');
-      setShowLoginPanel(true);
-      setTimeout(() => {
-        const loginEl = document.getElementById('toggle-login-panel');
-        if (loginEl) {
-          loginEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
-      }, 100);
-      return false;
+    const errors = {};
+
+    if (!billingAddress.fullName?.trim()) errors.fullName = 'Please enter Full Name';
+    if (!billingAddress.phone?.trim()) {
+      errors.phone = 'Mobile number is required';
+    } else {
+      const phoneVal = validatePhoneNumber(billingAddress.phone);
+      if (!phoneVal.isValid) errors.phone = phoneVal.message;
     }
-    const requiredFields = [
-      { key: 'fullName', label: 'Full Name' },
-      { key: 'phone', label: 'Mobile Number' },
-      { key: 'email', label: 'Email Address' },
-      { key: 'flatHouse', label: 'Street / House No.' },
-      { key: 'city', label: 'City' },
-      { key: 'state', label: 'State / Province' },
-      { key: 'pincode', label: 'Postal / Zip code' },
-      { key: 'country', label: 'Country' },
-    ];
-    for (const f of requiredFields) {
-      if (!billingAddress[f.key]?.trim()) {
-        toast.error(`Please enter ${f.label}`);
-        return false;
+    if (!billingAddress.email?.trim()) errors.email = 'Please enter Email Address';
+    if (!billingAddress.flatHouse?.trim()) errors.flatHouse = 'Please enter Street / House No.';
+    if (!billingAddress.city?.trim()) errors.city = 'Please enter City';
+    if (!billingAddress.state?.trim()) errors.state = 'Please enter State';
+
+    if (deliverySameAsBilling) {
+      const countryVal = (billingAddress.country || '').trim().toLowerCase();
+      if (countryVal && countryVal !== 'india' && countryVal !== 'in') {
+        errors.country = 'Delivery is strictly available within India. Please uncheck "same as billing" and enter an Indian delivery address.';
+        toast.error('Delivery is strictly available within India only. Please enter a valid Indian delivery address.');
+      }
+      if (!/^\d{6}$/.test((billingAddress.pincode || '').trim())) {
+        errors.pincode = 'Pincode must be exactly 6 numeric digits';
       }
     }
-    const phoneValidation = validatePhoneNumber(billingAddress.phone);
-    if (!phoneValidation.isValid) {
-      toast.error(phoneValidation.message);
-      return false;
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(billingAddress.email.trim())) {
-      toast.error('Please enter a valid email address');
-      return false;
-    }
-    if (billingAddress.pincode.trim().length < 3) {
-      toast.error('Please enter a valid postal or zip code');
-      return false;
-    }
+
     if (!deliverySameAsBilling) {
-      for (const f of requiredFields) {
-        if (!address[f.key]?.trim()) {
-          toast.error(`Please enter delivery ${f.label}`);
-          return false;
-        }
+      if (!address.fullName?.trim()) errors.del_fullName = 'Please enter delivery Full Name';
+      if (!address.phone?.trim()) {
+        errors.del_phone = 'Delivery mobile number is required';
+      } else {
+        const delPhoneVal = validatePhoneNumber(address.phone);
+        if (!delPhoneVal.isValid) errors.del_phone = 'Delivery Phone: ' + delPhoneVal.message;
       }
-      const delPhoneValidation = validatePhoneNumber(address.phone);
-      if (!delPhoneValidation.isValid) {
-        toast.error('Delivery Phone: ' + delPhoneValidation.message);
-        return false;
+      if (!address.email?.trim()) errors.del_email = 'Please enter delivery Email Address';
+      if (!address.flatHouse?.trim()) errors.del_flatHouse = 'Please enter delivery Street / House No.';
+      if (!address.city?.trim()) errors.del_city = 'Please enter delivery City';
+      if (!address.state?.trim()) errors.del_state = 'Please enter delivery State';
+      if (!/^\d{6}$/.test((address.pincode || '').trim())) {
+        errors.del_pincode = 'Delivery Pincode must be exactly 6 numeric digits';
       }
     }
+
     if (createAccount && newPassword.length < 6) {
-      toast.error('Password must be at least 6 characters');
+      errors.newPassword = 'Password must be at least 6 characters';
+    }
+
+    setFieldErrors(errors);
+
+    const elementIdMap = {
+      del_pincode: 'd-pincode',
+      del_fullName: 'd-fullname',
+      del_phone: 'd-phone',
+      del_email: 'd-email',
+      del_flatHouse: 'd-flat',
+      del_city: 'd-city',
+      del_state: 'd-state',
+    };
+
+    const errorKeys = Object.keys(errors);
+    if (errorKeys.length > 0) {
+      const firstKey = errorKeys[0];
+      toast.error(errors[firstKey] || 'Please complete all required fields (*)');
+      const targetId = elementIdMap[firstKey] || firstKey;
+      const errEl = document.getElementById(targetId) || document.getElementById('fullName');
+      if (errEl) {
+        errEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        errEl.focus();
+      }
       return false;
     }
+
+    if (shippingStatus === 'NOT_DELIVERABLE' || (pincodeZoneData && pincodeZoneData.deliverable === false)) {
+      toast.error(`Delivery is NOT available for pincode "${activePincode}". Please enter a serviceable pincode.`);
+      const pincodeTargetId = deliverySameAsBilling ? 'pincode' : 'd-pincode';
+      const pincodeEl = document.getElementById(pincodeTargetId) || document.getElementById('d-pincode') || document.getElementById('pincode');
+      if (pincodeEl) {
+        pincodeEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        pincodeEl.focus();
+      }
+      return false;
+    }
+
     return true;
   };
 
@@ -713,6 +849,18 @@ const CheckoutPage = () => {
     <main id="main-content">
       <div className="max-w-site mx-auto px-4 md:px-8 py-8 md:py-12">
         <h1 className="font-playfair text-2xl md:text-3xl font-bold mb-2">Secure Checkout</h1>
+
+        {/* Restricted Location Banner */}
+        {geoBlocked && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3 text-red-800">
+            <span className="text-2xl">🛑</span>
+            <div>
+              <p className="font-bold text-sm">Service Region Restriction</p>
+              <p className="text-xs text-red-700 mt-0.5">{geoMessage || 'Payments and order placement are accepted strictly from UAE and India only.'}</p>
+            </div>
+          </div>
+        )}
+
 
         {/* Returning customer panel */}
         {!isAuthenticated && (
@@ -835,33 +983,57 @@ const CheckoutPage = () => {
                       {/* Full Name */}
                       <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
-                          <label className={labelCls} htmlFor="full-name">Full Name <span className="text-red-400">*</span></label>
-                          <input id="full-name" type="text" value={billingAddress.fullName}
-                            onChange={e => setBillingAddress(p => ({ ...p, fullName: e.target.value }))}
-                            placeholder="Enter your full name" className={inputCls} required />
+                          <label className={labelCls} htmlFor="fullName">Full Name <span className="text-red-400">*</span></label>
+                          <input id="fullName" type="text" value={billingAddress.fullName}
+                            onChange={e => {
+                              const val = e.target.value;
+                              setBillingAddress(p => ({ ...p, fullName: val }));
+                              if (fieldErrors.fullName) setFieldErrors(p => ({ ...p, fullName: null }));
+                            }}
+                            placeholder="Enter your full name"
+                            className={`${inputCls} ${fieldErrors.fullName ? 'border-red-500 bg-red-50/20 focus:border-red-500 focus:ring-red-200' : ''}`} required />
+                          {fieldErrors.fullName && <p className="text-[11px] text-red-500 mt-1 font-medium">{fieldErrors.fullName}</p>}
                         </div>
                         <div>
-                          <label className={labelCls} htmlFor="mobile">Mobile Number <span className="text-red-400">*</span></label>
-                          <input id="mobile" type="tel" value={billingAddress.phone}
-                            onChange={e => setBillingAddress(p => ({ ...p, phone: e.target.value.replace(/\D/g, '').slice(0, 10) }))}
-                            placeholder="10-digit mobile" maxLength={10} className={inputCls} required />
+                          <label className={labelCls} htmlFor="phone">Mobile Number <span className="text-red-400">*</span></label>
+                          <input id="phone" type="tel" value={billingAddress.phone}
+                            onChange={e => {
+                              const val = e.target.value.replace(/[^\d+]/g, '').slice(0, 15);
+                              setBillingAddress(p => ({ ...p, phone: val }));
+                              if (fieldErrors.phone) setFieldErrors(p => ({ ...p, phone: null }));
+                            }}
+                            placeholder="10-digit mobile (or with country code)" maxLength={15}
+                            className={`${inputCls} ${fieldErrors.phone ? 'border-red-500 bg-red-50/20 focus:border-red-500 focus:ring-red-200' : ''}`} required />
+                          {fieldErrors.phone && <p className="text-[11px] text-red-500 mt-1 font-medium">{fieldErrors.phone}</p>}
                         </div>
                       </div>
 
                       {/* Email */}
                       <div className="sm:col-span-2">
-                        <label className={labelCls} htmlFor="email-addr">Email Address <span className="text-red-400">*</span></label>
-                        <input id="email-addr" type="email" value={billingAddress.email}
-                          onChange={e => setBillingAddress(p => ({ ...p, email: e.target.value }))}
-                          placeholder="your@email.com" className={inputCls} required />
+                        <label className={labelCls} htmlFor="email">Email Address <span className="text-red-400">*</span></label>
+                        <input id="email" type="email" value={billingAddress.email}
+                          onChange={e => {
+                            const val = e.target.value;
+                            setBillingAddress(p => ({ ...p, email: val }));
+                            if (fieldErrors.email) setFieldErrors(p => ({ ...p, email: null }));
+                          }}
+                          placeholder="your@email.com"
+                          className={`${inputCls} ${fieldErrors.email ? 'border-red-500 bg-red-50/20 focus:border-red-500 focus:ring-red-200' : ''}`} required />
+                        {fieldErrors.email && <p className="text-[11px] text-red-500 mt-1 font-medium">{fieldErrors.email}</p>}
                       </div>
 
                       {/* Street */}
                       <div className="sm:col-span-2">
-                        <label className={labelCls} htmlFor="flat-house">Street / House No. <span className="text-red-400">*</span></label>
-                        <input id="flat-house" type="text" value={billingAddress.flatHouse}
-                          onChange={e => setBillingAddress(p => ({ ...p, flatHouse: e.target.value }))}
-                          placeholder="House / flat no., road name" className={inputCls} required />
+                        <label className={labelCls} htmlFor="flatHouse">Street / House No. <span className="text-red-400">*</span></label>
+                        <input id="flatHouse" type="text" value={billingAddress.flatHouse}
+                          onChange={e => {
+                            const val = e.target.value;
+                            setBillingAddress(p => ({ ...p, flatHouse: val }));
+                            if (fieldErrors.flatHouse) setFieldErrors(p => ({ ...p, flatHouse: null }));
+                          }}
+                          placeholder="House / flat no., road name"
+                          className={`${inputCls} ${fieldErrors.flatHouse ? 'border-red-500 bg-red-50/20 focus:border-red-500 focus:ring-red-200' : ''}`} required />
+                        {fieldErrors.flatHouse && <p className="text-[11px] text-red-500 mt-1 font-medium">{fieldErrors.flatHouse}</p>}
                       </div>
 
                       {/* Landmark (optional) */}
@@ -876,25 +1048,43 @@ const CheckoutPage = () => {
                       <div>
                         <label className={labelCls} htmlFor="city">City <span className="text-red-400">*</span></label>
                         <input id="city" type="text" value={billingAddress.city}
-                          onChange={e => setBillingAddress(p => ({ ...p, city: e.target.value }))}
-                          placeholder="City" className={inputCls} required />
+                          onChange={e => {
+                            const val = e.target.value;
+                            setBillingAddress(p => ({ ...p, city: val }));
+                            if (fieldErrors.city) setFieldErrors(p => ({ ...p, city: null }));
+                          }}
+                          placeholder="City"
+                          className={`${inputCls} ${fieldErrors.city ? 'border-red-500 bg-red-50/20 focus:border-red-500 focus:ring-red-200' : ''}`} required />
+                        {fieldErrors.city && <p className="text-[11px] text-red-500 mt-1 font-medium">{fieldErrors.city}</p>}
                       </div>
 
                       {/* State Input */}
                       <div>
                         <label className={labelCls} htmlFor="state">State / Province / Region <span className="text-red-400">*</span></label>
                         <input id="state" type="text" value={billingAddress.state}
-                          onChange={e => setBillingAddress(p => ({ ...p, state: e.target.value }))}
-                          placeholder="State / Province / Region" className={inputCls} required />
+                          onChange={e => {
+                            const val = e.target.value;
+                            setBillingAddress(p => ({ ...p, state: val }));
+                            if (fieldErrors.state) setFieldErrors(p => ({ ...p, state: null }));
+                          }}
+                          placeholder="State / Province / Region"
+                          className={`${inputCls} ${fieldErrors.state ? 'border-red-500 bg-red-50/20 focus:border-red-500 focus:ring-red-200' : ''}`} required />
+                        {fieldErrors.state && <p className="text-[11px] text-red-500 mt-1 font-medium">{fieldErrors.state}</p>}
                       </div>
 
                       {/* Pincode / Zipcode */}
                       <div>
                         <label className={labelCls} htmlFor="pincode">Pincode / Zipcode <span className="text-red-400">*</span></label>
                         <input id="pincode" type="text" value={billingAddress.pincode}
-                          onChange={e => setBillingAddress(p => ({ ...p, pincode: e.target.value }))}
-                          placeholder="Postal / Zip code" className={inputCls} required />
-                        {(!billingAddress.pincode || billingAddress.pincode.trim().length < 3) && deliverySameAsBilling && (
+                          onChange={e => {
+                            const val = e.target.value;
+                            setBillingAddress(p => ({ ...p, pincode: val }));
+                            if (fieldErrors.pincode) setFieldErrors(p => ({ ...p, pincode: null }));
+                          }}
+                          placeholder="Postal / Zip code"
+                          className={`${inputCls} ${fieldErrors.pincode ? 'border-red-500 bg-red-50/20 focus:border-red-500 focus:ring-red-200' : ''}`} required />
+                        {fieldErrors.pincode && <p className="text-[11px] text-red-500 mt-1 font-medium">{fieldErrors.pincode}</p>}
+                        {(!billingAddress.pincode || billingAddress.pincode.trim().length < 3) && deliverySameAsBilling && !fieldErrors.pincode && (
                           <p className="text-[11px] text-neutral-400 mt-1 italic">
                             Enter pincode to calculate shipping charge
                           </p>
@@ -924,8 +1114,14 @@ const CheckoutPage = () => {
                       <div>
                         <label className={labelCls} htmlFor="country">Country <span className="text-red-400">*</span></label>
                         <input id="country" type="text" value={billingAddress.country}
-                          onChange={e => setBillingAddress(p => ({ ...p, country: e.target.value }))}
-                          placeholder="Country" className={inputCls} required />
+                          onChange={e => {
+                            const val = e.target.value;
+                            setBillingAddress(p => ({ ...p, country: val }));
+                            if (fieldErrors.country) setFieldErrors(p => ({ ...p, country: null }));
+                          }}
+                          placeholder="Country"
+                          className={`${inputCls} ${fieldErrors.country ? 'border-red-500 bg-red-50/20 focus:border-red-500 focus:ring-red-200' : ''}`} required />
+                        {fieldErrors.country && <p className="text-[11px] text-red-500 mt-1 font-medium">{fieldErrors.country}</p>}
                       </div>
                     </div>
 
@@ -980,14 +1176,16 @@ const CheckoutPage = () => {
                               <input id="d-state" type="text" value={address.state} onChange={e => setAddress(p => ({...p, state: e.target.value}))} placeholder="State / Province / Region" className={inputCls} />
                             </div>
                             <div>
-                              <label className={labelCls} htmlFor="d-pincode">Pincode / Zipcode *</label>
-                              <input id="d-pincode" type="text" value={address.pincode} onChange={e => setAddress(p => ({...p, pincode: e.target.value}))} placeholder="Postal / Zip code" className={inputCls} />
-                              {(!address.pincode || address.pincode.trim().length < 3) && !deliverySameAsBilling && (
+                              <label className={labelCls} htmlFor="d-pincode">Pincode / Zipcode (6 digits) *</label>
+                              <input id="d-pincode" type="text" value={address.pincode}
+                                onChange={e => setAddress(p => ({...p, pincode: e.target.value.replace(/\D/g, '').slice(0, 6)}))}
+                                placeholder="e.g. 600001" maxLength={6} className={inputCls} />
+                              {(!address.pincode || address.pincode.trim().length < 6) && !deliverySameAsBilling && (
                                 <p className="text-[11px] text-neutral-400 mt-1 italic">
-                                  Enter pincode to calculate shipping charge
+                                  Enter 6-digit Indian pincode to calculate shipping charge
                                 </p>
                               )}
-                              {pincodeZoneData && !deliverySameAsBilling && address.pincode.trim().length >= 3 && (
+                              {pincodeZoneData && !deliverySameAsBilling && address.pincode.trim().length === 6 && (
                                 pincodeZoneData.deliverable ? (
                                   <p className="text-[12px] text-emerald-600 mt-1 font-semibold flex items-center gap-1">
                                     📍 Delivery Available ({pincodeZoneData.zoneName}) — {
@@ -1008,12 +1206,17 @@ const CheckoutPage = () => {
                               )}
                             </div>
                             <div>
-                              <label className={labelCls} htmlFor="d-country">Country *</label>
-                              <input id="d-country" type="text" value={address.country}
-                                onChange={e => setAddress(p => ({...p, country: e.target.value}))}
-                                placeholder="Country" className={inputCls} />
+                              <label className={labelCls} htmlFor="d-country">Delivery Country *</label>
+                              <div className="relative">
+                                <input id="d-country" type="text" value="India 🇮🇳" readOnly
+                                  className={`${inputCls} bg-neutral-100 font-semibold cursor-not-allowed text-neutral-700`} />
+                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded">
+                                  Delivery Only in India
+                                </span>
+                              </div>
                             </div>
                           </div>
+
                         </motion.div>
                       )}
                     </AnimatePresence>
@@ -1083,9 +1286,11 @@ const CheckoutPage = () => {
                   )}
 
                   <button onClick={() => { if (validateStep1()) setStep(2); }}
-                    className="btn-primary w-full py-3 text-sm font-semibold" id="step1-next">
-                    Continue to Payment
+                    disabled={geoBlocked}
+                    className={`w-full py-3 text-sm font-semibold transition-all rounded ${geoBlocked ? 'bg-neutral-300 text-neutral-500 cursor-not-allowed opacity-60' : 'btn-primary'}`} id="step1-next">
+                    {geoBlocked ? 'Checkout Disabled (Restricted Region)' : 'Continue to Payment'}
                   </button>
+
                 </motion.div>
               )}
 
@@ -1098,8 +1303,12 @@ const CheckoutPage = () => {
                   className="bg-white border border-neutral-200 rounded-lg p-5 md:p-6"
                 >
                   <h2 className="font-playfair text-xl font-semibold mb-1">Payment Method</h2>
-                  <p className="text-xs text-neutral-400 mb-5">All transactions are secure and encrypted.</p>
+                  <p className="text-xs text-neutral-400 mb-3">All transactions are secure and encrypted.</p>
+
+
+
                   <div className="space-y-2.5">
+
                     {(currencyCode === 'AED'
                       ? [
                           { label: 'Credit / Debit Card', icon: '💳', badge: null },
@@ -1223,6 +1432,11 @@ const CheckoutPage = () => {
                     <button onClick={() => setStep(2)} className="btn-outline flex-1 py-3 text-sm font-semibold" id="step3-back">Back</button>
                     <button
                       onClick={() => {
+                        if (shippingStatus === 'NOT_DELIVERABLE') {
+                          toast.error('The selected delivery address / pincode is not deliverable. Please choose a deliverable address.');
+                          setStep(1);
+                          return;
+                        }
                         const inrLimit = otpSettings.inrThreshold || 20000;
                         const aedLimit = otpSettings.aedThreshold || 800;
                         const isCod = paymentMethod === 'Cash on Delivery (COD)';
@@ -1309,9 +1523,12 @@ const CheckoutPage = () => {
                   )}
                 </span>
               </div>
-              <div className="flex justify-between"><span className="text-brand-grey">GST (5% Included)</span><span>{fmt(tax)}</span></div>
-              <div className="border-t border-neutral-100 pt-3 flex justify-between font-bold text-base">
-                <span>Total</span><span className="text-brand-gold">{fmt(total)}</span>
+              <div className="border-t border-neutral-100 pt-3">
+                <div className="flex justify-between font-bold text-base">
+                  <span>Total</span>
+                  <span className="text-brand-gold">{fmt(total)}</span>
+                </div>
+                <p className="text-[11px] font-medium text-neutral-500 text-right mt-0.5">(Includes GST)</p>
               </div>
             </div>
 
@@ -1414,15 +1631,6 @@ const CheckoutPage = () => {
                   <button onClick={handleRemoveCheckoutCoupon} className="text-red-500 hover:underline font-semibold text-[11px]">Remove</button>
                 </div>
               )}
-            </div>
-
-            {/* Delivery estimate in sidebar */}
-            <div className="mt-4 pt-4 border-t border-neutral-100">
-              <div className="flex items-center gap-2 text-xs font-semibold text-brand-text mb-1">
-                <Package size={13} className="text-brand-gold" />
-                Estimated Delivery
-              </div>
-              <p className="text-xs text-brand-grey font-medium">{getEstimatedDeliveryRange(billingAddress.pincode)}</p>
             </div>
 
           </div>

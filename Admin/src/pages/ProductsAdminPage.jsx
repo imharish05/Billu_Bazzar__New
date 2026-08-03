@@ -273,6 +273,7 @@ const OptionTypeSelect = ({ value, onChange, usedOptions = [] }) => {
 const EMPTY_FORM = {
   name: '', slug: '', shortDescription: '', description: '', price: '', comparePrice: '',
   stock: '', sku: '', categoryId: '', subCategoryId: '', subSubCategoryId: '', vendorId: '', warehouseId: '',
+  gstRate: '0%',
   isFeatured: false, isNewArrival: false, isBestSeller: false, hasAuthenticityBadge: false, isActive: true,
   has360View: false, hasVideo: false, videoUrl: '', defaultProductImage: null,
 };
@@ -570,6 +571,7 @@ const ProductModal = ({ product, onClose, onSave }) => {
     subSubCategoryId: product.subSubCategoryId || '',
     vendorId: product.vendorId || '',
     warehouseId: product.warehouseId || '',
+    gstRate: product.gstRate || '0%',
     isFeatured: Boolean(product.isFeatured),
     isNewArrival: Boolean(product.isNewArrival),
     isBestSeller: Boolean(product.isBestSeller),
@@ -636,8 +638,11 @@ const ProductModal = ({ product, onClose, onSave }) => {
         price: v.price !== undefined ? String(v.price) : '',
         mrp: v.mrp !== undefined ? String(v.mrp) : '',
         stock: v.stock !== undefined ? String(v.stock) : '0',
+        lowStockThreshold: v.lowStockThreshold !== undefined ? String(v.lowStockThreshold) : '10',
+        gstRate: v.gstRate || product?.gstRate || '0%',
         attributes: v.attributes || {},
         existingImages: Array.isArray(v.images) ? v.images : (v.image ? [v.image] : []),
+        warehouseId: v.warehouseId || '',
         newFiles: [],
       }));
     }
@@ -700,6 +705,11 @@ const ProductModal = ({ product, onClose, onSave }) => {
         return {
           id: Date.now() + Math.random() + idx,
           sku: skuCode,
+          price: form.price || '',
+          mrp: form.comparePrice || '',
+          stock: form.stock || '0',
+          lowStockThreshold: '10',
+          gstRate: form.gstRate || '0%',
           attributes: combo,
           existingImages: [],
           newFiles: [],
@@ -790,30 +800,24 @@ const ProductModal = ({ product, onClose, onSave }) => {
 
   const handleSpinDragOver = (e, index) => {
     e.preventDefault();
+    e.stopPropagation();
     e.dataTransfer.dropEffect = 'move';
   };
 
   const handleSpinDrop = (e, targetIdx) => {
     e.preventDefault();
+    e.stopPropagation();
     if (draggedSpinIdx === null || draggedSpinIdx === targetIdx) return;
 
-    if (draggedSpinIdx < existingSpinImages.length && targetIdx < existingSpinImages.length) {
-      setExistingSpinImages(prev => {
-        const updated = [...prev];
-        const [moved] = updated.splice(draggedSpinIdx, 1);
-        updated.splice(targetIdx, 0, moved);
-        return updated;
-      });
-    } else if (draggedSpinIdx >= existingSpinImages.length && targetIdx >= existingSpinImages.length) {
-      const relStart = draggedSpinIdx - existingSpinImages.length;
-      const relTarget = targetIdx - existingSpinImages.length;
-      setNewSpinImageFiles(prev => {
-        const updated = [...prev];
-        const [moved] = updated.splice(relStart, 1);
-        updated.splice(relTarget, 0, moved);
-        return updated;
-      });
-    }
+    const combined = [...existingSpinImages, ...newSpinImageFiles];
+    const [moved] = combined.splice(draggedSpinIdx, 1);
+    combined.splice(targetIdx, 0, moved);
+
+    const updatedExisting = combined.filter(item => typeof item === 'string');
+    const updatedNew = combined.filter(item => typeof item !== 'string');
+
+    setExistingSpinImages(updatedExisting);
+    setNewSpinImageFiles(updatedNew);
     setDraggedSpinIdx(null);
   };
 
@@ -1194,6 +1198,7 @@ const ProductModal = ({ product, onClose, onSave }) => {
     fd.append('subSubCategoryId', finalSubSubCategoryId || '');
     fd.append('vendorId', form.vendorId || '');
     fd.append('warehouseId', form.warehouseId || '');
+    fd.append('gstRate', form.gstRate || '0%');
 
 
     fd.append('isFeatured', String(form.isFeatured));
@@ -1221,6 +1226,8 @@ const ProductModal = ({ product, onClose, onSave }) => {
         price: v.price,
         mrp: v.mrp,
         stock: v.stock,
+        lowStockThreshold: v.lowStockThreshold || '10',
+        gstRate: v.gstRate || form.gstRate || '0%',
         attributes: v.attributes,
         existingImages: v.existingImages || [],
         warehouseId: v.warehouseId || form.warehouseId || null,
@@ -1856,15 +1863,14 @@ const ProductModal = ({ product, onClose, onSave }) => {
                         <div>
                           <label className="block text-[10px] font-bold uppercase tracking-wider text-neutral-600 mb-1">GST RATE</label>
                           <select
-                            value={v.gstRate || '18%'}
+                            value={v.gstRate || '0%'}
                             onChange={e => updateVariantRow(v.id, 'gstRate', e.target.value)}
                             className="w-full border border-neutral-300 rounded-lg px-3 py-2 text-xs font-sans font-medium text-neutral-800 focus:outline-none focus:border-brand-gold bg-white"
                           >
-                            <option value="0%">0% (Exempt)</option>
+                            <option value="0%">0% (Exempt / 0%)</option>
                             <option value="5%">5% (SGST 2.5% + CGST 2.5%)</option>
-                            <option value="12%">12% (SGST 6% + CGST 6%)</option>
                             <option value="18%">18% (SGST 9% + CGST 9%)</option>
-                            <option value="28%">28% (SGST 14% + CGST 14%)</option>
+                            <option value="40%">40% (SGST 20% + CGST 20%)</option>
                           </select>
                         </div>
                       </div>
@@ -2246,7 +2252,7 @@ const ProductsAdminPage = () => {
           <table className="w-full text-sm" aria-label="Products table">
             <thead>
               <tr className="bg-brand-light/40 text-left">
-                {['Image', 'Name', 'Category', 'Price', 'Stock', 'Status', 'Actions'].map(h => (
+                {['Image', 'Name', 'Category', 'Price', 'Stock', 'Vendor', 'Warehouse', 'Status', 'Actions'].map(h => (
                   <th key={h} className="px-4 py-3 text-xs font-semibold text-brand-grey uppercase tracking-wider">{h}</th>
                 ))}
               </tr>
@@ -2255,7 +2261,8 @@ const ProductsAdminPage = () => {
               {loading ? (
                 [...Array(8)].map((_, i) => (
                   <tr key={i} className="border-b border-brand-light">
-                    {[...Array(7)].map((_, j) => <td key={j} className="px-4 py-3"><div className="skeleton h-4 w-16" /></td>)}
+                    {[...Array(9)].map((_, j) => <td key={j} className="px-4 py-3"><div className="skeleton h-4 w-16" /></td>)}
+
                   </tr>
                 ))
               ) : items.map(product => (
@@ -2282,6 +2289,27 @@ const ProductsAdminPage = () => {
                   <td className="px-4 py-3">
                     <span className={`text-xs font-medium ${product.stock <= 5 ? 'text-red-500' : 'text-green-600'}`}>{product.stock}</span>
                   </td>
+                  {/* Vendor */}
+                  <td className="px-4 py-3">
+                    {product.vendor ? (
+                      <div className="flex items-center gap-1.5">
+                        {product.vendor.logo && (
+                          <img src={product.vendor.logo} alt={product.vendor.name} className="w-5 h-5 rounded-full object-cover" />
+                        )}
+                        <span className="text-xs font-medium text-brand-text truncate max-w-[80px]">{product.vendor.name}</span>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-brand-grey">—</span>
+                    )}
+                  </td>
+                  {/* Warehouse */}
+                  <td className="px-4 py-3">
+                    {product.warehouse ? (
+                      <span className="text-xs px-2 py-0.5 rounded bg-blue-50 text-blue-700 font-medium">{product.warehouse.name}</span>
+                    ) : (
+                      <span className="text-xs text-brand-grey">—</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3">
                     <span className={`text-xs px-2 py-0.5 rounded-full ${product.isActive ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
                       {product.isActive ? 'Active' : 'Inactive'}
@@ -2289,9 +2317,6 @@ const ProductsAdminPage = () => {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1.5">
-                      <button onClick={() => setPreviewProduct(product)} className="p-1.5 text-brand-grey hover:text-brand-gold transition-colors" title="Live Preview">
-                        <Eye size={14} />
-                      </button>
                       <button onClick={() => { setEditing(product); setModalOpen(true); }} className="p-1.5 text-brand-grey hover:text-brand-gold transition-colors" title="Edit">
                         <Edit2 size={14} />
                       </button>

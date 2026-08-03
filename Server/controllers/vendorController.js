@@ -112,6 +112,18 @@ const create = async (req, res) => {
       }
     }
 
+    if (data.gstin !== undefined) {
+      if (data.gstin && String(data.gstin).trim()) {
+        const cleanGst = String(data.gstin).trim().toUpperCase();
+        if (cleanGst.length < 7 || cleanGst.length > 15 || !/^[0-9]{2}[A-Z0-9]{4,13}$/.test(cleanGst)) {
+          return res.status(400).json({ success: false, message: 'Invalid GSTIN number format. GST number must start with 2 state code digits (e.g. 22AAAAA0000A1Z5 or 22A435HG).' });
+        }
+        data.gstin = cleanGst;
+      } else {
+        data.gstin = null;
+      }
+    }
+
     const vendor = await Vendor.create(data);
     res.status(201).json({ success: true, vendor });
   } catch (err) {
@@ -143,6 +155,18 @@ const update = async (req, res) => {
         data.address = JSON.parse(data.address);
       } catch (e) {
         // preserve existing if invalid JSON
+      }
+    }
+
+    if (data.gstin !== undefined) {
+      if (data.gstin && String(data.gstin).trim()) {
+        const cleanGst = String(data.gstin).trim().toUpperCase();
+        if (cleanGst.length < 7 || cleanGst.length > 15 || !/^[0-9]{2}[A-Z0-9]{4,13}$/.test(cleanGst)) {
+          return res.status(400).json({ success: false, message: 'Invalid GSTIN number format. GST number must start with 2 state code digits (e.g. 22AAAAA0000A1Z5 or 22A435HG).' });
+        }
+        data.gstin = cleanGst;
+      } else {
+        data.gstin = null;
       }
     }
 

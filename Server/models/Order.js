@@ -38,6 +38,7 @@ const Order = sequelize.define('Order', {
   discountAmount: { type: DataTypes.DECIMAL(12, 2), defaultValue: 0 },
   shippingAmount: { type: DataTypes.DECIMAL(12, 2), defaultValue: 0 },
   taxAmount: { type: DataTypes.DECIMAL(12, 2), defaultValue: 0 },
+  taxRate: { type: DataTypes.DECIMAL(5, 2), defaultValue: 0 },
   totalAmount: { type: DataTypes.DECIMAL(12, 2), allowNull: false },
   currency: { type: DataTypes.STRING(5), defaultValue: 'INR' },
   shippingAddress: { type: DataTypes.JSON, allowNull: false },

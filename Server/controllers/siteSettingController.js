@@ -72,6 +72,10 @@ const defaultInventorySettings = {
   globalLowStockThreshold: 10,
 };
 
+const defaultTaxSettings = {
+  taxRate: 5,
+};
+
 const getSetting = async (req, res) => {
   try {
     const { key } = req.params;
@@ -89,11 +93,17 @@ const getSetting = async (req, res) => {
       if (key === 'inventory') {
         return res.json({ success: true, key, data: defaultInventorySettings });
       }
+      if (key === 'tax' || key === 'gst') {
+        return res.json({ success: true, key, data: defaultTaxSettings });
+      }
       return res.json({ success: true, key, data: {} });
     }
     const parsed = JSON.parse(setting.value);
     if (key === 'loyalty') {
       return res.json({ success: true, key, data: { ...defaultLoyaltySettings, ...parsed } });
+    }
+    if (key === 'tax' || key === 'gst') {
+      return res.json({ success: true, key, data: { ...defaultTaxSettings, ...parsed } });
     }
     return res.json({ success: true, key, data: parsed });
   } catch (err) {

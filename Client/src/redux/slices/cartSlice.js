@@ -139,6 +139,9 @@ const cartSlice = createSlice({
         if (resolvedVariant && Object.keys(resolvedVariant).length > 0) {
           state.items[existingIndex].selectedVariant = resolvedVariant;
         }
+        if (payload.gstRate) {
+          state.items[existingIndex].gstRate = payload.gstRate;
+        }
       } else {
         state.items.push({
           productId: targetProductId,
@@ -148,6 +151,7 @@ const cartSlice = createSlice({
           priceAtAdd: resolvedPrice,
           selectedVariant: resolvedVariant,
           quantity: addedQty,
+          gstRate: payload.gstRate || payload.selectedVariant?.gstRate || payload.product?.gstRate || '0%',
         });
       }
       state.subtotal = state.items.reduce((s, i) => s + (parseFloat(i.priceAtAdd) || 0) * i.quantity, 0);

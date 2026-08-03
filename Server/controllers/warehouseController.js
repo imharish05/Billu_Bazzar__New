@@ -8,32 +8,60 @@ const stockInclude = [
   { model: ProductVariant, as: 'variant', attributes: ['id', 'sku', 'price', 'stock', 'attributes'] }
 ];
 
-// Helper to sync main product/variant stock with fulfillment warehouse stock
-const syncStorefrontStock = async (productId, variantId) => {
+// Helper to sync main product/variant stock with warehouse stock across all active warehouses
+const syncStorefrontStock = async (productId, variantId = null) => {
   try {
-    const fulfillmentWh = await Warehouse.findOne({ where: { isFulfillment: true, isActive: true } });
-    if (!fulfillmentWh) return;
+    const activeWhs = await Warehouse.findAll({ where: { isActive: true }, attributes: ['id'] });
+    const activeWhIds = activeWhs.map(w => w.id);
 
-    // Get stock in primary fulfillment warehouse
-    const ws = await WarehouseStock.findOne({
-      where: { warehouseId: fulfillmentWh.id, productId, variantId: variantId || null }
-    });
-    const currentQty = ws ? ws.quantity : 0;
+    if (activeWhIds.length === 0) return;
 
     if (variantId) {
+      const totalVarStock = await WarehouseStock.sum('quantity', {
+        where: {
+          productId,
+          variantId,
+          warehouseId: { [Op.in]: activeWhIds }
+        }
+      }) || 0;
+
       const variant = await ProductVariant.findByPk(variantId);
       if (variant) {
-        await variant.update({ stock: currentQty });
-        // Sync parent product total stock
-        const allVars = await ProductVariant.findAll({ where: { productId } });
-        const totalStock = allVars.reduce((sum, v) => sum + (parseInt(v.stock, 10) || 0), 0);
-        const product = await Product.findByPk(productId);
-        if (product) await product.update({ stock: totalStock });
+        await variant.update({ stock: totalVarStock });
       }
-    } else {
+
+      const allVars = await ProductVariant.findAll({ where: { productId } });
+      const totalStock = allVars.reduce((sum, v) => sum + (parseInt(v.stock, 10) || 0), 0);
       const product = await Product.findByPk(productId);
-      if (product) {
-        await product.update({ stock: currentQty });
+      if (product) await product.update({ stock: totalStock });
+    } else {
+      const allVars = await ProductVariant.findAll({ where: { productId } });
+      if (allVars.length > 0) {
+        let totalProductStock = 0;
+        for (const v of allVars) {
+          const varQty = await WarehouseStock.sum('quantity', {
+            where: {
+              productId,
+              variantId: v.id,
+              warehouseId: { [Op.in]: activeWhIds }
+            }
+          }) || 0;
+          await v.update({ stock: varQty });
+          totalProductStock += varQty;
+        }
+        const product = await Product.findByPk(productId);
+        if (product) await product.update({ stock: totalProductStock });
+      } else {
+        const totalProdStock = await WarehouseStock.sum('quantity', {
+          where: {
+            productId,
+            variantId: null,
+            warehouseId: { [Op.in]: activeWhIds }
+          }
+        }) || 0;
+
+        const product = await Product.findByPk(productId);
+        if (product) await product.update({ stock: totalProdStock });
       }
     }
   } catch (err) {
@@ -377,4 +405,64 @@ const transferStock = async (req, res) => {
   }
 };
 
-module.exports = { getAll, getOne, create, update, remove, getStock, upsertStock, transferStock, getLowStockAlerts };
+// Helper to resolve the target warehouse ID for a product or variant item
+const resolveWarehouseIdForItem = async (productId, variantId = null, transaction = null) => {
+  try {
+    // 1. Check variant's explicit warehouseId
+    if (variantId) {
+      const variant = await ProductVariant.findByPk(variantId, { transaction });
+      if (variant && variant.warehouseId) return variant.warehouseId;
+    }
+
+    // 2. Check product's explicit warehouseId
+    if (productId) {
+      const product = await Product.findByPk(productId, { transaction });
+      if (product && product.warehouseId) return product.warehouseId;
+    }
+
+    // 3. Check if there is an existing WarehouseStock record for this item in an active warehouse
+    const activeWhs = await Warehouse.findAll({ where: { isActive: true }, attributes: ['id'], transaction });
+    const activeWhIds = activeWhs.map(w => w.id);
+
+    if (activeWhIds.length > 0) {
+      const existingStock = await WarehouseStock.findOne({
+        where: {
+          productId,
+          variantId: variantId || null,
+          warehouseId: { [Op.in]: activeWhIds }
+        },
+        order: [['quantity', 'DESC']],
+        transaction
+      });
+      if (existingStock) return existingStock.warehouseId;
+    }
+
+    // 4. Fallback to primary fulfillment warehouse
+    const fulfillmentWh = await Warehouse.findOne({ where: { isFulfillment: true, isActive: true }, transaction });
+    if (fulfillmentWh) return fulfillmentWh.id;
+
+    // 5. Fallback to any active warehouse
+    const anyActiveWh = await Warehouse.findOne({ where: { isActive: true }, transaction });
+    if (anyActiveWh) return anyActiveWh.id;
+
+    // 6. If no active warehouse exists at all, auto-create a default fulfillment warehouse
+    const defaultWh = await Warehouse.create({
+      name: 'Main Fulfillment Hub',
+      code: 'WH-MAIN',
+      address: 'Main Facility',
+      city: 'Default City',
+      state: 'Default State',
+      pincode: '600001',
+      isFulfillment: true,
+      isActive: true
+    }, { transaction });
+
+    return defaultWh.id;
+  } catch (err) {
+    console.error('[resolveWarehouseIdForItem] Error resolving warehouse:', err.message);
+    return null;
+  }
+};
+
+module.exports = { getAll, getOne, create, update, remove, getStock, upsertStock, transferStock, getLowStockAlerts, syncStorefrontStock, resolveWarehouseIdForItem };
+

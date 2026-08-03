@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo, useRef } from 'react';
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ShoppingBag, Heart, Star, ChevronRight, ChevronLeft, Share2, Shield, Truck, RotateCcw, ZoomIn, Play, Mail, CheckCircle2, X, Tag, Copy, Edit3, Trash2 } from 'lucide-react';
+import { ShoppingBag, Heart, Star, ChevronRight, ChevronLeft, Share2, Shield, Truck, RotateCcw, ZoomIn, Play, Mail, CheckCircle2, X, Tag, Copy, Edit3, Trash2, Store, Building2, FileText } from 'lucide-react';
 import { fetchProduct, fetchProducts } from '../redux/slices/productsSlice';
 import { addLocal, openCart, setBuyNowItem } from '../redux/slices/cartSlice';
 import { toggleItem } from '../redux/slices/wishlistSlice';
@@ -215,7 +215,15 @@ const ProductDetailsPage = () => {
           attrs = {};
         }
       }
-      return { ...v, attributes: attrs || {} };
+      let vImgs = v.images;
+      if (typeof vImgs === 'string') {
+        try {
+          vImgs = JSON.parse(vImgs);
+        } catch (e) {
+          vImgs = [];
+        }
+      }
+      return { ...v, attributes: attrs || {}, images: Array.isArray(vImgs) ? vImgs : [] };
     });
   }, [product]);
 
@@ -341,7 +349,7 @@ const ProductDetailsPage = () => {
     return true;
   }) : false;
 
-  const inCart = product ? cartItems.some(i => i.productId === product.id) : false;
+  const inCart = product ? cartItems.some(i => Number(i.productId || i.id) === Number(product.id)) : false;
 
   const rawImages = useMemo(() => {
     if (!product) return [];
@@ -357,15 +365,29 @@ const ProductDetailsPage = () => {
 
   const images = useMemo(() => {
     if (!product) return [];
-    if (selectedVariant && selectedVariant.image) {
-      const varImg = selectedVariant.image;
-      if (!baseImages.includes(varImg)) {
-        return [varImg, ...baseImages];
-      } else {
-        const filtered = baseImages.filter(img => img !== varImg);
-        return [varImg, ...filtered];
+
+    let variantImageList = [];
+    if (selectedVariant) {
+      let vImgs = selectedVariant.images;
+      if (typeof vImgs === 'string') {
+        try { vImgs = JSON.parse(vImgs); } catch (e) { vImgs = []; }
+      }
+      if (Array.isArray(vImgs) && vImgs.length > 0) {
+        variantImageList = vImgs.filter(img => typeof img === 'string' && img.length > 2);
+      }
+      if (selectedVariant.image && !variantImageList.includes(selectedVariant.image)) {
+        variantImageList.unshift(selectedVariant.image);
       }
     }
+
+    if (variantImageList.length > 0) {
+      const combined = [...variantImageList];
+      baseImages.forEach(img => {
+        if (!combined.includes(img)) combined.push(img);
+      });
+      return combined;
+    }
+
     return baseImages;
   }, [product, baseImages, selectedVariant]);
 
@@ -426,15 +448,37 @@ const ProductDetailsPage = () => {
 
   const handleAddToCart = () => {
     if (!product) return;
+    if (inCart) {
+      navigate('/cart');
+      return;
+    }
+
+    const targetVariantId = selectedVariant ? selectedVariant.id : null;
+    const existing = (cartItems || []).find(i => Number(i.productId || i.id) === Number(product.id) && (targetVariantId ? Number(i.variantId) === Number(targetVariantId) : true));
+    const currentInCart = existing ? Number(existing.quantity || 0) : 0;
+
+    if (currentInCart + quantity > displayStock) {
+      const allowedAdd = Math.max(0, displayStock - currentInCart);
+      if (allowedAdd === 0) {
+        toast.error(`Maximum available stock (${displayStock} items) is already in your cart.`);
+        return;
+      }
+      toast.error(`Only ${displayStock} items available in stock. Adding ${allowedAdd} instead of ${quantity}.`);
+    }
+
+    const finalQty = Math.min(quantity, Math.max(1, displayStock - currentInCart));
+
     const cartItem = {
       productId: product.id,
       name: product.name,
       image: (selectedVariant && selectedVariant.image) || images[0],
       priceAtAdd: displayPrice,
-      quantity,
+      quantity: finalQty,
       variantId: selectedVariant ? selectedVariant.id : null,
+      gstRate: (selectedVariant && selectedVariant.gstRate) || product.gstRate || '0%',
+      product: product,
       selectedVariant: selectedVariant 
-        ? selectedVariant.attributes 
+        ? { ...selectedVariant.attributes, gstRate: selectedVariant.gstRate || product.gstRate || '0%' } 
         : (selectedSize ? { size: selectedSize } : {})
     };
     dispatch(addLocal(cartItem));
@@ -443,15 +487,22 @@ const ProductDetailsPage = () => {
 
   const handleBuyNow = () => {
     if (!product) return;
+    if (displayStock <= 0) {
+      toast.error('Item is out of stock.');
+      return;
+    }
+    const finalQty = Math.min(quantity, displayStock);
     const cartItem = {
       productId: product.id,
       name: product.name,
       image: (selectedVariant && selectedVariant.image) || images[0],
       priceAtAdd: displayPrice,
-      quantity,
+      quantity: finalQty,
       variantId: selectedVariant ? selectedVariant.id : null,
+      gstRate: (selectedVariant && selectedVariant.gstRate) || product.gstRate || '0%',
+      product: product,
       selectedVariant: selectedVariant 
-        ? selectedVariant.attributes 
+        ? { ...selectedVariant.attributes, gstRate: selectedVariant.gstRate || product.gstRate || '0%' } 
         : (selectedSize ? { size: selectedSize } : {})
     };
     dispatch(setBuyNowItem(cartItem));
@@ -521,6 +572,10 @@ const ProductDetailsPage = () => {
     ? (attributes?.sizes || ['S', 'M', 'L', 'XL'])
     : [];
 
+  const vendorName = product.vendor?.name || product.vendorName || attributes?.vendorName || attributes?.sellerName || 'Billu Bazaar Official';
+  const rawVendorGst = product.vendor?.gstin || product.vendorGst || product.vendor?.gst || attributes?.vendorGst || attributes?.gstin || attributes?.gstNumber || '29ABCDE1234F1Z5';
+  const vendorGst = String(rawVendorGst).toUpperCase();
+
 
 
   const handleNotifySubmit = async (e) => {
@@ -541,9 +596,9 @@ const ProductDetailsPage = () => {
   };
 
   return (
-    <main id="main-content">
+    <main id="main-content" className="overflow-x-hidden w-full max-w-full">
       {/* Breadcrumb */}
-      <div className="max-w-site mx-auto px-6 md:px-8 py-4">
+      <div className="max-w-site mx-auto px-4 sm:px-6 md:px-8 py-4">
         <nav className="text-xs text-brand-grey flex items-center gap-1 flex-wrap" aria-label="Breadcrumb">
           <Link to="/" className="hover:text-brand-gold transition-colors">Home</Link>
           <ChevronRight size={12} />
@@ -560,18 +615,18 @@ const ProductDetailsPage = () => {
       </div>
 
       {/* Product Layout */}
-      <div className="max-w-site mx-auto px-6 md:px-8">
+      <div className="max-w-site mx-auto px-4 sm:px-6 md:px-8">
         <div className="grid md:grid-cols-2 gap-8 lg:gap-16">
           {/* Images */}
           <div className="flex flex-col flex-1">
-            <div className="flex gap-4">
+            <div className="flex flex-col-reverse md:flex-row gap-3 sm:gap-4">
               {/* Thumbnails */}
-              <div className="flex flex-col gap-3 w-20 flex-shrink-0">
+              <div className="flex md:flex-col gap-2.5 sm:gap-3 w-full md:w-20 overflow-x-auto md:overflow-x-visible flex-shrink-0 px-0.5 py-1.5 md:p-0 scrollbar-none max-w-full">
                 {images.map((img, i) => (
                   <button
                     key={i}
                     onClick={() => { setSelectedImage(i); setViewMode('standard'); }}
-                    className={`w-20 h-24 overflow-hidden border-2 transition-all ${selectedImage === i && viewMode === 'standard' ? 'border-brand-gold' : 'border-transparent hover:border-brand-grey'}`}
+                    className={`w-16 h-20 sm:w-20 sm:h-24 flex-shrink-0 overflow-hidden border-2 rounded-lg transition-all ${selectedImage === i && viewMode === 'standard' ? 'border-brand-gold ring-2 ring-brand-gold/30 scale-[1.02]' : 'border-neutral-200 hover:border-brand-grey'}`}
                     aria-label={`Product image ${i + 1}`}
                     id={`thumb-${i}`}
                   >
@@ -662,14 +717,29 @@ const ProductDetailsPage = () => {
           </div>
 
           {/* Details */}
-          <div className="flex flex-col gap-5">
-            {product.category && (
-              <p className="text-brand-gold text-xs tracking-[0.2em] uppercase">
-                {product.category?.name}
-              </p>
-            )}
+          <div className="flex flex-col gap-4 sm:gap-5 w-full max-w-full overflow-hidden px-1">
+            <div className="flex items-center justify-between gap-3 flex-wrap w-full max-w-full">
+              {product.category && (
+                <p className="text-brand-gold text-xs tracking-[0.2em] uppercase font-semibold">
+                  {product.category?.name}
+                </p>
+              )}
+              {vendorName && (
+                <div className="w-full sm:w-auto flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 text-[11px] sm:text-xs text-neutral-700 bg-neutral-100/90 p-3 rounded-xl border border-neutral-200 shadow-2xs font-medium max-w-full overflow-hidden">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <Store size={14} className="text-brand-gold flex-shrink-0" />
+                    <span className="truncate">Seller: <strong className="text-neutral-900 font-bold">{vendorName}</strong></span>
+                  </div>
+                  {vendorGst && (
+                    <div className="text-neutral-500 sm:border-l border-neutral-300 sm:pl-2 text-[10px] sm:text-xs font-mono">
+                      GST: <strong className="text-neutral-900 font-semibold uppercase">{vendorGst}</strong>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
 
-            <h1 className="font-playfair text-3xl md:text-4xl font-bold text-brand-text leading-tight">
+            <h1 className="font-playfair text-2xl sm:text-3xl md:text-4xl font-bold text-brand-text leading-tight break-words">
               {product.name}
             </h1>
 
@@ -691,7 +761,7 @@ const ProductDetailsPage = () => {
 
             {/* Price — React Bits price reveal pattern (inline motion) */}
             <motion.div
-              className="flex flex-wrap items-baseline gap-x-3.5 gap-y-1"
+              className="flex flex-wrap items-baseline gap-x-3 gap-y-1"
               key={displayPrice}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -704,7 +774,7 @@ const ProductDetailsPage = () => {
               {discount && (
                 <span className="text-brand-gold font-semibold text-xs sm:text-sm bg-brand-gold/10 px-2.5 py-0.5 rounded-sm whitespace-nowrap">Save {discount}%</span>
               )}
-              <span className="text-xs text-neutral-500 font-normal self-center whitespace-nowrap ml-1">(Incl. of all taxes)</span>
+              <span className="text-xs text-neutral-500 font-normal self-center ml-1">(Incl. of all taxes)</span>
             </motion.div>
 
             <p className="text-brand-grey text-sm leading-relaxed">{product.shortDescription}</p>
@@ -869,31 +939,44 @@ const ProductDetailsPage = () => {
             )}
 
             {/* Quantity */}
-            <div className="flex items-center gap-4">
-              <p className="font-medium text-sm">Quantity</p>
-              <div className="flex items-center border border-brand-light">
-                <button type="button" onClick={() => setQuantity(q => Math.max(1, q - 1))} className="w-10 h-10 flex items-center justify-center hover:bg-brand-light transition-colors focus-visible:outline-brand-gold" aria-label="Decrease quantity">−</button>
-                <span className="w-10 text-center font-medium">{quantity}</span>
-                <button type="button" onClick={() => setQuantity(q => Math.min(displayStock, q + 1))} className="w-10 h-10 flex items-center justify-center hover:bg-brand-light transition-colors focus-visible:outline-brand-gold" aria-label="Increase quantity">+</button>
+            <div className="flex flex-wrap items-center gap-2.5 sm:gap-4">
+              <p className="font-semibold text-xs sm:text-sm text-neutral-900 flex-shrink-0">Quantity</p>
+              <div className="flex items-center border border-neutral-300 rounded bg-white">
+                <button type="button" onClick={() => setQuantity(q => Math.max(1, q - 1))} className="w-9 h-9 flex items-center justify-center hover:bg-neutral-100 transition-colors focus-visible:outline-brand-gold font-bold text-neutral-700" aria-label="Decrease quantity">−</button>
+                <span className="w-9 text-center font-bold text-xs sm:text-sm text-neutral-900">{quantity}</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (quantity >= displayStock) {
+                      toast.error(`Maximum available stock reached (${displayStock} items).`);
+                    } else {
+                      setQuantity(q => Math.min(displayStock, q + 1));
+                    }
+                  }}
+                  disabled={quantity >= displayStock}
+                  className={`w-9 h-9 flex items-center justify-center transition-colors focus-visible:outline-brand-gold font-bold ${quantity >= displayStock ? 'bg-neutral-100 text-neutral-300 cursor-not-allowed' : 'hover:bg-neutral-100 text-neutral-700'}`}
+                  aria-label="Increase quantity"
+                  title={quantity >= displayStock ? `Max stock available: ${displayStock}` : 'Increase quantity'}
+                >+</button>
               </div>
-              <span className="text-xs text-brand-grey">{displayStock} in stock</span>
+              <span className="text-[11px] sm:text-xs font-medium text-brand-grey flex-shrink-0">{displayStock} in stock</span>
             </div>
 
             {/* CTA buttons */}
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-3 w-full max-w-full overflow-hidden">
               {displayStock > 0 ? (
-                <div className="flex flex-col sm:flex-row gap-3">
+                <div className="flex flex-col sm:flex-row gap-3 w-full">
                   <button
                     onClick={handleAddToCart}
-                    className="bg-brand-gold hover:bg-[#a8712a] text-white font-semibold text-sm tracking-wider uppercase py-4 flex-1 flex items-center justify-center gap-2 transition-all duration-200 shadow-sm"
+                    className="bg-brand-gold hover:bg-[#a8712a] text-white font-bold text-xs sm:text-sm tracking-wider uppercase py-3.5 sm:py-4 w-full sm:flex-1 flex items-center justify-center gap-2 transition-all duration-200 rounded-lg shadow-sm cursor-pointer"
                     id="pdp-add-cart"
                   >
                     <ShoppingBag size={18} />
-                    {inCart ? 'Added to Cart' : 'Add to Cart'}
+                    {inCart ? 'View Cart' : 'Add to Cart'}
                   </button>
                   <button
                     onClick={handleBuyNow}
-                    className="bg-neutral-950 hover:bg-neutral-800 text-white font-semibold text-sm tracking-wider uppercase py-4 flex-1 flex items-center justify-center gap-2 transition-all duration-200 shadow-sm"
+                    className="bg-neutral-950 hover:bg-neutral-800 text-white font-bold text-xs sm:text-sm tracking-wider uppercase py-3.5 sm:py-4 w-full sm:flex-1 flex items-center justify-center gap-2 transition-all duration-200 rounded-lg shadow-sm cursor-pointer"
                     id="pdp-buy-now"
                   >
                     Buy Now
@@ -963,19 +1046,46 @@ const ProductDetailsPage = () => {
             </div>
 
             {/* Trust signals */}
-            <div className="grid grid-cols-3 gap-4 pt-4 border-t border-brand-light">
+            <div className="grid grid-cols-3 gap-1.5 sm:gap-4 pt-4 border-t border-brand-light w-full max-w-full overflow-hidden">
               {[
                 { icon: Truck, label: 'Free Shipping', sub: 'on orders ₹1499+' },
-                { icon: RotateCcw, label: 'Easy Returns', sub: '7-day return policy' },
-                { icon: Shield, label: 'Secure Payment', sub: 'Razorpay secured' },
+                { icon: RotateCcw, label: 'Easy Returns', sub: '7-day policy' },
+                { icon: Shield, label: 'Secure Pay', sub: '100% secured' },
               ].map(({ icon: Icon, label, sub }) => (
-                <div key={label} className="flex flex-col items-center text-center gap-1">
-                  <Icon size={20} className="text-brand-gold" strokeWidth={1.5} />
-                  <p className="text-xs font-medium">{label}</p>
-                  <p className="text-[11px] text-brand-grey">{sub}</p>
+                <div key={label} className="flex flex-col items-center text-center gap-0.5 sm:gap-1 px-0.5 min-w-0">
+                  <Icon size={18} className="text-brand-gold flex-shrink-0" strokeWidth={1.5} />
+                  <p className="text-[10px] sm:text-xs font-semibold text-neutral-900 truncate w-full">{label}</p>
+                  <p className="text-[9px] sm:text-[11px] text-brand-grey truncate w-full">{sub}</p>
                 </div>
               ))}
             </div>
+
+            {/* Vendor & GST Information Card */}
+            {/* <div className="bg-neutral-50 border border-brand-light p-4 md:p-5 rounded-xl flex items-center justify-between gap-4 shadow-xs">
+              <div className="flex items-center gap-4 min-w-0">
+                <div className="w-11 h-11 rounded-full bg-brand-gold/10 text-brand-gold flex items-center justify-center font-bold text-base border border-brand-gold/20 flex-shrink-0">
+                  <Building2 size={22} />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-semibold text-brand-grey tracking-wider uppercase">Sold & Fulfilled By</span>
+                    <span className="inline-flex items-center gap-1 text-xs bg-emerald-50 text-emerald-700 font-semibold px-2.5 py-0.5 rounded-full border border-emerald-200">
+                      <CheckCircle2 size={12} /> Verified Vendor
+                    </span>
+                  </div>
+                  <p className="text-base md:text-lg font-bold text-neutral-900 truncate mt-1">
+                    {vendorName}
+                  </p>
+                </div>
+              </div>
+
+              <div className="text-right border-l border-brand-light pl-5 flex-shrink-0">
+                <span className="text-xs font-semibold text-brand-grey tracking-wider uppercase block mb-0.5">Vendor GST</span>
+                <span className="text-base md:text-lg font-bold text-neutral-900 uppercase">
+                  {vendorGst}
+                </span>
+              </div>
+            </div> */}
 
             {/* Authenticity Certificate Card */}
             {product.showAuthenticity && (
@@ -993,8 +1103,8 @@ const ProductDetailsPage = () => {
         </div>
 
         {/* Tabs — Description / Reviews */}
-        <div className="mt-16 border-t border-brand-light" id="reviews">
-          <div className="flex" role="tablist">
+        <div className="mt-12 sm:mt-16 border-t border-brand-light" id="reviews">
+          <div className="flex border-b border-neutral-200/60 overflow-x-auto scrollbar-none" role="tablist">
             {['description', 'reviews'].map(tab => (
               <button
                 key={tab}
@@ -1002,7 +1112,7 @@ const ProductDetailsPage = () => {
                 aria-selected={activeTab === tab}
                 onClick={() => setActiveTab(tab)}
                 id={`pdp-tab-${tab}`}
-                className={`px-6 py-4 text-sm font-medium capitalize border-b-2 transition-colors ${activeTab === tab ? 'border-brand-gold text-brand-gold' : 'border-transparent text-brand-grey hover:text-brand-text'}`}
+                className={`px-4 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm font-semibold capitalize border-b-2 transition-colors whitespace-nowrap ${activeTab === tab ? 'border-brand-gold text-brand-gold' : 'border-transparent text-brand-grey hover:text-brand-text'}`}
               >
                 {tab === 'reviews' ? `Reviews (${reviewsState.totalCount || 0})` : tab.charAt(0).toUpperCase() + tab.slice(1)}
               </button>
@@ -1027,7 +1137,7 @@ const ProductDetailsPage = () => {
                 {/* Summary & Rating Breakdown Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
                   {/* Review Summary Card */}
-                  <div className="bg-neutral-50 p-6 rounded-lg border border-neutral-200/60 flex flex-col justify-between">
+                  <div className="bg-neutral-50 p-4 sm:p-6 rounded-lg border border-neutral-200/60 flex flex-col justify-between overflow-hidden">
                     <div>
                       <h3 className="font-playfair text-xl font-bold text-neutral-900 mb-2">Customer Reviews</h3>
                       {reviewsState.totalCount > 0 ? (
@@ -1049,22 +1159,7 @@ const ProductDetailsPage = () => {
 
                     <div className="mt-4 pt-4 border-t border-neutral-200/60 flex items-center justify-between gap-3 flex-wrap">
                       {reviewsState.userCanReview ? (
-                        reviewsState.userReview ? (
-                          <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
-                            <button
-                              onClick={handleOpenWriteReview}
-                              className="px-4 py-2 bg-amber-400 hover:bg-amber-500 text-white text-xs font-semibold rounded-lg shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
-                            >
-                              <Edit3 size={14} /> Edit Your Review
-                            </button>
-                            <button
-                              onClick={() => handleDeleteReview(reviewsState.userReview.id)}
-                              className="px-3 py-2 bg-red-50 text-red-600 hover:bg-red-100 text-xs font-semibold rounded-lg border border-red-200 transition-colors flex items-center gap-1.5 cursor-pointer"
-                            >
-                              <Trash2 size={14} /> Delete
-                            </button>
-                          </div>
-                        ) : (
+                        !reviewsState.userReview && (
                           <button
                             onClick={handleOpenWriteReview}
                             className="px-5 py-2.5 bg-amber-400 hover:bg-amber-500 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors flex items-center gap-2 cursor-pointer"
@@ -1116,7 +1211,7 @@ const ProductDetailsPage = () => {
                         key={review.id}
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
-                        className="bg-white p-6 rounded-lg border border-neutral-200/60 shadow-sm relative w-full"
+                        className="bg-white p-4 sm:p-6 rounded-lg border border-neutral-200/60 shadow-sm relative w-full overflow-hidden"
                       >
                         <div className="flex justify-between items-start mb-2">
                           <div className="flex items-center gap-3">

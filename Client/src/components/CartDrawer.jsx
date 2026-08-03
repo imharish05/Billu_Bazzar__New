@@ -4,6 +4,7 @@ import { X, Minus, Plus, ShoppingBag, Trash2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { closeCart, removeLocal, addLocal } from '../redux/slices/cartSlice';
 import { formatPrice } from '../utils/currency';
+import { toast } from 'react-hot-toast';
 
 const FREE_SHIPPING_THRESHOLD = 1499;
 
@@ -140,32 +141,46 @@ const CartDrawer = () => {
                             </p>
 
                             {/* Quantity controls */}
-                            <div className="flex items-center gap-2 mt-2">
-                              <button
-                                onClick={() => item.quantity <= 1 
-                                  ? dispatch(removeLocal({ productId: item.productId || item.id, variantId: item.variantId, selectedVariant: item.selectedVariant })) 
-                                  : dispatch(addLocal({ ...item, quantity: -1 }))}
-                                className="w-7 h-7 border border-brand-light flex items-center justify-center hover:border-brand-gold hover:text-brand-gold transition-colors focus-visible:outline-brand-gold"
-                                aria-label="Decrease quantity"
-                              >
-                                <Minus size={12} />
-                              </button>
-                              <span className="w-8 text-center text-sm font-medium">{item.quantity}</span>
-                              <button
-                                onClick={() => dispatch(addLocal({ ...item, quantity: 1 }))}
-                                className="w-7 h-7 border border-brand-light flex items-center justify-center hover:border-brand-gold hover:text-brand-gold transition-colors focus-visible:outline-brand-gold"
-                                aria-label="Increase quantity"
-                              >
-                                <Plus size={12} />
-                              </button>
-                              <button
-                                onClick={() => dispatch(removeLocal({ productId: item.productId || item.id, variantId: item.variantId, selectedVariant: item.selectedVariant }))}
-                                className="ml-auto text-brand-grey hover:text-red-400 transition-colors p-1 focus-visible:outline-brand-gold"
-                                aria-label="Remove item"
-                              >
-                                <Trash2 size={14} />
-                              </button>
-                            </div>
+                            {(() => {
+                              const availStock = item.variant?.stock ?? item.product?.stock ?? item.availableStock ?? 9999;
+                              const isMax = item.quantity >= availStock;
+                              return (
+                                <div className="flex items-center gap-2 mt-2">
+                                  <button
+                                    onClick={() => item.quantity <= 1 
+                                      ? dispatch(removeLocal({ productId: item.productId || item.id, variantId: item.variantId, selectedVariant: item.selectedVariant })) 
+                                      : dispatch(addLocal({ ...item, quantity: -1 }))}
+                                    className="w-7 h-7 border border-brand-light flex items-center justify-center hover:border-brand-gold hover:text-brand-gold transition-colors focus-visible:outline-brand-gold"
+                                    aria-label="Decrease quantity"
+                                  >
+                                    <Minus size={12} />
+                                  </button>
+                                  <span className="w-8 text-center text-sm font-medium">{item.quantity}</span>
+                                  <button
+                                    onClick={() => {
+                                      if (isMax) {
+                                        toast.error(`Maximum available stock reached (${availStock} items).`);
+                                      } else {
+                                        dispatch(addLocal({ ...item, quantity: 1 }));
+                                      }
+                                    }}
+                                    disabled={isMax}
+                                    className={`w-7 h-7 border flex items-center justify-center transition-colors focus-visible:outline-brand-gold ${isMax ? 'border-neutral-200 text-neutral-300 cursor-not-allowed bg-neutral-50' : 'border-brand-light hover:border-brand-gold hover:text-brand-gold'}`}
+                                    aria-label="Increase quantity"
+                                    title={isMax ? `Max stock available: ${availStock}` : 'Increase quantity'}
+                                  >
+                                    <Plus size={12} />
+                                  </button>
+                                  <button
+                                    onClick={() => dispatch(removeLocal({ productId: item.productId || item.id, variantId: item.variantId, selectedVariant: item.selectedVariant }))}
+                                    className="ml-auto text-brand-grey hover:text-red-400 transition-colors p-1 focus-visible:outline-brand-gold"
+                                    aria-label="Remove item"
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                </div>
+                              );
+                            })()}
                           </div>
                         </>
                       );

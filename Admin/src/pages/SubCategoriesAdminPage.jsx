@@ -217,24 +217,24 @@ const SubCategoriesAdminPage = () => {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="border-b border-brand-light bg-brand-light/20 text-brand-grey text-xs font-semibold uppercase tracking-wider">
-                  <th className="pl-3 pr-1 py-3 w-8"></th>
-                  <th className="px-5 py-3 w-16">NO</th>
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+              modifiers={[restrictToVerticalAxis]}
+            >
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-brand-light bg-brand-light/20 text-brand-grey text-xs font-semibold uppercase tracking-wider">
+                    <th className="pl-3 pr-1 py-3 w-8"></th>
+                    <th className="px-5 py-3 w-16">NO</th>
 
-                  <th className="px-5 py-3">Category Name</th>
-                  <th className="px-5 py-3">Sub-category Name</th>
-                  <th className="px-5 py-3 w-32">Status</th>
-                  <th className="px-5 py-3 w-28 text-right">Actions</th>
-                </tr>
-              </thead>
-              <DndContext
-                sensors={sensors}
-                collisionDetection={closestCenter}
-                onDragEnd={handleDragEnd}
-                modifiers={[restrictToVerticalAxis]}
-              >
+                    <th className="px-5 py-3">Category Name</th>
+                    <th className="px-5 py-3">Sub-category Name</th>
+                    <th className="px-5 py-3 w-32">Status</th>
+                    <th className="px-5 py-3 w-28 text-right">Actions</th>
+                  </tr>
+                </thead>
                 <SortableContext
                   items={subCategories.map(s => s.id)}
                   strategy={verticalListSortingStrategy}
@@ -270,8 +270,8 @@ const SubCategoriesAdminPage = () => {
                     ))}
                   </tbody>
                 </SortableContext>
-              </DndContext>
-            </table>
+              </table>
+            </DndContext>
           </div>
         )}
         <PaginationBottom

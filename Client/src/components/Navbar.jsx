@@ -503,7 +503,7 @@ const Navbar = () => {
     );
   };
 
-  const cartCount = items.reduce((s, i) => s + i.quantity, 0);
+  const cartCount = items.length;
   const wishlistCount = wishlistItems?.length || 0;
   const isEmpty = localQuery.trim().length === 0;
 
@@ -688,14 +688,17 @@ const Navbar = () => {
                     <User size={20} strokeWidth={1.5} />
                   </Link>
                 )}
-                <button onClick={() => dispatch(toggleCart())} className="relative p-2 text-white hover:text-brand-gold transition-colors rounded-full focus-visible:outline-2 focus-visible:outline-brand-gold" aria-label={`Shopping cart — ${cartCount} items`} id="nav-cart-btn">
+                {/* Cart drawer toggle commented out - redirecting directly to /cart page */}
+                {/* <button onClick={() => dispatch(toggleCart())} className="relative p-2 text-white hover:text-brand-gold transition-colors rounded-full focus-visible:outline-2 focus-visible:outline-brand-gold" aria-label={`Shopping cart — ${cartCount} items`} id="nav-cart-btn"> */}
+                <Link to="/cart" className="relative p-2 text-white hover:text-brand-gold transition-colors rounded-full focus-visible:outline-2 focus-visible:outline-brand-gold" aria-label={`Shopping cart — ${cartCount} items`} id="nav-cart-btn">
                   <ShoppingBag size={20} strokeWidth={1.5} />
                   {cartCount > 0 && (
                     <motion.span key={cartCount} initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 500 }}
                       className="absolute -top-1 -right-1 w-5 h-5 bg-brand-gold text-white text-xs font-bold rounded-full flex items-center justify-center"
                     >{cartCount}</motion.span>
                   )}
-                </button>
+                </Link>
+                {/* </button> */}
                 </div>
             </div>
 
@@ -878,12 +881,15 @@ const Navbar = () => {
                     <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-brand-gold text-white text-[9px] font-bold rounded-full flex items-center justify-center">{wishlistCount}</span>
                   )}
                 </Link>
-                <button onClick={() => dispatch(toggleCart())} className="relative p-2 text-white hover:text-brand-gold transition-colors" aria-label={`Shopping cart — ${cartCount} items`}>
+                {/* Cart drawer toggle commented out - redirecting directly to /cart page */}
+                {/* <button onClick={() => dispatch(toggleCart())} className="relative p-2 text-white hover:text-brand-gold transition-colors" aria-label={`Shopping cart — ${cartCount} items`}> */}
+                <Link to="/cart" className="relative p-2 text-white hover:text-brand-gold transition-colors" aria-label={`Shopping cart — ${cartCount} items`}>
                   <ShoppingBag size={18} strokeWidth={1.5} />
                   {cartCount > 0 && (
                     <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-brand-gold text-white text-[10px] font-bold rounded-full flex items-center justify-center">{cartCount}</span>
                   )}
-                </button>
+                </Link>
+                {/* </button> */}
                 <button onClick={() => dispatch(toggleMobileMenu())} className="p-2 text-white hover:text-brand-gold transition-colors" aria-label="Toggle mobile menu" aria-expanded={mobileMenuOpen} id="nav-mobile-menu-btn">
                   {mobileMenuOpen ? <X size={20} strokeWidth={1.5} /> : <Menu size={20} strokeWidth={1.5} />}
                 </button>

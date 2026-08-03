@@ -223,24 +223,24 @@ const CategoriesAdminPage = () => {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="border-b border-brand-light bg-brand-light/20 text-brand-grey text-xs font-semibold uppercase tracking-wider">
-                  <th className="pl-3 pr-1 py-3 w-8"></th>
-                  <th className="px-5 py-3 w-16">NO</th>
-                  <th className="px-5 py-3 w-24">Image</th>
-                  <th className="px-5 py-3">Category Name</th>
-                  <th className="px-5 py-3 w-32">Status</th>
-                  <th className="px-5 py-3 w-32">Header</th>
-                  <th className="px-5 py-3 w-28 text-right">Actions</th>
-                </tr>
-              </thead>
-              <DndContext
-                sensors={sensors}
-                collisionDetection={closestCenter}
-                onDragEnd={handleDragEnd}
-                modifiers={[restrictToVerticalAxis]}
-              >
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+              modifiers={[restrictToVerticalAxis]}
+            >
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-brand-light bg-brand-light/20 text-brand-grey text-xs font-semibold uppercase tracking-wider">
+                    <th className="pl-3 pr-1 py-3 w-8"></th>
+                    <th className="px-5 py-3 w-16">NO</th>
+                    <th className="px-5 py-3 w-24">Image</th>
+                    <th className="px-5 py-3">Category Name</th>
+                    <th className="px-5 py-3 w-32">Status</th>
+                    <th className="px-5 py-3 w-32">Header</th>
+                    <th className="px-5 py-3 w-28 text-right">Actions</th>
+                  </tr>
+                </thead>
                 <SortableContext
                   items={categories.map(c => c.id)}
                   strategy={verticalListSortingStrategy}
@@ -290,8 +290,8 @@ const CategoriesAdminPage = () => {
                     ))}
                   </tbody>
                 </SortableContext>
-              </DndContext>
-            </table>
+              </table>
+            </DndContext>
           </div>
         )}
         <PaginationBottom
@@ -362,11 +362,11 @@ const CategoriesAdminPage = () => {
 
                 <div className="flex items-center gap-6 pt-1">
                   <div className="flex items-center gap-2">
-                    <Switch checked={form.isActive} onChange={e => setForm(p => ({ ...p, isActive: e.target.checked }))} id="cat-active" />
+                    <Switch checked={form.isActive} onChange={e => setForm(p => ({ ...p, isActive: typeof e === 'boolean' ? e : Boolean(e?.target?.checked) }))} id="cat-active" />
                     <label className="text-xs font-semibold text-brand-text cursor-pointer select-none" htmlFor="cat-active">Active (Visible in store)</label>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Switch checked={form.showHeader} onChange={e => setForm(p => ({ ...p, showHeader: e.target.checked }))} id="cat-header" />
+                    <Switch checked={form.showHeader} onChange={e => setForm(p => ({ ...p, showHeader: typeof e === 'boolean' ? e : Boolean(e?.target?.checked) }))} id="cat-header" />
                     <label className="text-xs font-semibold text-brand-text cursor-pointer select-none" htmlFor="cat-header">Show in header</label>
                   </div>
                 </div>

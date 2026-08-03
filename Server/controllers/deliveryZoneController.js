@@ -106,9 +106,12 @@ exports.checkPincodeDelivery = async (req, res) => {
         success: true,
         deliverable: false,
         pincode: rawPincode,
-        message: 'Delivery is currently not available for this pincode',
+        message: `Delivery is currently not available for pincode ${rawPincode}. Please enter a serviceable pincode.`,
       });
     }
+
+    const deliveryCharge = parseFloat(zone.deliveryCharge || 0);
+    const minOrderAmountForFreeDelivery = zone.minOrderAmountForFreeDelivery !== null ? parseFloat(zone.minOrderAmountForFreeDelivery) : null;
 
     res.json({
       success: true,
@@ -117,8 +120,8 @@ exports.checkPincodeDelivery = async (req, res) => {
       zoneName: zone.zoneName,
       city: zone.city,
       state: zone.state,
-      deliveryCharge: parseFloat(zone.deliveryCharge || 0),
-      minOrderAmountForFreeDelivery: zone.minOrderAmountForFreeDelivery !== null ? parseFloat(zone.minOrderAmountForFreeDelivery) : null,
+      deliveryCharge: deliveryCharge,
+      minOrderAmountForFreeDelivery: minOrderAmountForFreeDelivery,
     });
   } catch (error) {
     console.error('Error in checkPincodeDelivery:', error);

@@ -119,6 +119,14 @@ const start = async () => {
       console.log('⚠️ Manual alter note (Orders columns already exist):', alterErr.message);
     }
 
+    // Clean up past unverified payment attempts that were mistakenly set to PAID
+    try {
+      await sequelize.query("UPDATE Orders SET status = 'PENDING_PAYMENT', paymentStatus = 'UNPAID' WHERE status = 'PAID' AND razorpay_payment_id IS NULL AND paymentMethod != 'COD' AND (paymentMethod LIKE '%Razorpay%' OR paymentGatewayRef IS NOT NULL)");
+      console.log('✅ Cleaned up unverified payment attempt orders');
+    } catch (cleanErr) {
+      console.log('⚠️ Order cleanup note:', cleanErr.message);
+    }
+
     // Run manual database alters for CartItems and OrderItems to support variantId snapshot
     try {
       await sequelize.query("ALTER TABLE CartItems ADD COLUMN variantId INT NULL");
@@ -170,96 +178,45 @@ const start = async () => {
       console.log('⚠️ Manual alter note (already altered or table not synced yet):', alterErr.message);
     }
 
-    // Manual alter to add showAuthenticity and warehouseId to Products
-    try {
-      await sequelize.query("ALTER TABLE Products ADD COLUMN showAuthenticity BOOLEAN NOT NULL DEFAULT FALSE");
-      await sequelize.query("ALTER TABLE Products ADD COLUMN warehouseId INT NULL");
-      console.log('✅ Products table showAuthenticity and warehouseId columns added');
-    } catch (alterErr) {
-      console.log('⚠️ Manual alter note (Products columns already exist):', alterErr.message);
-    }
+    // Helper to safely execute individual column alters
+    const safeAddColumn = async (query) => {
+      try {
+        await sequelize.query(query);
+      } catch (alterErr) {
+        // Ignore column duplicate errors safely
+      }
+    };
 
-    // Manual alter to add warehouseId, lowStockThreshold, and gstRate to ProductVariants
-    try {
-      await sequelize.query("ALTER TABLE ProductVariants ADD COLUMN warehouseId INT NULL");
-      await sequelize.query("ALTER TABLE ProductVariants ADD COLUMN lowStockThreshold INT NULL DEFAULT 10");
-      await sequelize.query("ALTER TABLE ProductVariants ADD COLUMN gstRate VARCHAR(20) NULL DEFAULT '18%'");
-      console.log('✅ ProductVariants table warehouseId, lowStockThreshold, and gstRate columns added');
-    } catch (alterErr) {
-      console.log('⚠️ Manual alter note (ProductVariants columns already exist):', alterErr.message);
-    }
-
-    // Manual alter to add lowStockThreshold and gstRate to Products
-    try {
-      await sequelize.query("ALTER TABLE Products ADD COLUMN lowStockThreshold INT NULL DEFAULT 10");
-      await sequelize.query("ALTER TABLE Products ADD COLUMN gstRate VARCHAR(20) NULL DEFAULT '18%'");
-      console.log('✅ Products table lowStockThreshold and gstRate columns added');
-    } catch (alterErr) {
-      console.log('⚠️ Manual alter note (Products lowStockThreshold/gstRate columns already exist):', alterErr.message);
-    }
-
-    // Run manual database alters for Warehouses to support isFulfillment and isProcurement
-    try {
-      await sequelize.query("ALTER TABLE Warehouses ADD COLUMN isFulfillment BOOLEAN NOT NULL DEFAULT FALSE");
-      await sequelize.query("ALTER TABLE Warehouses ADD COLUMN isProcurement BOOLEAN NOT NULL DEFAULT FALSE");
-      console.log('✅ Warehouses table isFulfillment and isProcurement columns added');
-    } catch (alterErr) {
-      console.log('⚠️ Manual alter note (Warehouses isFulfillment/isProcurement already exists):', alterErr.message);
-    }
-
-    // Run manual database alters for WarehouseStocks to support variantId
-    try {
-      await sequelize.query("ALTER TABLE WarehouseStocks ADD COLUMN variantId INT NULL");
-      console.log('✅ WarehouseStocks table variantId column added');
-    } catch (alterErr) {
-      console.log('⚠️ Manual alter note (WarehouseStocks variantId already exists):', alterErr.message);
-    }
-
-    // Run manual database alters for ProductVariants to support mrp, image, and images
-    try {
-      await sequelize.query("ALTER TABLE ProductVariants ADD COLUMN mrp DECIMAL(10, 2) NULL");
-      await sequelize.query("ALTER TABLE ProductVariants ADD COLUMN image VARCHAR(255) NULL");
-      await sequelize.query("ALTER TABLE ProductVariants ADD COLUMN images JSON NULL");
-      console.log('✅ ProductVariants table columns added');
-    } catch (alterErr) {
-      console.log('⚠️ Manual alter note (ProductVariants columns already exist):', alterErr.message);
-    }
-
-    // Run manual database alters for InventoryMovementLogs to support warehouseId and toWarehouseId
-    try {
-      await sequelize.query("ALTER TABLE InventoryMovementLogs ADD COLUMN warehouseId INT NULL");
-      await sequelize.query("ALTER TABLE InventoryMovementLogs ADD COLUMN toWarehouseId INT NULL");
-      console.log('✅ InventoryMovementLogs table warehouse columns added');
-    } catch (alterErr) {
-      console.log('⚠️ Manual alter note (InventoryMovementLogs warehouse columns already exist):', alterErr.message);
-    }
-
-    // Add Customer password reset columns
-    try {
-      await sequelize.query('ALTER TABLE Customers ADD COLUMN passwordResetToken VARCHAR(128) NULL DEFAULT NULL');
-      await sequelize.query('ALTER TABLE Customers ADD COLUMN passwordResetExpiry DATETIME NULL DEFAULT NULL');
-      console.log('✅ Customers table password reset columns added');
-    } catch (alterErr) {
-      console.log('⚠️ Manual alter note (Customer reset columns already exist):', alterErr.message);
-    }
+    await safeAddColumn("ALTER TABLE Products ADD COLUMN showAuthenticity BOOLEAN NOT NULL DEFAULT FALSE");
+    await safeAddColumn("ALTER TABLE Products ADD COLUMN warehouseId INT NULL");
+    await safeAddColumn("ALTER TABLE ProductVariants ADD COLUMN warehouseId INT NULL");
+    await safeAddColumn("ALTER TABLE ProductVariants ADD COLUMN lowStockThreshold INT NULL DEFAULT 10");
+    await safeAddColumn("ALTER TABLE ProductVariants ADD COLUMN gstRate VARCHAR(20) NULL DEFAULT '18%'");
+    await safeAddColumn("ALTER TABLE Products ADD COLUMN lowStockThreshold INT NULL DEFAULT 10");
+    await safeAddColumn("ALTER TABLE Products ADD COLUMN gstRate VARCHAR(20) NULL DEFAULT '18%'");
+    await safeAddColumn("ALTER TABLE Warehouses ADD COLUMN isFulfillment BOOLEAN NOT NULL DEFAULT FALSE");
+    await safeAddColumn("ALTER TABLE Warehouses ADD COLUMN isProcurement BOOLEAN NOT NULL DEFAULT FALSE");
+    await safeAddColumn("ALTER TABLE WarehouseStocks ADD COLUMN variantId INT NULL");
+    await safeAddColumn("ALTER TABLE ProductVariants ADD COLUMN mrp DECIMAL(10, 2) NULL");
+    await safeAddColumn("ALTER TABLE ProductVariants ADD COLUMN image VARCHAR(255) NULL");
+    await safeAddColumn("ALTER TABLE ProductVariants ADD COLUMN images JSON NULL");
+    await safeAddColumn("ALTER TABLE InventoryMovementLogs ADD COLUMN warehouseId INT NULL");
+    await safeAddColumn("ALTER TABLE InventoryMovementLogs ADD COLUMN toWarehouseId INT NULL");
+    await safeAddColumn('ALTER TABLE Customers ADD COLUMN passwordResetToken VARCHAR(128) NULL DEFAULT NULL');
+    await safeAddColumn('ALTER TABLE Customers ADD COLUMN passwordResetExpiry DATETIME NULL DEFAULT NULL');
+    await safeAddColumn("ALTER TABLE Orders ADD COLUMN taxRate DECIMAL(5, 2) NULL DEFAULT 0");
 
     // Ensure Banners table columns exist and migrate legacy type
     try {
       await sequelize.query("ALTER TABLE Banners MODIFY COLUMN type VARCHAR(50) NOT NULL DEFAULT 'PROMO'");
       await sequelize.query("UPDATE Banners SET type = 'EXCLUSIVE_DEAL' WHERE type = 'DEAL'");
-      console.log('✅ Banners table type column updated');
     } catch (migErr) {
-      console.log('⚠️ Migration note (or already migrated):', migErr.message);
+      // Ignore migration note
     }
 
-    try {
-      await sequelize.query("ALTER TABLE Banners ADD COLUMN badgeText VARCHAR(50) NULL");
-      await sequelize.query("ALTER TABLE Banners ADD COLUMN countdown DATETIME NULL");
-      await sequelize.query("ALTER TABLE Banners ADD COLUMN position INT DEFAULT 0");
-      console.log('✅ Banners extra columns added');
-    } catch (migErr) {
-      console.log('⚠️ Banners extra columns alter note:', migErr.message);
-    }
+    await safeAddColumn("ALTER TABLE Banners ADD COLUMN badgeText VARCHAR(50) NULL");
+    await safeAddColumn("ALTER TABLE Banners ADD COLUMN countdown DATETIME NULL");
+    await safeAddColumn("ALTER TABLE Banners ADD COLUMN position INT DEFAULT 0");
 
     // 2.5 Run search keywords sync if empty
     const { syncAllExisting } = require('./services/searchSyncService');
@@ -303,10 +260,10 @@ const start = async () => {
     const { syncAllProductRatings } = require('./controllers/reviewController');
     await syncAllProductRatings();
 
-    // 3.5 Load background cron jobs
-    require('./jobs/reminderJob');
-    require('./jobs/searchJob');
-    // require('./jobs/orderExpiryJob'); // Disabled to prevent minutely database queries and optimize performance under high traffic.
+    // 3.5 Load background cron jobs (DISABLED per user preference — no cron jobs active)
+    // require('./jobs/reminderJob');
+    // require('./jobs/searchJob');
+    // require('./jobs/orderExpiryJob');
 
     // 4. Start server
     app.listen(PORT, () => {

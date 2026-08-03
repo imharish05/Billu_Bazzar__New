@@ -13,10 +13,34 @@ export default defineConfig(({ mode }) => {
         '/api': {
           target: backendUrl,
           changeOrigin: true,
+          configure: (proxy, _options) => {
+            proxy.on('error', (err, req, res) => {
+              if (err.code === 'ECONNREFUSED') {
+                if (!res.headersSent) {
+                  res.writeHead(503, { 'Content-Type': 'application/json' });
+                  res.end(JSON.stringify({ error: 'Backend server is not running or starting up' }));
+                }
+                return;
+              }
+              console.error('Vite Proxy Error:', err);
+            });
+          },
         },
         '/uploads': {
           target: backendUrl,
           changeOrigin: true,
+          configure: (proxy, _options) => {
+            proxy.on('error', (err, req, res) => {
+              if (err.code === 'ECONNREFUSED') {
+                if (!res.headersSent) {
+                  res.writeHead(503, { 'Content-Type': 'text/plain' });
+                  res.end('Backend server offline');
+                }
+                return;
+              }
+              console.error('Vite Proxy Error:', err);
+            });
+          },
         },
       },
     },

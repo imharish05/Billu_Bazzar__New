@@ -474,7 +474,15 @@ const BannersAdminPage = () => {
               <div>
                 <div className="relative h-44 bg-brand-light/50">
                   {banner.image ? (
-                    <img src={banner.image} alt={banner.title || 'Banner'} className="w-full h-full object-cover" />
+                    <img
+                      src={banner.image}
+                      alt={banner.title || 'Banner'}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        e.target.onerror = null;
+                        e.target.src = 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=1200&q=80';
+                      }}
+                    />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-brand-grey text-xs">No image</div>
                   )}
@@ -566,10 +574,11 @@ const BannersAdminPage = () => {
                         : 'border-brand-light hover:border-brand-gold'
                     }`}
                     onClick={() => fileInputRef.current?.click()}
-                    onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-                    onDragLeave={() => setIsDragging(false)}
+                    onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragging(true); }}
+                    onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragging(false); }}
                     onDrop={(e) => {
                       e.preventDefault();
+                      e.stopPropagation();
                       setIsDragging(false);
                       const file = e.dataTransfer.files?.[0];
                       if (file && file.type.startsWith('image/')) {

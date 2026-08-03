@@ -98,6 +98,8 @@ const QuickViewModal = () => {
   const { code: currencyCode, rate: currencyRate } = useSelector(s => s.currency);
   const { customer } = useSelector(s => s.auth);
   const wishlist = useSelector(s => s.wishlist?.items || []);
+  const cartItems = useSelector(s => s.cart?.items || []);
+  const inCart = product ? cartItems.some(i => Number(i.productId || i.id) === Number(product.id)) : false;
 
   const [activeImgIndex, setActiveImgIndex] = useState(0);
   const [quantity, setQuantity] = useState(1);
@@ -290,13 +292,37 @@ const QuickViewModal = () => {
   };
 
   const handleAddToCart = () => {
+    if (!product) return;
+    if (inCart) {
+      dispatch(closeQuickView());
+      navigate('/cart');
+      return;
+    }
+
+    const targetVariantId = selectedVariant ? selectedVariant.id : null;
+    const existing = (cartItems || []).find(i => Number(i.productId || i.id) === Number(product.id) && (targetVariantId ? Number(i.variantId) === Number(targetVariantId) : true));
+    const currentInCart = existing ? Number(existing.quantity || 0) : 0;
+
+    if (currentInCart + quantity > stockLimit) {
+      const allowedAdd = Math.max(0, stockLimit - currentInCart);
+      if (allowedAdd === 0) {
+        toast.error(`Maximum available stock (${stockLimit} items) is already in your cart.`);
+        return;
+      }
+      toast.error(`Only ${stockLimit} items available in stock. Adding ${allowedAdd} instead of ${quantity}.`);
+    }
+
+    const finalQty = Math.min(quantity, Math.max(1, stockLimit - currentInCart));
+
     const cartItem = {
       productId: product.id,
       name: product.name,
       image: galleryImages[activeImgIndex] || (selectedVariant && selectedVariant.image) || '',
       priceAtAdd: displayPrice,
-      quantity,
+      quantity: finalQty,
       variantId: selectedVariant ? selectedVariant.id : null,
+      gstRate: (selectedVariant && selectedVariant.gstRate) || product?.gstRate || '0%',
+      product: product,
       selectedVariant: currentSelectedAttrs
     };
     dispatch(addLocal(cartItem));
@@ -312,6 +338,8 @@ const QuickViewModal = () => {
       priceAtAdd: displayPrice,
       quantity,
       variantId: selectedVariant ? selectedVariant.id : null,
+      gstRate: (selectedVariant && selectedVariant.gstRate) || product?.gstRate || '0%',
+      product: product,
       selectedVariant: currentSelectedAttrs
     };
     dispatch(setBuyNowItem(cartItem));
@@ -663,10 +691,17 @@ const QuickViewModal = () => {
                           {quantity}
                         </span>
                         <button
-                          onClick={() => setQuantity(q => Math.min(stockLimit, q + 1))}
+                          onClick={() => {
+                            if (quantity >= stockLimit) {
+                              toast.error(`Maximum available stock reached (${stockLimit} items).`);
+                            } else {
+                              setQuantity(q => Math.min(stockLimit, q + 1));
+                            }
+                          }}
                           disabled={quantity >= stockLimit}
                           className="w-7 h-7 rounded-lg bg-white border border-neutral-300 flex items-center justify-center text-neutral-800 hover:bg-neutral-100 disabled:opacity-40 transition-colors cursor-pointer"
                           aria-label="Increase quantity"
+                          title={quantity >= stockLimit ? `Max stock available: ${stockLimit}` : 'Increase quantity'}
                         >
                           <Plus size={13} />
                         </button>
@@ -696,7 +731,7 @@ const QuickViewModal = () => {
                         id={`quickview-add-cart-${product.id}`}
                       >
                         <ShoppingBag size={15} className="shrink-0" />
-                        <span className="truncate">Add to Cart</span>
+                        <span className="truncate">{inCart ? 'View Cart' : 'Add to Cart'}</span>
                       </button>
                       <button
                         onClick={handleBuyNow}

@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { motion } from 'framer-motion';
 import { Heart, ShoppingBag, Eye, Star } from 'lucide-react';
@@ -9,10 +9,14 @@ import { addLocal, openCart } from '../../redux/slices/cartSlice';
 
 const WishlistPage = () => {
   const dispatch = useDispatch();
+  const navigate = useNavigate();
   const { code: currencyCode, rate: currencyRate } = useSelector(s => s.currency);
   
   // Real Redux Wishlist items (containing fully detailed product objects)
   const items = useSelector(s => s.wishlist.items) || [];
+  const cartItems = useSelector(s => s.cart?.items || []);
+
+  const isItemInCart = (item) => cartItems.some(i => Number(i.productId || i.id) === Number(item.productId || item.id));
 
   const fmt = (v) => formatPrice(v, currencyCode, currencyRate);
 
@@ -28,6 +32,10 @@ const WishlistPage = () => {
   };
 
   const addToCart = (item) => {
+    if (isItemInCart(item)) {
+      navigate('/cart');
+      return;
+    }
     if (!item.inStock) {
       toast.error('Item is currently out of stock');
       return;
@@ -137,11 +145,11 @@ const WishlistPage = () => {
                     </Link>
                     <button
                       onClick={() => addToCart(item)}
-                      disabled={!item.inStock}
+                      disabled={!item.inStock && !isItemInCart(item)}
                       className="flex-1 flex items-center justify-center gap-1.5 py-3 text-white text-[10px] font-medium hover:bg-white/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                       id={`add-cart-${item.id}`}
                     >
-                      <ShoppingBag size={12} /> Add to Cart
+                      <ShoppingBag size={12} /> {isItemInCart(item) ? 'View Cart' : 'Add to Cart'}
                     </button>
                   </div>
                 </div>

@@ -13,11 +13,21 @@ const getAll = async (req, res) => {
       offset: (parseInt(page) - 1) * parseInt(limit),
       order: [['createdAt', 'DESC']],
       attributes: { exclude: ['password'] },
-      include: [{ model: Order, as: 'orders', attributes: ['id'] }]
+      include: [{ model: Order, as: 'orders', attributes: ['id', 'totalAmount', 'status', 'paymentStatus'] }]
+    });
+    const processedRows = rows.map(c => {
+      const plain = c.get({ plain: true });
+      const validOrders = (plain.orders || []).filter(o => o.paymentStatus === 'PAID');
+      const totalSpent = validOrders.reduce((sum, o) => sum + (parseFloat(o.totalAmount) || 0), 0);
+      return {
+        ...plain,
+        ordersCount: (plain.orders || []).length,
+        totalSpent: Math.round(totalSpent * 10) / 10
+      };
     });
     const p = Math.max(1, parseInt(page, 10));
     const l = Math.max(1, parseInt(limit, 10));
-    res.json({ success: true, customers: rows, total: count, page: p, limit: l, totalPages: Math.ceil(count / l) });
+    res.json({ success: true, customers: processedRows, total: count, page: p, limit: l, totalPages: Math.ceil(count / l) });
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 };
 
