@@ -61,6 +61,7 @@ app.use('/api/stock-alerts',  require('./routes/stockAlertRoutes'));
 app.use('/api/delivery-zones', require('./routes/deliveryZoneRoutes'));
 app.use('/api/contact-enquiries', require('./routes/contactEnquiryRoutes'));
 app.use('/api/currency',          require('./routes/currencyRoutes'));
+app.use('/api/roles',             require('./routes/roleRoutes'));
 
 // ── Warm up exchange rate cache on startup (non-blocking) ────────────────────
 require('./services/currencyRateService').warmUp().catch(() => {});
