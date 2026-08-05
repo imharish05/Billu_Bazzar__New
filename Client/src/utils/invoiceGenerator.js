@@ -1,4 +1,5 @@
 import { formatPrice } from './currency';
+import { formatVariantName } from './variantFormatter';
 
 /**
  * generateInvoiceHTML — Generates a clean, professional, print-optimized Tax Invoice HTML document.
@@ -33,6 +34,11 @@ export const generateInvoiceHTML = (order) => {
   const shippingAmount = Number(order.shippingAmount) || 0;
   const taxAmount = Number(order.taxAmount) !== undefined && order.taxAmount !== null ? Number(order.taxAmount) : Math.round((Math.max(0, subtotal - discountAmount) * 5) / 105);
   const totalAmount = Number(order.totalAmount) || (subtotal - discountAmount + shippingAmount);
+  const diffFee = Math.round(totalAmount - (subtotal - discountAmount + shippingAmount));
+  const giftWrapFee = Number(order.giftWrapFee || order.giftWrapPrice || 0) || (diffFee > 0 ? diffFee : 0);
+
+  const isPaid = order.paymentStatus === 'PAID' || order.status === 'PAID' || order.status === 'CONFIRMED' || order.paymentMethod === 'COD' || String(order.paymentStatus).toUpperCase() === 'SUCCESS';
+  const displayStatus = isPaid ? 'PAID' : (order.paymentStatus || 'UNPAID');
 
   const supportEmail = import.meta.env.VITE_SUPPORT_EMAIL || 'support@billubazaar.com';
   const supportPhone = import.meta.env.VITE_SUPPORT_PHONE || '+91 98765 43210';
@@ -240,8 +246,8 @@ export const generateInvoiceHTML = (order) => {
           <p><strong>Order Ref:</strong> #${orderNum}</p>
           <p><strong>Date:</strong> ${invoiceDate}</p>
           <p style="margin-top: 4px;">
-            <span class="badge ${order.paymentStatus === 'PAID' ? 'badge-paid' : 'badge-pending'}">
-              ${order.paymentStatus || 'PAID'}
+            <span class="badge ${isPaid ? 'badge-paid' : 'badge-pending'}">
+              ${displayStatus}
             </span>
           </p>
         </div>
@@ -284,7 +290,7 @@ export const generateInvoiceHTML = (order) => {
           const unitPrice = Number(item.unitPrice || item.price || 0);
           const qty = Number(item.quantity || item.qty || 1);
           const totalItemPrice = unitPrice * qty;
-          const variantStr = item.selectedVariant ? `${item.selectedVariant.size ? 'Size: ' + item.selectedVariant.size : ''} ${item.selectedVariant.color ? 'Color: ' + item.selectedVariant.color : ''}` : '';
+          const variantStr = formatVariantName(item.selectedVariant || item.variant);
 
           return `
             <tr>
@@ -294,7 +300,7 @@ export const generateInvoiceHTML = (order) => {
                   ${item.productImage || item.image ? `<img src="${item.productImage || item.image}" alt="${item.productName || item.name}" class="product-img" />` : ''}
                   <div>
                     <strong style="color: #111827;">${item.productName || item.name || 'Product'}</strong>
-                    ${variantStr ? `<br/><span style="font-size: 11px; color: #6b7280;">${variantStr}</span>` : ''}
+                    ${variantStr ? `<br/><span style="font-size: 11px; color: #c5a059; font-weight: 600;">${variantStr}</span>` : ''}
                   </div>
                 </div>
               </td>
@@ -317,6 +323,12 @@ export const generateInvoiceHTML = (order) => {
           <div class="summary-row" style="color: #16a34a;">
             <span>Discount & Rewards</span>
             <span>-${fmt(discountAmount)}</span>
+          </div>
+        ` : ''}
+        ${giftWrapFee > 0 ? `
+          <div class="summary-row">
+            <span>Gift Wrapping</span>
+            <span>${fmt(giftWrapFee)}</span>
           </div>
         ` : ''}
         <div class="summary-row">

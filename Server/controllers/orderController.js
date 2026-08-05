@@ -29,19 +29,20 @@ const getAll = async (req, res) => {
 
     if (status) {
       if (status === 'PENDING' || status === 'New Orders') {
-        where[Op.and] = [
-          { [Op.or]: [{ paymentStatus: 'PAID' }, { paymentMethod: 'COD' }] },
-          { status: { [Op.in]: ['PENDING', 'CONFIRMED', 'PROCESSING', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED'] } }
+        where[Op.or] = [
+          { status: 'PENDING' },
+          { status: 'PAID' },
+          { status: 'CONFIRMED' },
+          { status: 'PROCESSING' }
         ];
       } else {
         where.status = status;
-        where[Op.or] = [{ paymentStatus: 'PAID' }, { paymentMethod: 'COD' }];
       }
     } else {
-      // STRICT: ONLY list orders where payment is SUCCESS (PAID) or payment method is COD
       where[Op.or] = [
         { paymentStatus: 'PAID' },
-        { paymentMethod: 'COD' }
+        { paymentMethod: 'COD' },
+        { status: { [Op.in]: ['PAID', 'CONFIRMED', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'OUT_FOR_DELIVERY'] } }
       ];
     }
 
@@ -190,7 +191,7 @@ const placeOrder = async (req, res) => {
     // 1. Force session lock wait timeout to protect against locking bottlenecks
     await sequelize.query('SET SESSION innodb_lock_wait_timeout = 5', { transaction });
 
-    const { shippingAddress, billingAddress, paymentMethod, couponCode, referralCode, redeemPoints, requestedCurrency: reqCurrency, currencyRate: reqRate } = req.body;
+    const { shippingAddress, billingAddress, paymentMethod, couponCode, referralCode, redeemPoints, isGiftWrap, giftWrapPrice: reqGiftWrapPrice, requestedCurrency: reqCurrency, currencyRate: reqRate } = req.body;
 
     // 2. Fetch server-side cart based on customer or guest sessionId (NEVER trust req.body.items)
     let cartWhere = {};
@@ -448,8 +449,12 @@ const placeOrder = async (req, res) => {
       weightedTaxSum += itemGstRate * itemLineTotal;
     }
 
+    const giftWrapCharge = isGiftWrap ? Math.round(Number(reqGiftWrapPrice || 99)) : 0;
     let taxRate = subtotal > 0 ? Math.round((weightedTaxSum / subtotal) * 10) / 10 : 0;
-    let totalAmount = taxableSubtotal + shippingAmount;
+    let totalAmount = taxableSubtotal + shippingAmount + giftWrapCharge;
+    if (!reqCurrency || reqCurrency.toUpperCase() === 'INR') {
+      totalAmount = Math.round(totalAmount);
+    }
 
     // Guard: Enforce currency uniformity and resolve correct currency code
     // Priority: 1) requestedCurrency from client (set by geo-detection), 2) shippingAddress country, 3) customer preference
@@ -520,6 +525,8 @@ const placeOrder = async (req, res) => {
       currency: orderCurrency,
       shippingAddress,
       billingAddress: billingAddress || shippingAddress,
+      notes: req.body.giftMessage || req.body.notes || null,
+      giftWrapFee: isGiftWrap ? giftWrapCharge : 0,
       inventoryProcessed: isCod
     }, { transaction });
 
@@ -600,7 +607,7 @@ const { syncStorefrontStock, resolveWarehouseIdForItem } = require('./warehouseC
       }, { transaction });
     }
 
-    await order.update({ inventoryProcessed: true }, { transaction });
+    await order.update({ inventoryProcessed: isCod }, { transaction });
 
     // 10. Process Loyalty Ledger and Points Balance
     if (req.customer && req.customer.id) {
@@ -620,7 +627,8 @@ const { syncStorefrontStock, resolveWarehouseIdForItem } = require('./warehouseC
           user.loyaltyPoints -= pointsRedeemed; // update local instance for next calculation
         }
         
-        if (earnedPoints > 0) {
+        // Earn points immediately ONLY for COD orders. Online orders earn points upon payment confirmation.
+        if (earnedPoints > 0 && isCod) {
           await LoyaltyLedger.create({
             customerId: user.id,
             orderId: order.id,
@@ -700,6 +708,7 @@ const updateStatus = async (req, res) => {
       previousProcessed === true;
 
     if (isRestockRequired) {
+      const { resolveWarehouseIdForItem, syncStorefrontStock } = require('./warehouseController');
       // Sort items to restock ascending to prevent deadlocks
       const sortedItems = [...order.items].sort((a, b) => {
         if (a.productId !== b.productId) return a.productId - b.productId;
@@ -766,6 +775,7 @@ const updateStatus = async (req, res) => {
 
     // Post-commit storefront stock sync
     if (isRestockRequired) {
+      const { syncStorefrontStock } = require('./warehouseController');
       for (const item of order.items) {
         syncStorefrontStock(item.productId, item.variantId || null).catch(console.error);
       }

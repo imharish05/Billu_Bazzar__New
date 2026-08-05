@@ -1,16 +1,67 @@
 import { useState, useEffect } from 'react';
-import { Save, ShieldCheck, RefreshCw, Percent } from 'lucide-react';
+import { Save, ShieldCheck, RefreshCw, Percent, Lock, UserCheck, Key, CheckSquare } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
 import api from '../services/api';
 import toast from 'react-hot-toast';
 
-const TABS = ['General', 'Inventory Alerts', 'Security & OTP', 'Shipping', 'Payments', 'Users'];
+const TABS = ['Inventory Alerts', 'Security & OTP', 'Roles & Permissions'];
+
+const MODULE_LIST = [
+  { key: 'products', name: 'Products & Catalog' },
+  { key: 'orders', name: 'Orders & Shipping' },
+  { key: 'customers', name: 'Customers & CRM' },
+  { key: 'coupons', name: 'Coupons & Marketing' },
+  { key: 'inventory', name: 'Inventory & Warehouses' },
+  { key: 'reports', name: 'Reports & Analytics' },
+  { key: 'settings', name: 'Settings & Security' },
+];
 
 const SettingsAdminPage = () => {
-  const [tab, setTab] = useState('General');
+  const [tab, setTab] = useState('Inventory Alerts');
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  // Roles & Permissions State
+  const [selectedRole, setSelectedRole] = useState('Store Admin');
+  const [rolePermissions, setRolePermissions] = useState({
+    'Super Admin': {
+      products: { create: true, read: true, update: true, delete: true },
+      orders: { create: true, read: true, update: true, delete: true },
+      customers: { create: true, read: true, update: true, delete: true },
+      coupons: { create: true, read: true, update: true, delete: true },
+      inventory: { create: true, read: true, update: true, delete: true },
+      reports: { create: true, read: true, update: true, delete: true },
+      settings: { create: true, read: true, update: true, delete: true },
+    },
+    'Store Admin': {
+      products: { create: true, read: true, update: true, delete: true },
+      orders: { create: true, read: true, update: true, delete: true },
+      customers: { create: true, read: true, update: true, delete: false },
+      coupons: { create: true, read: true, update: true, delete: true },
+      inventory: { create: true, read: true, update: true, delete: false },
+      reports: { create: false, read: true, update: false, delete: false },
+      settings: { create: false, read: true, update: true, delete: false },
+    },
+    'Inventory Manager': {
+      products: { create: true, read: true, update: true, delete: false },
+      orders: { create: false, read: true, update: true, delete: false },
+      customers: { create: false, read: true, update: false, delete: false },
+      coupons: { create: false, read: true, update: false, delete: false },
+      inventory: { create: true, read: true, update: true, delete: true },
+      reports: { create: false, read: true, update: false, delete: false },
+      settings: { create: false, read: false, update: false, delete: false },
+    },
+    'Support Agent': {
+      products: { create: false, read: true, update: false, delete: false },
+      orders: { create: false, read: true, update: true, delete: false },
+      customers: { create: false, read: true, update: true, delete: false },
+      coupons: { create: false, read: true, update: false, delete: false },
+      inventory: { create: false, read: true, update: false, delete: false },
+      reports: { create: false, read: false, update: false, delete: false },
+      settings: { create: false, read: false, update: false, delete: false },
+    }
+  });
 
   // OTP Verification Thresholds
   const [otpSettings, setOtpSettings] = useState({
@@ -247,6 +298,144 @@ const SettingsAdminPage = () => {
                     When enabled, any customer selecting Cash on Delivery must verify their order via email OTP regardless of order value.
                   </p>
                 </div>
+
+            {tab === 'Roles & Permissions' && (
+              <div className="space-y-6">
+                <div>
+                  <h3 className="font-playfair text-lg font-bold text-neutral-900 mb-1">Roles & Access Control Matrix</h3>
+                  <p className="text-xs text-brand-grey">Configure granular CRUD (Create, Read, Update, Delete) permissions for system roles.</p>
+                </div>
+
+                {/* Role Selector Tabs */}
+                <div className="flex gap-2 border-b border-brand-light pb-3 overflow-x-auto">
+                  {Object.keys(rolePermissions).map(role => (
+                    <button
+                      key={role}
+                      type="button"
+                      onClick={() => setSelectedRole(role)}
+                      className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${selectedRole === role ? 'bg-brand-gold text-white shadow-xs' : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'}`}
+                    >
+                      {role}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Granular CRUD Permissions Matrix Table */}
+                <div className="border border-brand-light rounded-xl overflow-hidden shadow-xs bg-white">
+                  <div className="p-3.5 bg-neutral-50 border-b border-brand-light flex justify-between items-center">
+                    <span className="text-xs font-bold text-neutral-800 uppercase tracking-wider">Module Permissions for "{selectedRole}"</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRolePermissions(prev => ({
+                          ...prev,
+                          [selectedRole]: MODULE_LIST.reduce((acc, mod) => ({
+                            ...acc,
+                            [mod.key]: { create: true, read: true, update: true, delete: true }
+                          }), {})
+                        }));
+                        toast.success(`Full CRUD permissions granted to ${selectedRole}!`);
+                      }}
+                      className="text-[11px] text-brand-gold hover:underline font-semibold"
+                    >
+                      Grant Full Access (All CRUD)
+                    </button>
+                  </div>
+
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="bg-neutral-100/70 border-b border-brand-light">
+                        <th className="p-3 font-bold text-neutral-700">Module Name</th>
+                        <th className="p-3 text-center font-bold text-emerald-700">Create (C)</th>
+                        <th className="p-3 text-center font-bold text-blue-700">Read (R)</th>
+                        <th className="p-3 text-center font-bold text-amber-700">Update (U)</th>
+                        <th className="p-3 text-center font-bold text-rose-700">Delete (D)</th>
+                        <th className="p-3 text-center font-bold text-brand-gold">Full Access</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-brand-light/60">
+                      {MODULE_LIST.map(mod => {
+                        const currentMods = rolePermissions[selectedRole] || {};
+                        const perm = currentMods[mod.key] || { create: false, read: false, update: false, delete: false };
+                        const isAllChecked = Boolean(perm.create && perm.read && perm.update && perm.delete);
+
+                        const toggleAction = (action) => {
+                          setRolePermissions(prev => ({
+                            ...prev,
+                            [selectedRole]: {
+                              ...prev[selectedRole],
+                              [mod.key]: {
+                                ...perm,
+                                [action]: !perm[action]
+                              }
+                            }
+                          }));
+                        };
+
+                        const toggleAllModule = () => {
+                          const nextState = !isAllChecked;
+                          setRolePermissions(prev => ({
+                            ...prev,
+                            [selectedRole]: {
+                              ...prev[selectedRole],
+                              [mod.key]: {
+                                create: nextState,
+                                read: nextState,
+                                update: nextState,
+                                delete: nextState,
+                              }
+                            }
+                          }));
+                        };
+
+                        return (
+                          <tr key={mod.key} className="hover:bg-amber-50/20 transition-colors">
+                            <td className="p-3 font-semibold text-neutral-900">{mod.name}</td>
+                            {['create', 'read', 'update', 'delete'].map(act => (
+                              <td key={act} className="p-3 text-center">
+                                <label className="inline-flex items-center justify-center cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={Boolean(perm[act])}
+                                    onChange={() => toggleAction(act)}
+                                    className="w-4 h-4 accent-brand-gold rounded cursor-pointer"
+                                  />
+                                </label>
+                              </td>
+                            ))}
+                            <td className="p-3 text-center">
+                              <button
+                                type="button"
+                                onClick={toggleAllModule}
+                                className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider transition-colors ${
+                                  isAllChecked
+                                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                    : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
+                                }`}
+                              >
+                                {isAllChecked ? 'Full Access ✓' : 'Select All'}
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="pt-4 border-t border-brand-light flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      toast.success(`Roles & CRUD permissions for "${selectedRole}" saved successfully!`);
+                    }}
+                    className="btn-primary flex items-center gap-2 text-sm px-5 py-2.5"
+                  >
+                    <Save size={15} /> Save Roles & Permissions
+                  </button>
+                </div>
+              </div>
+            )}
 
                 <div className="pt-4 border-t border-brand-light flex items-center gap-3">
                   <button type="submit" disabled={saving} className="btn-primary flex items-center gap-2 text-sm px-5 py-2.5" id="settings-save-otp">

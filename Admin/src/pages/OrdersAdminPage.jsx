@@ -7,6 +7,7 @@ import AdminOrderDetailsModal from '../components/AdminOrderDetailsModal';
 import { PaginationTop, PaginationBottom } from '../components/Pagination';
 import { fetchAdminOrders, updateOrderStatus } from '../redux/slices/ordersSlice';
 import currencyJs from 'currency.js';
+import { toast } from 'react-hot-toast';
 
 const fmt = (v) => currencyJs(v, { symbol: '₹', precision: 0 }).format();
 
@@ -68,12 +69,19 @@ const OrdersAdminPage = () => {
     }
   };
 
-  const handleStatusUpdate = (id, status) => dispatch(updateOrderStatus({ id, status }));
+  const handleStatusUpdate = async (id, status) => {
+    try {
+      const updatedOrder = await dispatch(updateOrderStatus({ id, status })).unwrap();
+      toast.success(`Order status updated to ${status}`);
+    } catch (err) {
+      toast.error(err || 'Failed to update order status');
+    }
+  };
 
   const filtered = activeStatus === 'All' 
     ? orders 
     : (activeStatus === 'PENDING' 
-        ? orders.filter(o => o.status === 'PENDING' || o.status === 'PAID') 
+        ? orders.filter(o => o.status === 'PENDING' || o.status === 'PAID' || o.status === 'CONFIRMED' || o.status === 'PROCESSING') 
         : orders.filter(o => o.status === activeStatus));
 
   return (

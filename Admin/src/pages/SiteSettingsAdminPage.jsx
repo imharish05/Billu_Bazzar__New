@@ -407,9 +407,15 @@ const SiteSettingsAdminPage = () => {
                           {imagePreview ? (
                             <>
                               <img
-                                src={imagePreview.startsWith('data:') ? imagePreview : `${import.meta.env.VITE_SERVER_URL || 'http://localhost:5000'}${imagePreview}`}
+                                src={imagePreview.startsWith('data:') || imagePreview.startsWith('http://') || imagePreview.startsWith('https://')
+                                  ? imagePreview
+                                  : `${import.meta.env.VITE_SERVER_URL || 'http://localhost:5000'}${imagePreview.startsWith('/') ? '' : '/'}${imagePreview}`}
                                 alt="Story Banner Preview"
                                 className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  e.target.onerror = null;
+                                  e.target.src = 'https://images.unsplash.com/photo-1469334031218-e382a71b716b?w=800';
+                                }}
                               />
                               {imageFile && (
                                 <span className="absolute top-2 right-2 bg-brand-gold text-white text-[10px] font-semibold px-2 py-0.5 rounded-full shadow">
@@ -418,7 +424,11 @@ const SiteSettingsAdminPage = () => {
                               )}
                             </>
                           ) : (
-                            <span className="text-xs text-brand-grey">No image uploaded</span>
+                            <img
+                              src="https://images.unsplash.com/photo-1469334031218-e382a71b716b?w=800"
+                              alt="Story Banner Fallback"
+                              className="w-full h-full object-cover opacity-80"
+                            />
                           )}
                         </div>
                       </div>

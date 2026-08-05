@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { X, MapPin, CreditCard, Truck, FileText, Package, Check, Circle, Phone, Mail } from 'lucide-react';
+import { X, MapPin, CreditCard, Truck, FileText, Package, Check, Circle, Phone, Mail, Gift } from 'lucide-react';
 import currencyJs from 'currency.js';
 import toast from 'react-hot-toast';
 
@@ -23,15 +23,32 @@ const STATUS_COLORS = {
 
 const parseJsonObj = (val) => {
   if (!val) return null;
-  if (typeof val === 'string') {
-    try {
-      const parsed = JSON.parse(val);
-      if (typeof parsed === 'object' && parsed !== null) return parsed;
-    } catch {
-      return { plainText: val };
+  let parsed = val;
+  for (let i = 0; i < 5; i++) {
+    if (typeof parsed === 'string') {
+      const trimmed = parsed.trim();
+      if (
+        (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+        (trimmed.startsWith('[') && trimmed.endsWith(']')) ||
+        (trimmed.startsWith('"') && trimmed.endsWith('"'))
+      ) {
+        try {
+          const next = JSON.parse(parsed);
+          if (next === parsed) break;
+          parsed = next;
+        } catch {
+          break;
+        }
+      } else {
+        break;
+      }
+    } else {
+      break;
     }
   }
-  if (typeof val === 'object') return val;
+  if (Array.isArray(parsed) && parsed.length > 0) parsed = parsed[0];
+  if (typeof parsed === 'object' && parsed !== null) return parsed;
+  if (typeof parsed === 'string' && parsed !== '{}' && parsed !== '[]') return { variant: parsed };
   return null;
 };
 
@@ -229,19 +246,29 @@ const AdminOrderDetailsModal = ({ order, onClose, onStatusUpdate }) => {
             </div>
           </div>
 
-          {/* Shipment & Tracking Details */}
-          {(order.trackingNumber || order.shiprocketOrderId || ['SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED'].includes(order.status)) && (
-            <div className="bg-neutral-50 p-4 rounded-lg border border-neutral-200 flex items-start gap-3 text-xs">
-              <Truck size={18} className="text-brand-gold mt-0.5 flex-shrink-0" />
-              <div>
-                <h4 className="font-semibold text-neutral-900 mb-1">Shipment Information</h4>
-                <p className="text-neutral-600">Courier Partner: <span className="font-medium text-neutral-900">Shiprocket Logistics</span></p>
-                {order.trackingNumber && <p className="text-neutral-600 mt-0.5">AWB Tracking No: <span className="font-mono font-medium text-brand-gold">{order.trackingNumber}</span></p>}
-                {order.trackingUrl && (
-                  <a href={order.trackingUrl} target="_blank" rel="noopener noreferrer" className="mt-2 inline-block text-brand-gold underline font-semibold">
-                    Track Package Live &rarr;
-                  </a>
+          {/* Gift Services & Personalized Message (Only if selected or message exists) */}
+          {(order.giftMessage || order.notes || order.isGiftWrap || Number(order.giftWrapFee || order.giftWrapPrice || 0) > 0) && (
+            <div className="bg-amber-50/50 p-4 rounded-lg border border-amber-200/80 flex items-start gap-3 text-xs">
+              <Gift size={20} className="text-brand-gold mt-0.5 flex-shrink-0" />
+              <div className="flex-1">
+                <h4 className="font-bold text-neutral-900 text-xs mb-1.5 uppercase tracking-wide flex items-center gap-2">
+                  Gift Services & Personalized Message <span className="text-[10px] bg-amber-100 text-amber-800 font-semibold px-2 py-0.5 rounded-full capitalize">Complimentary</span>
+                </h4>
+                
+                {/* Gift Message / Note */}
+                {(order.giftMessage || order.notes) && (
+                  <div className="bg-white p-3 rounded border border-amber-100 text-neutral-800 mb-2 italic font-serif text-sm">
+                    "{order.giftMessage || order.notes}"
+                  </div>
                 )}
+
+                {/* Gift Wrap Status */}
+                <p className="text-neutral-600 font-medium flex items-center gap-1.5">
+                  <span>🎁 Gift Packaging:</span> 
+                  <span className="font-semibold text-neutral-900">
+                    {Number(order.giftWrapFee || order.giftWrapPrice || 0) > 0 || order.isGiftWrap ? 'Luxury Gift Wrap (Included)' : 'Complimentary Gift Service'}
+                  </span>
+                </p>
               </div>
             </div>
           )}
@@ -258,6 +285,21 @@ const AdminOrderDetailsModal = ({ order, onClose, onStatusUpdate }) => {
                 <span>-{fmt(order.discountAmount, currency)}</span>
               </div>
             )}
+            {(() => {
+              const sub = Number(order.subtotal || 0);
+              const disc = Number(order.discountAmount || 0);
+              const ship = Number(order.shippingAmount || 0);
+              const tot = Number(order.totalAmount || 0);
+              const diff = Math.round(tot - (sub - disc + ship));
+              const gw = Number(order.giftWrapFee || order.giftWrapPrice || 0) || (diff > 0 ? diff : 0);
+              if (gw <= 0) return null;
+              return (
+                <div className="flex justify-between font-medium text-neutral-800">
+                  <span>Gift Wrapping</span>
+                  <span>{fmt(gw, currency)}</span>
+                </div>
+              );
+            })()}
             <div className="flex justify-between">
               <span>Shipping Fee</span>
               <span>{Number(order.shippingAmount) === 0 ? 'FREE' : fmt(order.shippingAmount, currency)}</span>

@@ -9,6 +9,8 @@ import { formatPrice } from '../utils/currency';
 import api from '../services/api';
 import { toast } from 'react-hot-toast';
 
+import { formatVariantName } from '../utils/variantFormatter';
+
 const FREE_SHIP = 1499;
 
 const CartPage = () => {
@@ -91,22 +93,7 @@ const CartPage = () => {
                   img = `http://localhost:5000${img}`;
                 }
 
-                let variantText = null;
-                const rawVar = item.selectedVariant || item.variant?.attributes || item.variant;
-                if (rawVar) {
-                  let parsed = rawVar;
-                  if (typeof rawVar === 'string') {
-                    try { parsed = JSON.parse(rawVar); } catch {
-                      if (rawVar !== '{}' && rawVar !== 'null') variantText = rawVar;
-                    }
-                  }
-                  if (parsed && typeof parsed === 'object') {
-                    const entries = Object.entries(parsed).filter(([k, v]) => v !== undefined && v !== null && v !== '' && k !== 'id');
-                    if (entries.length > 0) {
-                      variantText = entries.map(([k, v]) => `${k}: ${v}`).join(' · ');
-                    }
-                  }
-                }
+                const variantText = formatVariantName(item.selectedVariant || item.variant?.attributes || item.variant);
 
                 return (
                   <motion.div

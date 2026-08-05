@@ -183,9 +183,20 @@ const cartSlice = createSlice({
       .addCase(fetchCart.pending, (state) => { state.loading = true; })
       .addCase(fetchCart.fulfilled, (state, action) => {
         state.loading = false;
-        state.items = action.payload?.items || [];
-        state.subtotal = action.payload?.subtotal || 0;
-        persistCart(state.items);
+        const serverItems = action.payload?.items || [];
+        if (serverItems.length > 0) {
+          state.items = serverItems;
+          state.subtotal = action.payload?.subtotal || 0;
+          persistCart(state.items);
+        } else if (state.items.length > 0) {
+          // Keep persisted local/guest cart items on page refresh if server session returns empty
+          state.subtotal = state.items.reduce((s, i) => s + (parseFloat(i.priceAtAdd || i.price) || 0) * i.quantity, 0);
+          persistCart(state.items);
+        } else {
+          state.items = [];
+          state.subtotal = 0;
+          persistCart([]);
+        }
       })
       .addCase(syncCart.fulfilled, (state, action) => {
         state.items = action.payload?.items || [];

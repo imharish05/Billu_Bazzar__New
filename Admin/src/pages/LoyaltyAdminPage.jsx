@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import AdminLayout from '../components/AdminLayout';
 import api from '../services/api';
 import toast from 'react-hot-toast';
+import { PaginationTop, PaginationBottom } from '../components/Pagination';
 
 const TYPE_COLORS = {
   EARN: 'bg-green-50 text-green-700',
@@ -88,6 +89,8 @@ const LoyaltyAdminPage = () => {
   };
 
   const [searchQuery, setSearchQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
 
   const filteredLedger = ledger.filter(entry => {
     if (!searchQuery) return true;
@@ -98,6 +101,10 @@ const LoyaltyAdminPage = () => {
     const desc = (entry.description || '').toLowerCase();
     return custId.includes(q) || custName.includes(q) || custEmail.includes(q) || desc.includes(q);
   });
+
+  const totalItems = filteredLedger.length;
+  const totalPages = Math.ceil(totalItems / rowsPerPage) || 1;
+  const paginatedLedger = filteredLedger.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
 
   return (
     <AdminLayout title="Loyalty Program">
@@ -116,18 +123,15 @@ const LoyaltyAdminPage = () => {
       </div>
 
       <div className="bg-white rounded-xl shadow-sm overflow-hidden mb-8">
-        <div className="px-5 py-3 border-b border-brand-light flex items-center justify-between">
-          <p className="text-sm font-medium">Loyalty Ledger</p>
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Filter by Customer ID or name..."
-            className="text-sm border border-brand-light px-3 py-1.5 focus:outline-none focus:border-brand-gold w-64 rounded"
-            id="loyalty-search"
-            aria-label="Filter by customer ID or name"
-          />
-        </div>
+        <PaginationTop
+          search={searchQuery}
+          onSearchChange={(q) => { setSearchQuery(q); setCurrentPage(1); }}
+          searchPlaceholder="Filter by Customer ID or name..."
+          currentPage={currentPage}
+          totalItems={totalItems}
+          limit={rowsPerPage}
+          onLimitChange={(l) => { setRowsPerPage(l); setCurrentPage(1); }}
+        />
         <div className="overflow-x-auto">
           <table className="w-full text-sm" aria-label="Loyalty ledger">
             <thead>
@@ -140,12 +144,12 @@ const LoyaltyAdminPage = () => {
             <tbody>
               {loading ? (
                 <tr><td colSpan="7" className="text-center py-4 text-brand-grey">Loading...</td></tr>
-              ) : filteredLedger.length === 0 ? (
+              ) : paginatedLedger.length === 0 ? (
                 <tr><td colSpan="7" className="text-center py-4 text-brand-grey">No transactions found.</td></tr>
-              ) : filteredLedger.map(entry => (
+              ) : paginatedLedger.map(entry => (
                 <tr key={entry.id} className="border-b border-brand-light hover:bg-brand-light/20 transition-colors">
                   <td className="px-4 py-3">
-                    <span className="font-mono text-xs bg-amber-100/80px-2 py-0.5 rounded font-bold">
+                    <span className="font-mono text-xs bg-amber-100/80 px-2 py-0.5 rounded font-bold">
                       {entry.customerId || entry.customer?.id || '—'}
                     </span>
                   </td>
@@ -171,6 +175,12 @@ const LoyaltyAdminPage = () => {
             </tbody>
           </table>
         </div>
+        <PaginationBottom
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalItems={totalItems}
+          onPageChange={(p) => setCurrentPage(p)}
+        />
       </div>
 
       {showSettings && (

@@ -12,13 +12,13 @@ import { toast } from 'react-hot-toast';
 // Helper for formatting INR currency
 const fmtINR = (v) => {
   if (typeof v !== 'number' || isNaN(v)) return '₹0';
-  return `₹${v.toLocaleString('en-IN')}`;
+  return `₹${Math.round(v).toLocaleString('en-IN')}`;
 };
 
 // Helper for formatting AED currency
 const fmtAED = (v) => {
   if (typeof v !== 'number' || isNaN(v)) return 'AED 0';
-  return `AED ${v.toLocaleString('en-IN')}`;
+  return `AED ${Math.round(v).toLocaleString('en-IN')}`;
 };
 
 const ReportsAdminPage = () => {

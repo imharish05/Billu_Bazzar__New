@@ -288,9 +288,9 @@ const HomePage = () => {
     return () => clearInterval(interval);
   }, [categoriesList.length, autoplayResetTrigger, isCatVisible, isScrolling]);
 
-  const countdownBanner = banners.find(b => b.type === 'COUNTDOWN');
+  const countdownBanner = banners.find(b => b.type === 'COUNTDOWN' && b.isActive);
   const countdown = useCountdown(countdownBanner?.countdown);
-  const isExpired = countdownBanner?.countdown ? (new Date(countdownBanner.countdown) - new Date() <= 0) : false;
+  const isExpired = !countdownBanner || (countdown.d === 0 && countdown.h === 0 && countdown.m === 0 && countdown.s === 0) || (countdownBanner?.countdown ? (new Date(countdownBanner.countdown) - new Date() <= 0) : true);
   const promoBanner = banners.find(b => b.type === 'PROMO' && b.isActive);
 
   useEffect(() => {

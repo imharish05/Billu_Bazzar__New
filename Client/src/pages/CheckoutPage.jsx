@@ -11,12 +11,12 @@ import api from '../services/api';
 import Footer from '../components/Footer';
 import { formatPrice } from '../utils/currency';
 import toast from 'react-hot-toast';
+import { formatVariantName } from '../utils/variantFormatter';
 import { validatePhoneNumber } from '../utils/validation';
 
 const STEPS = [
   { id: 1, label: 'Delivery', icon: MapPin },
-  { id: 2, label: 'Payment', icon: CreditCard },
-  { id: 3, label: 'Review', icon: Package },
+  { id: 2, label: 'Review', icon: Package },
 ];
 
 const INDIAN_STATES = [
@@ -148,22 +148,7 @@ const CheckoutPage = () => {
     }
 
     // Variant details
-    let variantText = null;
-    const rawVar = item.selectedVariant || item.variant;
-    if (rawVar) {
-      let parsedVar = rawVar;
-      if (typeof rawVar === 'string') {
-        try { parsedVar = JSON.parse(rawVar); } catch { parsedVar = null; }
-      }
-      if (parsedVar && typeof parsedVar === 'object') {
-        const entries = Object.entries(parsedVar).filter(([k, v]) => v !== undefined && v !== null && v !== '' && k !== 'id');
-        if (entries.length > 0) {
-          variantText = entries.map(([k, v]) => `${k}: ${v}`).join(' · ');
-        }
-      } else if (typeof rawVar === 'string' && rawVar !== '{}') {
-        variantText = rawVar;
-      }
-    }
+    const variantText = formatVariantName(item.selectedVariant || item.variant);
 
     const price = parseFloat(item.priceAtAdd || item.price || item.unitPrice || item.product?.price || 0);
 
@@ -245,9 +230,9 @@ const CheckoutPage = () => {
   };
 
   const [billingAddress, setBillingAddress] = useState({ ...emptyAddr });
-  const [deliverySameAsBilling, setDeliverySameAsBilling] = useState(false); // Default to false for clear separate billing vs delivery
+  const [deliverySameAsBilling, setDeliverySameAsBilling] = useState(false); // Default to false
   const [address, setAddress] = useState({ ...emptyAddr, country: 'India' });
-  const [paymentMethod, setPaymentMethod] = useState('Credit / Debit Card');
+  const [paymentMethod, setPaymentMethod] = useState('Razorpay Secure Online');
   const [geoBlocked, setGeoBlocked] = useState(false);
   const [geoMessage, setGeoMessage] = useState('');
 
@@ -284,9 +269,13 @@ const CheckoutPage = () => {
         toast.error('Delivery is strictly available within India only. Please fill in a valid Indian delivery address for your recipient.');
         return;
       }
+      setDeliverySameAsBilling(true);
+      setAddress({ ...billingAddress, country: 'India' });
+      toast.success('Delivery address set to same as billing address.');
+    } else {
+      setDeliverySameAsBilling(false);
+      setAddress({ ...emptyAddr, country: 'India' });
     }
-    setDeliverySameAsBilling(checked);
-    if (!checked) setAddress({ ...billingAddress, country: 'India' });
   };
 
   // Delivery Zone Pincode Lookup for Dynamic Shipping Charge
@@ -345,18 +334,34 @@ const CheckoutPage = () => {
     const fetchCoupons = async () => {
       try {
         const res = await api.get('/coupons');
-        if (res.data?.success) {
-          const active = (res.data.coupons || []).filter(c => c.isActive);
-          setAvailableCoupons(active);
+        let active = [];
+        if (res.data?.success && Array.isArray(res.data.coupons)) {
+          active = res.data.coupons.filter(c => c.isActive !== false && String(c.isActive) !== '0' && String(c.isActive) !== 'false');
         }
+        if (active.length === 0) {
+          active = [
+            { id: 'c1', code: 'WELCOME10', type: 'PERCENT', value: 10, minOrderValue: 499, maxDiscount: 500, isActive: true },
+            { id: 'c2', code: 'FESTIVE20', type: 'PERCENT', value: 20, minOrderValue: 999, maxDiscount: 1000, isActive: true },
+            { id: 'c3', code: 'BILLU100', type: 'FLAT', value: 100, minOrderValue: 799, maxDiscount: 100, isActive: true },
+            { id: 'c4', code: 'LUXURY500', type: 'FLAT', value: 500, minOrderValue: 2999, maxDiscount: 500, isActive: true },
+          ];
+        }
+        setAvailableCoupons(active);
       } catch (err) {
-        console.error('Failed to load coupons:', err);
+        console.warn('Failed to load coupons from API, using default list:', err.message);
+        setAvailableCoupons([
+          { id: 'c1', code: 'WELCOME10', type: 'PERCENT', value: 10, minOrderValue: 499, maxDiscount: 500, isActive: true },
+          { id: 'c2', code: 'FESTIVE20', type: 'PERCENT', value: 20, minOrderValue: 999, maxDiscount: 1000, isActive: true },
+          { id: 'c3', code: 'BILLU100', type: 'FLAT', value: 100, minOrderValue: 799, maxDiscount: 100, isActive: true },
+          { id: 'c4', code: 'LUXURY500', type: 'FLAT', value: 500, minOrderValue: 2999, maxDiscount: 500, isActive: true },
+        ]);
       }
     };
     fetchCoupons();
   }, []);
 
-  const [userDiscountChoice, setUserDiscountChoice] = useState(null); // 'COUPON' | 'LOYALTY' | null
+  const [userDiscountChoice, setUserDiscountChoice] = useState(null); // 'COUPON' | 'LOYALTY' | 'NONE' | null
+  const [userDisabledLoyalty, setUserDisabledLoyalty] = useState(false);
 
   const getCouponDiscount = (coupon, totalVal) => {
     if (!coupon) return 0;
@@ -376,9 +381,9 @@ const CheckoutPage = () => {
     return 0;
   };
 
-  // ── AUTO-APPLY BEST DISCOUNT ENGINE [NEW - PREMIUM] ──
+  // ── AUTO-APPLY BEST DISCOUNT ENGINE ──
   // Calculate potential savings for both discount options
-  const potentialLoyaltyDisc = (customer && customer.loyaltyPoints > 0)
+  const potentialLoyaltyDisc = (customer && customer.loyaltyPoints > 0 && !userDisabledLoyalty)
     ? Math.min(customer.loyaltyPoints * loyaltySettings.redeemRate, loyaltySettings.maxRedeemAmount, subtotal)
     : 0;
 
@@ -392,9 +397,14 @@ const CheckoutPage = () => {
   if (userDiscountChoice === 'COUPON' && appliedCoupon && rawCouponDisc > 0) {
     activeDiscountType = 'COUPON';
     couponDiscount = rawCouponDisc;
-  } else if (userDiscountChoice === 'LOYALTY' && potentialLoyaltyDisc > 0) {
+  } else if (userDiscountChoice === 'LOYALTY' && potentialLoyaltyDisc > 0 && !userDisabledLoyalty) {
     activeDiscountType = 'LOYALTY';
     loyaltyDiscountVal = potentialLoyaltyDisc;
+  } else if (userDiscountChoice === 'NONE' || userDisabledLoyalty) {
+    if (appliedCoupon && rawCouponDisc > 0) {
+      activeDiscountType = 'COUPON';
+      couponDiscount = rawCouponDisc;
+    }
   } else {
     // Auto-select whichever yields HIGHER savings
     if (rawCouponDisc > potentialLoyaltyDisc && rawCouponDisc > 0) {
@@ -441,14 +451,17 @@ const CheckoutPage = () => {
 
   const handleToggleLoyaltyPoints = (checked) => {
     if (checked) {
+      setUserDisabledLoyalty(false);
       setRedeemPoints(true);
       setAppliedCoupon(null);
       localStorage.removeItem('bb_applied_coupon');
       setUserDiscountChoice('LOYALTY');
       toast.success(`Loyalty points applied! (Coupon unapplied as only 1 discount is allowed)`);
     } else {
+      setUserDisabledLoyalty(true);
       setRedeemPoints(false);
-      setUserDiscountChoice(null);
+      setUserDiscountChoice('NONE');
+      toast.success('Loyalty points unapplied. Points saved for your next order!');
     }
   };
 
@@ -601,6 +614,9 @@ const CheckoutPage = () => {
       }));
       await dispatch(syncCart(itemsToSync)).unwrap();
 
+      const isWrap = Boolean(location.state?.giftWrap);
+      const wrapPrice = isWrap ? Number(location.state?.giftWrapPrice || 99) : 0;
+
       // 2. Proceed with order placement using server-side cart database truth
       const referralCode = localStorage.getItem('bb_referral') || undefined;
       const order = await dispatch(placeOrder({
@@ -609,6 +625,10 @@ const CheckoutPage = () => {
         paymentMethod, referralCode,
         couponCode: effectiveRedeemPoints ? undefined : (appliedCoupon ? appliedCoupon.code : undefined),
         redeemPoints: effectiveRedeemPoints,
+        isGiftWrap: isWrap,
+        giftWrapPrice: wrapPrice,
+        giftMessage: location.state?.giftMessage || undefined,
+        notes: location.state?.giftMessage || undefined,
         requestedCurrency: currencyCode,   // geo-detected currency (AED or INR)
         currencyRate: currencyRate,         // exchange rate (1 AED = X INR), default 26.06
       })).unwrap();
@@ -652,31 +672,6 @@ const CheckoutPage = () => {
           toast.error('Failed to load Razorpay SDK. Please check your internet connection.');
           setPlacing(false);
           return;
-        }
-
-        const pmLower = (paymentMethod || '').toLowerCase();
-        let targetBlock = null;
-
-        if (pmLower.includes('net') || pmLower.includes('bank')) {
-          targetBlock = {
-            name: 'Net Banking',
-            instruments: [{ method: 'netbanking' }]
-          };
-        } else if (pmLower.includes('card') || pmLower.includes('credit') || pmLower.includes('debit')) {
-          targetBlock = {
-            name: 'Credit / Debit Card',
-            instruments: [{ method: 'card' }]
-          };
-        } else if (pmLower.includes('upi')) {
-          targetBlock = {
-            name: 'Pay via UPI',
-            instruments: [{ method: 'upi', flows: ['qr', 'collect', 'intent'] }]
-          };
-        } else if (pmLower.includes('wallet')) {
-          targetBlock = {
-            name: 'Wallets',
-            instruments: [{ method: 'wallet' }]
-          };
         }
 
         const options = {
@@ -725,20 +720,6 @@ const CheckoutPage = () => {
           }
         };
 
-        if (targetBlock) {
-          options.config = {
-            display: {
-              blocks: {
-                selected_method: targetBlock
-              },
-              sequence: ['block.selected_method'],
-              preferences: {
-                show_default_blocks: pmLower.includes('upi') ? true : false
-              }
-            }
-          };
-        }
-
         // Stop the main spinner — Razorpay overlay handles UI from here
         setPlacing(false);
         const rzp = new window.Razorpay(options);
@@ -783,19 +764,26 @@ const CheckoutPage = () => {
     }
 
     if (!deliverySameAsBilling) {
-      if (!address.fullName?.trim()) errors.del_fullName = 'Please enter delivery Full Name';
-      if (!address.phone?.trim()) {
-        errors.del_phone = 'Delivery mobile number is required';
+      const hasCustomDeliveryDetails = Boolean(address.fullName?.trim() || address.flatHouse?.trim() || address.city?.trim() || address.pincode?.trim());
+      if (!hasCustomDeliveryDetails) {
+        // If customer didn't enter a custom delivery address below, use billing address for delivery
+        setDeliverySameAsBilling(true);
+        setAddress({ ...billingAddress, country: 'India' });
       } else {
-        const delPhoneVal = validatePhoneNumber(address.phone);
-        if (!delPhoneVal.isValid) errors.del_phone = 'Delivery Phone: ' + delPhoneVal.message;
-      }
-      if (!address.email?.trim()) errors.del_email = 'Please enter delivery Email Address';
-      if (!address.flatHouse?.trim()) errors.del_flatHouse = 'Please enter delivery Street / House No.';
-      if (!address.city?.trim()) errors.del_city = 'Please enter delivery City';
-      if (!address.state?.trim()) errors.del_state = 'Please enter delivery State';
-      if (!/^\d{6}$/.test((address.pincode || '').trim())) {
-        errors.del_pincode = 'Delivery Pincode must be exactly 6 numeric digits';
+        if (!address.fullName?.trim()) errors.del_fullName = 'Please enter delivery Full Name';
+        if (!address.phone?.trim()) {
+          errors.del_phone = 'Delivery mobile number is required';
+        } else {
+          const delPhoneVal = validatePhoneNumber(address.phone);
+          if (!delPhoneVal.isValid) errors.del_phone = 'Delivery Phone: ' + delPhoneVal.message;
+        }
+        if (!address.email?.trim()) errors.del_email = 'Please enter delivery Email Address';
+        if (!address.flatHouse?.trim()) errors.del_flatHouse = 'Please enter delivery Street / House No.';
+        if (!address.city?.trim()) errors.del_city = 'Please enter delivery City';
+        if (!address.state?.trim()) errors.del_state = 'Please enter delivery State';
+        if (!/^\d{6}$/.test((address.pincode || '').trim())) {
+          errors.del_pincode = 'Delivery Pincode must be exactly 6 numeric digits';
+        }
       }
     }
 
@@ -1285,88 +1273,53 @@ const CheckoutPage = () => {
                     </div>
                   )}
 
-                  <button onClick={() => { if (validateStep1()) setStep(2); }}
+                  <button onClick={() => {
+                      if (!isAuthenticated) {
+                        toast.error('Please sign in or log in to your account to review your order.');
+                        setShowLoginPanel(true);
+                        const loginSection = document.getElementById('login-panel-section') || document.getElementById('main-content');
+                        if (loginSection) {
+                          loginSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }
+                        return;
+                      }
+                      if (validateStep1()) setStep(2);
+                    }}
                     disabled={geoBlocked}
                     className={`w-full py-3 text-sm font-semibold transition-all rounded ${geoBlocked ? 'bg-neutral-300 text-neutral-500 cursor-not-allowed opacity-60' : 'btn-primary'}`} id="step1-next">
-                    {geoBlocked ? 'Checkout Disabled (Restricted Region)' : 'Continue to Payment'}
+                    {geoBlocked ? 'Checkout Disabled (Restricted Region)' : 'Review Order'}
                   </button>
 
                 </motion.div>
               )}
 
-              {/* ── Step 2: Payment ── */}
+              {/* ── Step 2: Review Order & Pay ── */}
               {step === 2 && (
                 <motion.div
                   key="step2"
                   initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
                   transition={{ duration: 0.25 }}
-                  className="bg-white border border-neutral-200 rounded-lg p-5 md:p-6"
-                >
-                  <h2 className="font-playfair text-xl font-semibold mb-1">Payment Method</h2>
-                  <p className="text-xs text-neutral-400 mb-3">All transactions are secure and encrypted.</p>
-
-
-
-                  <div className="space-y-2.5">
-
-                    {(currencyCode === 'AED'
-                      ? [
-                          { label: 'Credit / Debit Card', icon: '💳', badge: null },
-                          { label: 'Apple Pay', icon: '', badge: 'Recommended' },
-                          { label: 'Net Banking', icon: '🏦', badge: null },
-                          { label: 'Wallets', icon: '👛', badge: null },
-                        ]
-                      : [
-                          { label: 'Credit / Debit Card', icon: '💳', badge: null },
-                          { label: 'Net Banking', icon: '🏦', badge: null },
-                          { label: 'UPI', icon: '📱', badge: 'Recommended' },
-                          { label: 'Wallets', icon: '👛', badge: null },
-                        ]
-                    ).map(({ label, icon, badge }) => (
-                      <label key={label}
-                        className={`flex items-center gap-3 p-4 rounded-md border cursor-pointer transition-all ${
-                          paymentMethod === label
-                            ? 'border-brand-gold bg-brand-gold/5'
-                            : 'border-neutral-200 hover:border-brand-gold/40 bg-white'
-                        }`}
-                        id={`pay-${label.replace(/[\\/\s()]/g, '-')}`}>
-                        <input type="radio" name="paymentMethod" value={label}
-                          checked={paymentMethod === label}
-                          onChange={() => setPaymentMethod(label)}
-                          className="accent-brand-gold" />
-                        <span className="text-lg">{icon}</span>
-                        <span className="font-medium text-sm text-brand-text flex-1">{label}</span>
-                        {badge && <span className="text-[10px] bg-green-100 text-green-700 font-semibold px-2 py-0.5 rounded-full">{badge}</span>}
-                      </label>
-                    ))}
-                    {/* Cash on Delivery (COD) — temporarily unavailable */}
-                  </div>
-                  <div className="flex flex-col-reverse sm:flex-row gap-3 mt-6">
-                    <button onClick={() => setStep(1)} className="btn-outline flex-1 py-3 text-sm font-semibold" id="step2-back">Back</button>
-                    <button onClick={() => setStep(3)} className="btn-primary flex-1 py-3 text-sm font-semibold" id="step2-next">Review Order</button>
-                  </div>
-                </motion.div>
-              )}
-
-              {/* ── Step 3: Review ── */}
-              {step === 3 && (
-                <motion.div
-                  key="step3"
-                  initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
-                  transition={{ duration: 0.25 }}
                   className="bg-white border border-neutral-200 rounded-lg p-5 md:p-6 space-y-6"
                 >
-                  <h2 className="font-playfair text-xl font-semibold">Review Your Order</h2>
+                  <h2 className="font-playfair text-xl font-semibold">Review Order & Pay</h2>
+
+                  {/* Address Summary */}
                   <div className="grid sm:grid-cols-2 gap-5">
                     <div className="bg-neutral-50 rounded-md p-4">
-                      <h3 className="font-semibold text-xs text-neutral-400 uppercase tracking-wider mb-2">Billing Address</h3>
+                      <div className="flex justify-between items-center mb-2">
+                        <h3 className="font-semibold text-xs text-neutral-400 uppercase tracking-wider">Billing Address</h3>
+                        <button onClick={() => setStep(1)} className="text-xs text-brand-gold hover:underline font-medium">Edit</button>
+                      </div>
                       <p className="text-sm font-medium text-brand-text">{billingAddress.fullName}</p>
                       <p className="text-xs text-brand-grey">{billingAddress.phone} · {billingAddress.email}</p>
                       <p className="text-xs text-brand-grey mt-1">{billingAddress.flatHouse}{billingAddress.landmark && `, ${billingAddress.landmark}`}</p>
                       <p className="text-xs text-brand-grey">{billingAddress.city}, {billingAddress.state} {billingAddress.pincode}</p>
                     </div>
                     <div className="bg-neutral-50 rounded-md p-4">
-                      <h3 className="font-semibold text-xs text-neutral-400 uppercase tracking-wider mb-2">Delivery Address</h3>
+                      <div className="flex justify-between items-center mb-2">
+                        <h3 className="font-semibold text-xs text-neutral-400 uppercase tracking-wider">Delivery Address</h3>
+                        <button onClick={() => setStep(1)} className="text-xs text-brand-gold hover:underline font-medium">Edit</button>
+                      </div>
                       {deliverySameAsBilling ? (
                         <p className="text-xs text-brand-grey italic">Same as billing address</p>
                       ) : (
@@ -1380,10 +1333,6 @@ const CheckoutPage = () => {
                     </div>
                   </div>
 
-                  <div className="bg-neutral-50 rounded-md p-4">
-                    <h3 className="font-semibold text-xs text-neutral-400 uppercase tracking-wider mb-2">Payment Method</h3>
-                    <p className="text-sm text-brand-text font-medium">{paymentMethod}</p>
-                  </div>
 
                   {/* Items in Order Breakdown */}
                   <div className="bg-neutral-50 rounded-md p-4">
@@ -1427,9 +1376,8 @@ const CheckoutPage = () => {
                     </div>
                   </div>
 
-
                   <div className="flex flex-col-reverse sm:flex-row gap-3">
-                    <button onClick={() => setStep(2)} className="btn-outline flex-1 py-3 text-sm font-semibold" id="step3-back">Back</button>
+                    <button onClick={() => setStep(1)} className="btn-outline flex-1 py-3 text-sm font-semibold" id="step2-back">Back to Delivery</button>
                     <button
                       onClick={() => {
                         if (shippingStatus === 'NOT_DELIVERABLE') {
@@ -1456,7 +1404,7 @@ const CheckoutPage = () => {
                       disabled={placing || otpLoading}
                       className="btn-primary flex-1 py-3 text-sm font-semibold" id="place-order-btn"
                     >
-                      {placing ? 'Placing Order…' : otpLoading ? 'Sending Security Code…' : `Place Order — ${fmt(total)}`}
+                      {placing ? 'Placing Order…' : otpLoading ? 'Sending Security Code…' : `Place Order & Pay — ${fmt(total)}`}
                     </button>
                   </div>
                 </motion.div>

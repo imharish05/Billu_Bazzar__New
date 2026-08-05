@@ -13,5 +13,6 @@ router.post('/', optionalCustomer, placeOrder); // allow optional guest order pl
 router.get('/', verifyAdmin, getAll);
 router.get('/:id', verifyAdmin, getOne);
 router.patch('/:id/status', verifyAdmin, updateStatus);
+router.put('/:id/status', verifyAdmin, updateStatus);
 
 module.exports = router;

@@ -884,10 +884,22 @@ const VariantsAdminPage = () => {
                 <tr>
                   <td colSpan={9} className="px-4 py-8 text-center text-brand-grey italic">No variants found matching criteria</td>
                 </tr>
-              ) : filteredVariants.map(variant => {
-                const attributesStr = Object.entries(variant.attributes || {})
-                  .map(([k, v]) => `${k}: ${v}`)
-                  .join(' · ');
+              ) : (
+                filteredVariants.map(variant => {
+                  let rawAttrs = variant.attributes;
+                  for (let k = 0; k < 4; k++) {
+                    if (typeof rawAttrs === 'string') {
+                      try { rawAttrs = JSON.parse(rawAttrs); } catch { break; }
+                    }
+                  }
+                  if (Array.isArray(rawAttrs) && rawAttrs.length > 0) rawAttrs = rawAttrs[0];
+
+                  const attributesStr = (rawAttrs && typeof rawAttrs === 'object')
+                    ? Object.entries(rawAttrs)
+                        .filter(([k, v]) => v !== undefined && v !== null && v !== '' && !['id', 'sku', 'price', 'stock'].includes(k))
+                        .map(([k, v]) => (k.toLowerCase() === 'variant' ? String(v) : `${k}: ${v}`))
+                        .join(' · ')
+                    : (typeof rawAttrs === 'string' && rawAttrs !== '{}' ? rawAttrs : '');
 
                 return (
                   <tr key={variant.id} className="border-b border-brand-light hover:bg-brand-light/20 transition-colors">
@@ -923,7 +935,7 @@ const VariantsAdminPage = () => {
                     </td>
                   </tr>
                 );
-              })}
+              }))}
             </tbody>
           </table>
         </div>
