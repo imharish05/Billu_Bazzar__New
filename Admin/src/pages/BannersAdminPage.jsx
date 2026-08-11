@@ -1,10 +1,12 @@
 import { useEffect, useState, useRef } from 'react';
+import { useSelector } from 'react-redux';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Edit2, Trash2, X, Upload, RefreshCw, AlertCircle, CheckCircle2, Info } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
 import Switch from '../components/Switch';
 import api from '../services/api';
 import toast from 'react-hot-toast';
+import { checkPermission } from '../utils/rbac';
 
 const formatDatetimeLocal = (dateStr) => {
   if (!dateStr) return '';
@@ -73,7 +75,14 @@ const BANNER_SPECS = {
   },
 };
 
-const validateBannerImageDimensions = (dims, bannerType) => {
+const validateBannerImageDimensions = (dims, bannerType, file = null) => {
+  if (file && file.size > 5 * 1024 * 1024) {
+    return {
+      isValid: false,
+      message: `File size exceeds 5MB limit (${(file.size / (1024 * 1024)).toFixed(1)}MB). Maximum allowed file size is 5MB.`
+    };
+  }
+
   if (!dims) return { isValid: true, message: null };
   const spec = BANNER_SPECS[bannerType];
   if (!spec) return { isValid: true, message: null };
@@ -101,7 +110,7 @@ const validateBannerImageDimensions = (dims, bannerType) => {
 
     return {
       isValid: false,
-      message: `Image dimensions (${width} × ${height} px) do not match recommended dimensions for ${spec.label}. Recommended size is ${spec.recommended} (${spec.aspectLabel}). ${reason}`
+      message: `Image dimensions (${width} × ${height} px) do not match recommended dimensions for ${spec.label}. Recommended size is ${spec.recommended} (${spec.aspectLabel}, max 5MB). ${reason}`
     };
   }
 
@@ -139,12 +148,12 @@ const BannersAdminPage = () => {
     checkImageDimensions(source).then(dims => {
       setImageDims(dims);
       if (dims) {
-        const val = validateBannerImageDimensions(dims, form.type);
+        const val = validateBannerImageDimensions(dims, form.type, imageFile);
         setDimValidation(val);
         if (!val.isValid) {
           setUploadError(val.message);
         } else {
-          setUploadError(prev => (prev && prev.includes('Recommended size') ? null : prev));
+          setUploadError(prev => (prev && (prev.includes('Recommended') || prev.includes('dimensions') || prev.includes('File size') || prev.includes('5MB')) ? null : prev));
         }
       } else {
         setDimValidation({ isValid: true, message: null });
@@ -196,8 +205,13 @@ const BannersAdminPage = () => {
   const handleFileSelect = (eOrFile) => {
     const file = eOrFile instanceof File ? eOrFile : eOrFile.target.files?.[0];
     if (!file) return;
-    if (file.size > 10 * 1024 * 1024) {
-      setUploadError(`File size exceeds 10MB limit. Your image is ${(file.size / (1024 * 1024)).toFixed(1)}MB.`);
+    if (file.size > 5 * 1024 * 1024) {
+      const errMsg = `File size exceeds 5MB limit. Your image is ${(file.size / (1024 * 1024)).toFixed(1)}MB.`;
+      setDimValidation({
+        isValid: false,
+        message: errMsg
+      });
+      setUploadError(errMsg);
       return;
     }
     setUploadError(null);
@@ -210,12 +224,12 @@ const BannersAdminPage = () => {
   const handleTypeChange = (newType) => {
     setForm(p => ({ ...p, type: newType }));
     if (imageDims) {
-      const val = validateBannerImageDimensions(imageDims, newType);
+      const val = validateBannerImageDimensions(imageDims, newType, imageFile);
       setDimValidation(val);
       if (!val.isValid) {
         setUploadError(val.message);
       } else {
-        setUploadError(prev => (prev && (prev.includes('dimensions') || prev.includes('Recommended')) ? null : prev));
+        setUploadError(prev => (prev && (prev.includes('dimensions') || prev.includes('Recommended') || prev.includes('File size') || prev.includes('5MB')) ? null : prev));
       }
     }
   };
@@ -226,9 +240,16 @@ const BannersAdminPage = () => {
     setUploadProgress(0);
     setUploadError(null);
 
-    // Image dimension validation check
+    // Image dimension & size validation check
+    if (imageFile && imageFile.size > 5 * 1024 * 1024) {
+      const errMsg = `File size exceeds 5MB limit. Your image is ${(imageFile.size / (1024 * 1024)).toFixed(1)}MB.`;
+      setDimValidation({ isValid: false, message: errMsg });
+      setUploadError(errMsg);
+      setSaving(false); setUploadProgress(null); return;
+    }
+
     if (imageDims) {
-      const val = validateBannerImageDimensions(imageDims, form.type);
+      const val = validateBannerImageDimensions(imageDims, form.type, imageFile);
       setDimValidation(val);
       if (!val.isValid) {
         setUploadError(val.message);
@@ -426,6 +447,9 @@ const BannersAdminPage = () => {
 
   // Tabs order matching homepage display sequence: Hero (1st) -> CountDown (2nd) -> Exclusive Deal (3rd) -> Promo (4th)
   const TABS = ['All', 'Hero', 'CountDown', 'Exclusive Deal', 'Promo'];
+  const { admin } = useSelector((s) => s.auth);
+  const canAddBanner = checkPermission(admin, 'add_banner');
+  const canDeleteBanner = checkPermission(admin, 'delete_banner');
 
   const filteredBanners = activeTab === 'All'
     ? banners
@@ -458,9 +482,11 @@ const BannersAdminPage = () => {
 
       <div className="flex justify-between items-center mb-6">
         <p className="text-sm text-brand-grey">{filteredBanners.length} banner{filteredBanners.length !== 1 ? 's' : ''}</p>
-        <button onClick={() => openModal()} className="btn-primary flex items-center gap-2" id="add-banner-btn">
-          <Plus size={16} /> Add Banner
-        </button>
+        {canAddBanner && (
+          <button onClick={() => openModal()} className="btn-primary flex items-center gap-2" id="add-banner-btn">
+            <Plus size={16} /> Add Banner
+          </button>
+        )}
       </div>
 
       {loading ? (
@@ -512,14 +538,21 @@ const BannersAdminPage = () => {
                 <div className="flex items-center gap-2">
                   <Switch
                     checked={banner.isActive}
-                    onChange={() => handleToggle(banner)}
+                    disabled={!canAddBanner}
+                    onChange={() => canAddBanner && handleToggle(banner)}
                     id={`toggle-banner-${banner.id}`}
                   />
-                  <span className="text-xs text-brand-grey font-medium">{banner.isActive ? 'Active' : 'Hidden'}</span>
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${banner.isActive ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                    {banner.isActive ? 'Active' : 'Inactive'}
+                  </span>
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={() => openModal(banner)} className="p-1.5 text-brand-grey hover:text-brand-gold transition-colors" title="Edit" id={`edit-banner-${banner.id}`}><Edit2 size={14} /></button>
-                  <button onClick={() => handleDelete(banner.id)} className="p-1.5 text-brand-grey hover:text-red-500 transition-colors" title="Delete" id={`del-banner-${banner.id}`}><Trash2 size={14} /></button>
+                  {canAddBanner && (
+                    <button onClick={() => openModal(banner)} className="p-1.5 text-brand-grey hover:text-brand-gold transition-colors" title="Edit" id={`edit-banner-${banner.id}`}><Edit2 size={14} /></button>
+                  )}
+                  {canDeleteBanner && (
+                    <button onClick={() => handleDelete(banner.id)} className="p-1.5 text-brand-grey hover:text-red-500 transition-colors" title="Delete" id={`del-banner-${banner.id}`}><Trash2 size={14} /></button>
+                  )}
                 </div>
               </div>
             </div>
@@ -595,9 +628,9 @@ const BannersAdminPage = () => {
                       <div className="py-4">
                         <Upload size={28} className="mx-auto text-brand-grey mb-2" />
                         <p className="text-sm text-brand-grey font-medium">Drag & drop image here, or click to upload</p>
-                        <p className="text-xs text-brand-grey mt-1">JPEG, PNG, WebP — max 10MB</p>
+                        <p className="text-xs text-brand-grey mt-1">JPEG, PNG, WebP — max 5MB</p>
                         <p className="text-xs text-red-500 mt-1">
-                          (Recommended size {BANNER_SPECS[form.type]?.width} * {BANNER_SPECS[form.type]?.height})
+                          (Recommended size {BANNER_SPECS[form.type]?.width} × {BANNER_SPECS[form.type]?.height} px, max 5MB)
                         </p>
                       </div>
                     )}
@@ -611,7 +644,7 @@ const BannersAdminPage = () => {
                       <div>
                         <p className="font-semibold text-red-700">Improper Image Size Detected</p>
                         <p className="text-xs text-red-700 font-medium mt-1">
-                          Please upload a proper image matching the recommended dimensions: {BANNER_SPECS[form.type]?.width} × {BANNER_SPECS[form.type]?.height} px.
+                          Please upload a proper image matching the recommended dimensions: {BANNER_SPECS[form.type]?.width} × {BANNER_SPECS[form.type]?.height} px (max file size: 5 MB).
                         </p>
                       </div>
                     </div>

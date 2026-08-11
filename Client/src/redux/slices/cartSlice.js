@@ -210,36 +210,35 @@ const cartSlice = createSlice({
 
 export const { openCart, closeCart, toggleCart, setBuyNowItem, clearBuyNowItem, addLocalState, removeLocalState, clearLocalState } = cartSlice.actions;
 
-// ── Wrapped local cart actions that trigger background server sync ─────────────────────────────
-export const addLocal = createAsyncThunk('cart/addLocalSync', async (cartItem, { dispatch, getState }) => {
-  dispatch(addLocalState(cartItem));
-  const items = getState().cart.items;
-  if (items.length > 0) {
+// ── Debounced background cart sync helper to prevent repetitive heavy API calls ──
+let syncTimer = null;
+const debouncedSyncCart = (items) => {
+  if (syncTimer) clearTimeout(syncTimer);
+  syncTimer = setTimeout(async () => {
     try {
       await api.post('/cart/sync', { items });
     } catch (err) {
       console.log('[cart/sync] Background sync note:', err.message);
     }
-  }
+  }, 300);
+};
+
+// ── Wrapped local cart actions that trigger debounced background server sync ──
+export const addLocal = createAsyncThunk('cart/addLocalSync', async (cartItem, { dispatch, getState }) => {
+  dispatch(addLocalState(cartItem));
+  const items = getState().cart.items;
+  debouncedSyncCart(items);
 });
 
 export const removeLocal = createAsyncThunk('cart/removeLocalSync', async (payload, { dispatch, getState }) => {
   dispatch(removeLocalState(payload));
   const items = getState().cart.items;
-  try {
-    await api.post('/cart/sync', { items });
-  } catch (err) {
-    console.log('[cart/sync] Background sync note:', err.message);
-  }
+  debouncedSyncCart(items);
 });
 
-export const clearLocal = createAsyncThunk('cart/clearLocalSync', async (_, { dispatch, getState }) => {
+export const clearLocal = createAsyncThunk('cart/clearLocalSync', async (_, { dispatch }) => {
   dispatch(clearLocalState());
-  try {
-    await api.post('/cart/sync', { items: [] });
-  } catch (err) {
-    console.log('[cart/sync] Background sync note:', err.message);
-  }
+  debouncedSyncCart([]);
 });
 
 export default cartSlice.reducer;

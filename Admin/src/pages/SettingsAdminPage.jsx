@@ -1,14 +1,13 @@
 import { useState, useEffect } from 'react';
 import { Save, ShieldCheck, RefreshCw } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
-import RolesPermissionsAdminPage from './RolesPermissionsAdminPage';
 import api from '../services/api';
 import toast from 'react-hot-toast';
 
-const TABS = ['Inventory Alerts', 'Security & OTP', 'Roles & Permissions'];
+const TABS = ['Inventory Alerts', 'Security & OTP'];
 
 const SettingsAdminPage = () => {
-  const [tab, setTab] = useState('Roles & Permissions');
+  const [tab, setTab] = useState('Inventory Alerts');
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -122,10 +121,7 @@ const SettingsAdminPage = () => {
         ))}
       </div>
 
-      {tab === 'Roles & Permissions' ? (
-        <RolesPermissionsAdminPage standalone={false} />
-      ) : (
-        <div className="bg-white rounded-xl shadow-sm p-6 max-w-2xl border border-neutral-100">
+      <div className="bg-white rounded-xl shadow-sm p-6 max-w-2xl border border-neutral-100">
           {tab === 'Inventory Alerts' ? (
             <form onSubmit={handleSaveInventorySettings} className="space-y-6">
               <div className="flex items-center gap-2 pb-3 border-b border-neutral-100">
@@ -221,7 +217,6 @@ const SettingsAdminPage = () => {
             </form>
           )}
         </div>
-      )}
     </AdminLayout>
   );
 };

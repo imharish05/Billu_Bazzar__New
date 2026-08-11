@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
+import { useSelector } from 'react-redux';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   MapPin, Plus, FileSpreadsheet, Download, Search, Edit, Trash2, CheckCircle2,
@@ -9,8 +10,14 @@ import AdminLayout from '../components/AdminLayout';
 import { PaginationTop, PaginationBottom } from '../components/Pagination';
 import Switch from '../components/Switch';
 import api from '../services/api';
+import { checkPermission } from '../utils/rbac';
 
 const DeliveryZonesAdminPage = () => {
+  const { admin } = useSelector((s) => s.auth);
+  const canAddDeliveryZone = checkPermission(admin, 'add_delivery_zone');
+  const canEditDeliveryZone = checkPermission(admin, 'edit_delivery_zone');
+  const canDeleteDeliveryZone = checkPermission(admin, 'delete_delivery_zone');
+  const canShowActions = canEditDeliveryZone || canDeleteDeliveryZone;
   const [zones, setZones] = useState([]);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
@@ -310,25 +317,29 @@ const DeliveryZonesAdminPage = () => {
               Download Template
             </button>
 
-            <button
-              onClick={() => {
-                setUploadFile(null);
-                setUploadResult(null);
-                setUploadModalOpen(true);
-              }}
-              className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl transition-all shadow-sm"
-            >
-              <FileSpreadsheet className="w-4 h-4" />
-              Bulk Upload Excel
-            </button>
+            {canAddDeliveryZone && (
+              <>
+                <button
+                  onClick={() => {
+                    setUploadFile(null);
+                    setUploadResult(null);
+                    setUploadModalOpen(true);
+                  }}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl transition-all shadow-sm"
+                >
+                  <FileSpreadsheet className="w-4 h-4" />
+                  Bulk Upload Excel
+                </button>
 
-            <button
-              onClick={openAddModal}
-              className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl transition-all shadow-sm"
-            >
-              <Plus className="w-4 h-4" />
-              Add Pincode
-            </button>
+                <button
+                  onClick={openAddModal}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl transition-all shadow-sm"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add Pincode
+                </button>
+              </>
+            )}
           </div>
         </div>
 
@@ -469,13 +480,13 @@ const DeliveryZonesAdminPage = () => {
                   <th className="p-4">Delivery Charge (₹)</th>
                   <th className="p-4">Free Delivery Threshold</th>
                   <th className="p-4 text-center">Status</th>
-                  <th className="p-4 text-right">Actions</th>
+                  {canShowActions && <th className="p-4 text-right">Actions</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-100 text-sm">
                 {loading ? (
                   <tr>
-                    <td colSpan="8" className="p-8 text-center text-neutral-400">
+                    <td colSpan={canShowActions ? 8 : 7} className="p-8 text-center text-neutral-400">
                       <div className="flex flex-col items-center justify-center gap-2">
                         <RefreshCw className="w-6 h-6 animate-spin text-indigo-600" />
                         <span>Loading delivery zones...</span>
@@ -484,7 +495,7 @@ const DeliveryZonesAdminPage = () => {
                   </tr>
                 ) : zones.length === 0 ? (
                   <tr>
-                    <td colSpan="8" className="p-8 text-center text-neutral-500">
+                    <td colSpan={canShowActions ? 8 : 7} className="p-8 text-center text-neutral-500">
                       <div className="flex flex-col items-center justify-center gap-2">
                         <MapPin className="w-8 h-8 text-neutral-300" />
                         <span className="font-semibold text-neutral-700">No delivery zones found</span>
@@ -537,28 +548,35 @@ const DeliveryZonesAdminPage = () => {
                         <div className="flex justify-center">
                           <Switch
                             checked={zone.isActive}
-                            onChange={() => handleToggleActive(zone)}
+                            disabled={!canEditDeliveryZone}
+                            onChange={() => canEditDeliveryZone && handleToggleActive(zone)}
                           />
                         </div>
                       </td>
-                      <td className="p-4 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <button
-                            onClick={() => handleEdit(zone)}
-                            className="p-1.5 text-neutral-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                            title="Edit"
-                          >
-                            <Edit className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(zone.id, zone.pincode)}
-                            className="p-1.5 text-neutral-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                            title="Delete"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
+                      {canShowActions && (
+                        <td className="p-4 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            {canEditDeliveryZone && (
+                              <button
+                                onClick={() => handleEdit(zone)}
+                                className="p-1.5 text-neutral-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                                title="Edit"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </button>
+                            )}
+                            {canDeleteDeliveryZone && (
+                              <button
+                                onClick={() => handleDelete(zone.id, zone.pincode)}
+                                className="p-1.5 text-neutral-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                title="Delete"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   ))
                 )}

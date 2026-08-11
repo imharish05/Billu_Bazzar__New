@@ -62,9 +62,23 @@ app.use('/api/delivery-zones', require('./routes/deliveryZoneRoutes'));
 app.use('/api/contact-enquiries', require('./routes/contactEnquiryRoutes'));
 app.use('/api/currency',          require('./routes/currencyRoutes'));
 app.use('/api/roles',             require('./routes/roleRoutes'));
+app.use('/api/admin-users',       require('./routes/adminUserRoutes'));
 
 // ── Warm up exchange rate cache on startup (non-blocking) ────────────────────
 require('./services/currencyRateService').warmUp().catch(() => {});
+
+// ── Swagger API Documentation ──────────────────────────────────────────────────
+try {
+  const swaggerUi = require('swagger-ui-express');
+  const fs = require('fs');
+  const swaggerSpecPath = path.join(__dirname, 'swagger-output.json');
+  if (fs.existsSync(swaggerSpecPath)) {
+    const swaggerDocument = JSON.parse(fs.readFileSync(swaggerSpecPath, 'utf8'));
+    app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+  }
+} catch (swaggerErr) {
+  console.log('⚠️ Swagger UI setup note:', swaggerErr.message);
+}
 
 // ── Health Check ──────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));

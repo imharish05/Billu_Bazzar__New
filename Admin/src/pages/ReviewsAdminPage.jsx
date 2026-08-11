@@ -1,12 +1,16 @@
 import { useState, useEffect } from 'react';
+import { useSelector } from 'react-redux';
 import { motion } from 'framer-motion';
 import { Star, CheckCircle, XCircle, Trash2, Search, RefreshCw, MessageSquare, ShieldCheck, Filter } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
 import { PaginationTop, PaginationBottom } from '../components/Pagination';
 import api from '../services/api';
 import toast from 'react-hot-toast';
+import { checkPermission } from '../utils/rbac';
 
 const ReviewsAdminPage = () => {
+  const { admin } = useSelector((s) => s.auth);
+  const canDeleteReview = checkPermission(admin, 'delete_review');
   const [reviews, setReviews] = useState([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('all'); // 'all', 'approved', 'pending'
@@ -230,7 +234,7 @@ const ReviewsAdminPage = () => {
                     <th className="py-3 px-4">Review Content</th>
                     <th className="py-3 px-4">Date</th>
                     <th className="py-3 px-4">Status</th>
-                    <th className="py-3 px-4 text-right">Actions</th>
+                    {canDeleteReview && <th className="py-3 px-4 text-right">Actions</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-neutral-100 text-xs">
@@ -291,35 +295,37 @@ const ReviewsAdminPage = () => {
                       </td>
 
                       {/* Actions */}
-                      <td className="py-4 px-4 text-right whitespace-nowrap">
-                        <div className="flex items-center justify-end gap-2">
-                          <button
-                            onClick={() => handleToggleStatus(r.id, r.isApproved)}
-                            disabled={updatingId === r.id}
-                            className={`px-3 py-1.5 text-xs font-semibold rounded flex items-center gap-1 transition-colors ${r.isApproved ? 'bg-amber-50 text-amber-700 hover:bg-amber-100' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}`}
-                            title={r.isApproved ? 'Unapprove / Reject Review' : 'Approve Review'}
-                          >
-                            {r.isApproved ? (
-                              <>
-                                <XCircle size={14} /> Reject
-                              </>
-                            ) : (
-                              <>
-                                <CheckCircle size={14} /> Approve
-                              </>
-                            )}
-                          </button>
+                      {canDeleteReview && (
+                        <td className="py-4 px-4 text-right whitespace-nowrap">
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              onClick={() => handleToggleStatus(r.id, r.isApproved)}
+                              disabled={updatingId === r.id}
+                              className={`px-3 py-1.5 text-xs font-semibold rounded flex items-center gap-1 transition-colors ${r.isApproved ? 'bg-amber-50 text-amber-700 hover:bg-amber-100' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}`}
+                              title={r.isApproved ? 'Unapprove / Reject Review' : 'Approve Review'}
+                            >
+                              {r.isApproved ? (
+                                <>
+                                  <XCircle size={14} /> Reject
+                                </>
+                              ) : (
+                                <>
+                                  <CheckCircle size={14} /> Approve
+                                </>
+                              )}
+                            </button>
 
-                          <button
-                            onClick={() => handleDeleteReview(r.id)}
-                            disabled={updatingId === r.id}
-                            className="p-1.5 text-neutral-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                            title="Delete Review"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
-                      </td>
+                            <button
+                              onClick={() => handleDeleteReview(r.id)}
+                              disabled={updatingId === r.id}
+                              className="p-1.5 text-neutral-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                              title="Delete Review"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>

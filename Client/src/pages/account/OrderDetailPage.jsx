@@ -367,6 +367,7 @@ const OrderDetailPage = () => {
                   src={item.productImage || item.image || '/placeholder.jpg'}
                   alt={item.productName || item.name || 'Product'}
                   className="w-16 h-20 object-cover rounded border border-neutral-100 flex-shrink-0"
+                  onError={(e) => { e.target.onerror = null; e.target.src = '/placeholder.jpg'; }}
                 />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-neutral-900 truncate">{item.productName || item.name}</p>

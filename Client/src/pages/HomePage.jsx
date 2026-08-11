@@ -329,8 +329,12 @@ const HomePage = () => {
     if (meta) meta.setAttribute('content', 'Discover luxury party wear, jewelry, perfumes and accessories at Billu Bazaar. Handcrafted, curated, and delivered with love across India.');
   }, [dispatch]);
 
+  const expiredRefetchedRef = useRef(false);
   useEffect(() => {
-    if (isExpired && countdownBanner) {
+    if (!isExpired) {
+      expiredRefetchedRef.current = false;
+    } else if (countdownBanner && !expiredRefetchedRef.current) {
+      expiredRefetchedRef.current = true;
       dispatch(fetchBanners());
     }
   }, [isExpired, countdownBanner, dispatch]);

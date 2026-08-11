@@ -1,10 +1,12 @@
 import { useEffect, useState, useRef, useMemo } from 'react';
+import { useSelector } from 'react-redux';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Search, Edit2, Trash2, X, Upload, ChevronLeft, ChevronRight, Camera, Copy } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
 import currencyJs from 'currency.js';
 import toast from 'react-hot-toast';
 import api from '../services/api';
+import { checkPermission } from '../utils/rbac';
 
 const fmt = (v) => currencyJs(v, { symbol: '₹', precision: 0 }).format();
 
@@ -829,6 +831,15 @@ const VariantsAdminPage = () => {
     return matchesSearch && matchesProduct;
   });
 
+  const { admin } = useSelector((s) => s.auth);
+  const canAddVariant = checkPermission(admin, 'add_variant');
+  const canEditVariant = checkPermission(admin, 'edit_variant');
+  const canDeleteVariant = checkPermission(admin, 'delete_variant');
+  const canShowActions = canEditVariant || canDeleteVariant;
+
+  const variantHeaders = ['Image', 'Product', 'SKU', 'Attributes', 'Warehouse', 'Selling Price', 'MRP', 'Stock'];
+  if (canShowActions) variantHeaders.push('Actions');
+
   return (
     <AdminLayout title="Variants">
       <div className="mb-6 flex flex-col sm:flex-row gap-3">
@@ -855,9 +866,11 @@ const VariantsAdminPage = () => {
           ))}
         </select>
 
-        <button onClick={() => { setEditing(null); setModalOpen(true); }} className="btn-primary flex items-center gap-2 whitespace-nowrap">
-          <Plus size={16} /> Add Variant
-        </button>
+        {canAddVariant && (
+          <button onClick={() => { setEditing(null); setModalOpen(true); }} className="btn-primary flex items-center gap-2 whitespace-nowrap">
+            <Plus size={16} /> Add Variant
+          </button>
+        )}
       </div>
 
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">
@@ -868,7 +881,7 @@ const VariantsAdminPage = () => {
           <table className="w-full text-sm" aria-label="Variants table">
             <thead>
               <tr className="bg-brand-light/40 text-left">
-                {['Image', 'Product', 'SKU', 'Attributes', 'Warehouse', 'Selling Price', 'MRP', 'Stock', 'Actions'].map(h => (
+                {variantHeaders.map(h => (
                   <th key={h} className="px-4 py-3 text-xs font-semibold text-brand-grey uppercase tracking-wider">{h}</th>
                 ))}
               </tr>
@@ -877,12 +890,12 @@ const VariantsAdminPage = () => {
               {loading ? (
                 [...Array(6)].map((_, i) => (
                   <tr key={i} className="border-b border-brand-light">
-                    {[...Array(9)].map((_, j) => <td key={j} className="px-4 py-3"><div className="skeleton h-4 w-16" /></td>)}
+                    {[...Array(variantHeaders.length)].map((_, j) => <td key={j} className="px-4 py-3"><div className="skeleton h-4 w-16" /></td>)}
                   </tr>
                 ))
               ) : filteredVariants.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-8 text-center text-brand-grey italic">No variants found matching criteria</td>
+                  <td colSpan={variantHeaders.length} className="px-4 py-8 text-center text-brand-grey italic">No variants found matching criteria</td>
                 </tr>
               ) : (
                 filteredVariants.map(variant => {
@@ -927,12 +940,14 @@ const VariantsAdminPage = () => {
                         {variant.stock}
                       </span>
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <button onClick={() => { setEditing(variant); setModalOpen(true); }} className="p-1.5 text-brand-grey hover:text-brand-gold transition-colors focus-visible:outline-brand-gold" aria-label="Edit"><Edit2 size={14} /></button>
-                        <button onClick={() => handleDelete(variant.id)} className="p-1.5 text-brand-grey hover:text-red-400 transition-colors focus-visible:outline-brand-gold" aria-label="Delete"><Trash2 size={14} /></button>
-                      </div>
-                    </td>
+                    {canShowActions && (
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          {canEditVariant && <button onClick={() => { setEditing(variant); setModalOpen(true); }} className="p-1.5 text-brand-grey hover:text-brand-gold transition-colors focus-visible:outline-brand-gold" aria-label="Edit"><Edit2 size={14} /></button>}
+                          {canDeleteVariant && <button onClick={() => handleDelete(variant.id)} className="p-1.5 text-brand-grey hover:text-red-400 transition-colors focus-visible:outline-brand-gold" aria-label="Delete"><Trash2 size={14} /></button>}
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 );
               }))}

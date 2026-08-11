@@ -111,9 +111,9 @@ Coupon.hasMany(Order,    { foreignKey: 'couponId', as: 'orders' });
 // OrderItem ↔ Order / Product
 Order.hasMany(OrderItem,     { foreignKey: 'orderId', as: 'items' });
 OrderItem.belongsTo(Order,   { foreignKey: 'orderId', as: 'order' });
-OrderItem.belongsTo(Product, { foreignKey: 'productId', as: 'product' });
-OrderItem.belongsTo(ProductVariant, { foreignKey: 'variantId', as: 'variant' });
-ProductVariant.hasMany(OrderItem, { foreignKey: 'variantId', as: 'orderItems' });
+OrderItem.belongsTo(Product, { foreignKey: 'productId', constraints: false, as: 'product' });
+OrderItem.belongsTo(ProductVariant, { foreignKey: 'variantId', constraints: false, as: 'variant' });
+ProductVariant.hasMany(OrderItem, { foreignKey: 'variantId', constraints: false, as: 'orderItems' });
 
 InventoryMovementLog.belongsTo(Product, { foreignKey: 'productId', as: 'product' });
 InventoryMovementLog.belongsTo(ProductVariant, { foreignKey: 'variantId', as: 'variant' });

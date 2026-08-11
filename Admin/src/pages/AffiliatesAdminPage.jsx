@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useSelector } from 'react-redux';
 import { 
   X, Save, Plus, Edit2, Trash2, Upload, Copy, RefreshCw, 
   FileText, ExternalLink, Eye, CheckSquare, Square, Download, Eye as PreviewIcon
@@ -7,6 +8,7 @@ import AdminLayout from '../components/AdminLayout';
 import Switch from '../components/Switch';
 import api from '../services/api';
 import toast from 'react-hot-toast';
+import { checkPermission } from '../utils/rbac';
 
 const generateUniqueCode = () => {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // avoid ambiguous characters
@@ -47,6 +49,12 @@ const buildDefaultSocials = (existingList = []) => {
 };
 
 const AffiliatesAdminPage = () => {
+  const { admin } = useSelector((s) => s.auth);
+  const canManageAffiliates = checkPermission(admin, 'manage_affiliates');
+
+  const affiliateHeaders = ['Affiliate Name', 'Email', 'Referral Code', 'Social Platforms & Followers', 'Commission', 'Total Earnings', 'Clicks', 'Orders', 'Document Proof', 'Status'];
+  if (canManageAffiliates) affiliateHeaders.push('Actions');
+
   const [affiliates, setAffiliates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
@@ -305,9 +313,11 @@ const AffiliatesAdminPage = () => {
             {affiliates.length} affiliates registered · ₹{affiliates.reduce((s, a) => s + Number(a.totalEarnings || 0), 0).toLocaleString('en-IN')} total paid out
           </p>
         </div>
-        <button onClick={() => openModal()} className="btn-primary flex items-center justify-center gap-2" id="add-affiliate-btn">
-          <Plus size={16} /> Add Affiliate
-        </button>
+        {canManageAffiliates && (
+          <button onClick={() => openModal()} className="btn-primary flex items-center justify-center gap-2" id="add-affiliate-btn">
+            <Plus size={16} /> Add Affiliate
+          </button>
+        )}
       </div>
 
       {loading ? (
@@ -318,7 +328,7 @@ const AffiliatesAdminPage = () => {
             <table className="min-w-[1250px] w-full text-sm text-left border-collapse" aria-label="Affiliates table">
               <thead>
                 <tr className="bg-brand-light/40 border-b border-brand-light">
-                  {['Affiliate Name', 'Email', 'Referral Code', 'Social Platforms & Followers', 'Commission', 'Total Earnings', 'Clicks', 'Orders', 'Document Proof', 'Status', 'Actions'].map(h => (
+                  {affiliateHeaders.map(h => (
                     <th key={h} className="px-4 py-3.5 text-xs font-semibold text-brand-grey uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -326,7 +336,7 @@ const AffiliatesAdminPage = () => {
               <tbody className="divide-y divide-brand-light">
                 {affiliates.length === 0 ? (
                   <tr>
-                    <td colSpan="11" className="px-5 py-8 text-center text-brand-grey">
+                    <td colSpan={affiliateHeaders.length} className="px-5 py-8 text-center text-brand-grey">
                       No affiliates found. Click "Add Affiliate" to create one.
                     </td>
                   </tr>
@@ -429,7 +439,8 @@ const AffiliatesAdminPage = () => {
                           <div className="flex items-center gap-2">
                             <Switch
                               checked={a.isActive}
-                              onChange={() => handleToggleActive(a)}
+                              disabled={!canManageAffiliates}
+                              onChange={() => canManageAffiliates && handleToggleActive(a)}
                               id={`toggle-aff-${a.id}`}
                             />
                             <span className={`text-[11px] font-medium px-1.5 py-0.5 rounded ${a.isActive ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'}`}>
@@ -439,33 +450,35 @@ const AffiliatesAdminPage = () => {
                         </td>
 
                         {/* Actions */}
-                        <td className="px-4 py-4 text-right whitespace-nowrap">
-                          <div className="flex items-center gap-1 justify-end">
-                            <button
-                              onClick={() => handleViewOrders(a)}
-                              className="p-1.5 text-brand-grey hover:text-brand-gold hover:bg-brand-light rounded transition-colors"
-                              title="View Orders History"
-                            >
-                              <Eye size={15} />
-                            </button>
-                            <button
-                              onClick={() => openModal(a)}
-                              className="p-1.5 text-brand-grey hover:text-brand-gold hover:bg-brand-light rounded transition-colors"
-                              id={`edit-aff-${a.id}`}
-                              title="Edit"
-                            >
-                              <Edit2 size={15} />
-                            </button>
-                            <button
-                              onClick={() => handleDelete(a.id)}
-                              className="p-1.5 text-brand-grey hover:text-red-500 hover:bg-red-50 rounded transition-colors"
-                              id={`del-aff-${a.id}`}
-                              title="Delete"
-                            >
-                              <Trash2 size={15} />
-                            </button>
-                          </div>
-                        </td>
+                        {canManageAffiliates && (
+                          <td className="px-4 py-4 text-right whitespace-nowrap">
+                            <div className="flex items-center gap-1 justify-end">
+                              <button
+                                onClick={() => handleViewOrders(a)}
+                                className="p-1.5 text-brand-grey hover:text-brand-gold hover:bg-brand-light rounded transition-colors"
+                                title="View Orders History"
+                              >
+                                <Eye size={15} />
+                              </button>
+                              <button
+                                onClick={() => openModal(a)}
+                                className="p-1.5 text-brand-grey hover:text-brand-gold hover:bg-brand-light rounded transition-colors"
+                                id={`edit-aff-${a.id}`}
+                                title="Edit"
+                              >
+                                <Edit2 size={15} />
+                              </button>
+                              <button
+                                onClick={() => handleDelete(a.id)}
+                                className="p-1.5 text-brand-grey hover:text-red-500 hover:bg-red-50 rounded transition-colors"
+                                id={`del-aff-${a.id}`}
+                                title="Delete"
+                              >
+                                <Trash2 size={15} />
+                              </button>
+                            </div>
+                          </td>
+                        )}
                       </tr>
                     );
                   })

@@ -121,12 +121,12 @@ const AdminOrderDetailsModal = ({ order, onClose, onStatusUpdate }) => {
           </div>
 
           <div className="flex items-center gap-3">
-            <button
+            {/* <button
               onClick={handlePrintInvoice}
               className="btn-outline flex items-center gap-1 text-xs py-1.5 px-3 rounded hover:bg-neutral-50"
             >
               <FileText size={13} /> Print Invoice
-            </button>
+            </button> */}
 
             <button
               onClick={onClose}
@@ -194,6 +194,7 @@ const AdminOrderDetailsModal = ({ order, onClose, onStatusUpdate }) => {
                               src={item.productImage || item.image || '/placeholder.jpg'}
                               alt={item.productName || item.name}
                               className="w-12 h-14 object-cover rounded border border-neutral-200 flex-shrink-0"
+                              onError={(e) => { e.target.onerror = null; e.target.src = '/placeholder.jpg'; }}
                             />
                             <div>
                               <p className="font-semibold text-neutral-900 text-xs">{item.productName || item.name || 'Product'}</p>

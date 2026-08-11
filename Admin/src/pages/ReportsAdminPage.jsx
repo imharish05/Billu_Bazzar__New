@@ -368,7 +368,7 @@ const ReportsAdminPage = () => {
           <div className="flex items-center gap-2">
             <button
               onClick={loadDynamicData}
-              className="p-2 rounded-lg border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-600 hover:text-brand-gold transition-colors"
+              className="p-2 rounded-lg border border-neutral-300 bg-white text-neutral-600 hover:text-brand-gold transition-colors"
               title="Refresh Data"
             >
               <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
@@ -388,7 +388,7 @@ const ReportsAdminPage = () => {
         </div>
 
         {/* Dynamic Controls Card */}
-        <div className="bg-[#F8F9FA] dark:bg-neutral-900 border border-neutral-200/80 dark:border-neutral-800 rounded-2xl p-5 shadow-sm space-y-4">
+        <div className="bg-[#F8F9FA] border border-neutral-200/80 rounded-2xl p-5 shadow-sm space-y-4">
           
           {/* Top Row: Report Type (Sales, Orders, Customers), Date Range, Category */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -401,7 +401,7 @@ const ReportsAdminPage = () => {
               <select
                 value={reportType}
                 onChange={(e) => setReportType(e.target.value)}
-                className="w-full bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-lg px-3 py-2 text-xs font-medium text-neutral-800 dark:text-neutral-100 focus:ring-2 focus:ring-brand-gold focus:border-brand-gold outline-none transition-all shadow-sm"
+                className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-xs font-medium text-neutral-800 focus:ring-2 focus:ring-brand-gold focus:border-brand-gold outline-none transition-all shadow-sm"
                 id="report-type-select"
               >
                 <option value="sales">Sales</option>
@@ -418,7 +418,7 @@ const ReportsAdminPage = () => {
               <select
                 value={dateRange}
                 onChange={(e) => setDateRange(e.target.value)}
-                className="w-full bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-lg px-3 py-2 text-xs font-medium text-neutral-800 dark:text-neutral-100 focus:ring-2 focus:ring-brand-gold focus:border-brand-gold outline-none transition-all shadow-sm"
+                className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-xs font-medium text-neutral-800 focus:ring-2 focus:ring-brand-gold focus:border-brand-gold outline-none transition-all shadow-sm"
                 id="date-range-select"
               >
                 <option value="All Time">All Time</option>
@@ -438,7 +438,7 @@ const ReportsAdminPage = () => {
                 <select
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
-                  className="w-full bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-lg px-3 py-2 text-xs font-medium text-neutral-800 dark:text-neutral-100 focus:ring-2 focus:ring-brand-gold focus:border-brand-gold outline-none transition-all shadow-sm"
+                  className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-xs font-medium text-neutral-800 focus:ring-2 focus:ring-brand-gold focus:border-brand-gold outline-none transition-all shadow-sm"
                   id="category-select"
                 >
                   <option value="All Categories">All Categories</option>
@@ -457,7 +457,7 @@ const ReportsAdminPage = () => {
                 <select
                   value={selectedOrderStatus}
                   onChange={(e) => setSelectedOrderStatus(e.target.value)}
-                  className="w-full bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-lg px-3 py-2 text-xs font-medium text-neutral-800 dark:text-neutral-100 focus:ring-2 focus:ring-brand-gold focus:border-brand-gold outline-none transition-all shadow-sm"
+                  className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-xs font-medium text-neutral-800 focus:ring-2 focus:ring-brand-gold focus:border-brand-gold outline-none transition-all shadow-sm"
                   id="order-status-select"
                 >
                   <option value="ALL">All Statuses</option>
@@ -477,7 +477,7 @@ const ReportsAdminPage = () => {
 
           {/* Custom Date Pickers */}
           {dateRange === 'Custom' && (
-            <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-neutral-200/60 dark:border-neutral-800">
+            <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-neutral-200/60">
               <div className="flex items-center gap-2 text-xs text-neutral-600">
                 <Calendar size={14} className="text-brand-gold" />
                 <span className="font-semibold text-neutral-700">Start Date:</span>
@@ -511,7 +511,7 @@ const ReportsAdminPage = () => {
                 placeholder="Search items..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-lg pl-9 pr-3 py-1.5 text-xs text-neutral-800 dark:text-neutral-100 placeholder-neutral-400 focus:ring-2 focus:ring-brand-gold focus:border-brand-gold outline-none transition-all"
+                className="w-full bg-white border border-neutral-300 rounded-lg pl-9 pr-3 py-1.5 text-xs text-neutral-800 placeholder-neutral-400 focus:ring-2 focus:ring-brand-gold focus:border-brand-gold outline-none transition-all"
                 id="report-search-input"
               />
               {searchQuery && (
@@ -530,7 +530,7 @@ const ReportsAdminPage = () => {
               <select
                 value={rowsPerPage}
                 onChange={(e) => setRowsPerPage(Number(e.target.value))}
-                className="bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-lg px-2.5 py-1 text-xs font-semibold text-neutral-800 dark:text-neutral-100 focus:ring-2 focus:ring-brand-gold focus:border-brand-gold outline-none"
+                className="bg-white border border-neutral-300 rounded-lg px-2.5 py-1 text-xs font-semibold text-neutral-800 focus:ring-2 focus:ring-brand-gold focus:border-brand-gold outline-none"
                 id="rows-per-page-select"
               >
                 <option value={5}>5</option>
@@ -547,17 +547,17 @@ const ReportsAdminPage = () => {
           {summaryMetrics.map((metric, i) => {
             const Icon = metric.icon || TrendingUp;
             return (
-              <div key={i} className="bg-white dark:bg-neutral-800 rounded-xl p-4 border border-brand-light dark:border-neutral-700 shadow-sm flex flex-col justify-between">
+              <div key={i} className="bg-white rounded-xl p-4 border border-brand-light shadow-sm flex flex-col justify-between">
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-bold uppercase tracking-wider text-brand-grey">
                     {metric.label}
                   </span>
-                  <div className="w-8 h-8 rounded-lg bg-amber-50 dark:bg-neutral-700 flex items-center justify-center text-brand-gold">
+                  <div className="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center text-brand-gold">
                     <Icon size={16} />
                   </div>
                 </div>
                 <div className="flex items-baseline justify-between mt-3">
-                  <span className="font-playfair text-xl font-bold text-neutral-900 dark:text-white">
+                  <span className="font-playfair text-xl font-bold text-neutral-900">
                     {metric.value}
                   </span>
                 </div>
@@ -567,11 +567,11 @@ const ReportsAdminPage = () => {
         </div>
 
         {/* Dynamic Main Data Table Container */}
-        <div className="bg-white dark:bg-neutral-800 rounded-2xl border border-brand-light dark:border-neutral-700 shadow-sm overflow-hidden">
+        <div className="bg-white rounded-2xl border border-brand-light shadow-sm overflow-hidden">
           
           {/* Table Header */}
-          <div className="px-5 py-4 border-b border-brand-light dark:border-neutral-700 flex items-center justify-between">
-            <h3 className="font-playfair text-base font-bold text-neutral-900 dark:text-white capitalize">
+          <div className="px-5 py-4 border-b border-brand-light flex items-center justify-between">
+            <h3 className="font-playfair text-base font-bold text-neutral-900 capitalize">
               {reportType} Report Data
             </h3>
             <span className="text-xs text-brand-grey">
@@ -585,7 +585,7 @@ const ReportsAdminPage = () => {
               
               {/* Table Column Headers */}
               <thead>
-                <tr className="bg-[#F4F6F9] dark:bg-neutral-900 border-b border-brand-light dark:border-neutral-700">
+                <tr className="bg-[#F4F6F9] border-b border-brand-light">
                   {reportType === 'sales' && (
                     <>
                       <th className="px-5 py-3 text-[11px] font-bold uppercase tracking-wider text-brand-grey">Order ID / Date</th>
@@ -625,7 +625,7 @@ const ReportsAdminPage = () => {
               </thead>
 
               {/* Table Body */}
-              <tbody className="divide-y divide-brand-light/60 dark:divide-neutral-700 text-xs">
+              <tbody className="divide-y divide-brand-light/60 text-xs">
                 {paginatedData.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="px-5 py-8 text-center text-brand-grey">
@@ -636,21 +636,21 @@ const ReportsAdminPage = () => {
                   paginatedData.map((row, idx) => (
                     <tr 
                       key={row.id || idx} 
-                      className="hover:bg-amber-50/30 dark:hover:bg-neutral-750 transition-colors"
+                      className="hover:bg-amber-50/30 transition-colors"
                     >
                       {reportType === 'sales' && (
                         <>
-                          <td className="px-5 py-3.5 font-medium text-neutral-900 dark:text-white">
+                          <td className="px-5 py-3.5 font-medium text-neutral-900">
                             <div>{row.id}</div>
                             <div className="text-[10px] text-neutral-400">{row.date}</div>
                           </td>
-                          <td className="px-5 py-3.5 text-neutral-800 dark:text-neutral-200 font-medium">{row.customerName}</td>
-                          <td className="px-5 py-3.5 text-neutral-600 dark:text-neutral-400">{row.itemsCount} items</td>
-                          <td className="px-5 py-3.5 text-neutral-600 dark:text-neutral-400">
+                          <td className="px-5 py-3.5 text-neutral-800 font-medium">{row.customerName}</td>
+                          <td className="px-5 py-3.5 text-neutral-600">{row.itemsCount} items</td>
+                          <td className="px-5 py-3.5 text-neutral-600">
                             {row.currency === 'AED' ? fmtAED(row.gross) : fmtINR(row.gross)}
                           </td>
                           <td className="px-5 py-3.5 text-rose-600 font-medium">-{fmtINR(row.discount)}</td>
-                          <td className="px-5 py-3.5 font-bold text-emerald-700 dark:text-emerald-400">
+                          <td className="px-5 py-3.5 font-bold text-emerald-700">
                             {row.currency === 'AED' ? fmtAED(row.net) : fmtINR(row.net)}
                           </td>
                           <td className="px-5 py-3.5 text-right">
@@ -664,9 +664,9 @@ const ReportsAdminPage = () => {
                       {reportType === 'orders' && (
                         <>
                           <td className="px-5 py-3.5 font-semibold text-brand-gold">{row.orderNumber}</td>
-                          <td className="px-5 py-3.5 font-medium text-neutral-900 dark:text-white">{row.customerName}</td>
+                          <td className="px-5 py-3.5 font-medium text-neutral-900">{row.customerName}</td>
                           <td className="px-5 py-3.5 text-neutral-500">{row.date}</td>
-                          <td className="px-5 py-3.5 font-bold text-neutral-900 dark:text-white">
+                          <td className="px-5 py-3.5 font-bold text-neutral-900">
                             {row.currency === 'AED' ? fmtAED(row.totalAmount) : fmtINR(row.totalAmount)}
                           </td>
                           <td className="px-5 py-3.5 text-neutral-600">{row.paymentMethod}</td>
@@ -686,11 +686,11 @@ const ReportsAdminPage = () => {
 
                       {reportType === 'customers' && (
                         <>
-                          <td className="px-5 py-3.5 font-semibold text-neutral-900 dark:text-white">{row.name}</td>
-                          <td className="px-5 py-3.5 text-neutral-600 dark:text-neutral-400">{row.email}</td>
-                          <td className="px-5 py-3.5 text-neutral-600 dark:text-neutral-400">{row.phone}</td>
-                          <td className="px-5 py-3.5 font-semibold text-neutral-800 dark:text-neutral-200">{row.ordersCount} orders</td>
-                          <td className="px-5 py-3.5 font-bold text-emerald-700 dark:text-emerald-400">{fmtINR(row.totalSpent)}</td>
+                          <td className="px-5 py-3.5 font-semibold text-neutral-900">{row.name}</td>
+                          <td className="px-5 py-3.5 text-neutral-600">{row.email}</td>
+                          <td className="px-5 py-3.5 text-neutral-600">{row.phone}</td>
+                          <td className="px-5 py-3.5 font-semibold text-neutral-800">{row.ordersCount} orders</td>
+                          <td className="px-5 py-3.5 font-bold text-emerald-700">{fmtINR(row.totalSpent)}</td>
                           <td className="px-5 py-3.5 font-bold text-brand-gold">{row.loyaltyPoints} pts</td>
                           <td className="px-5 py-3.5 text-right">
                             <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
@@ -707,7 +707,7 @@ const ReportsAdminPage = () => {
           </div>
 
           {/* Footer Bar: Showing Count & Pagination */}
-          <div className="px-5 py-3.5 border-t border-brand-light dark:border-neutral-700 bg-[#F9FAFB] dark:bg-neutral-900 flex items-center justify-between text-xs text-brand-grey">
+          <div className="px-5 py-3.5 border-t border-brand-light bg-[#F9FAFB] flex items-center justify-between text-xs text-brand-grey">
             <div>
               Showing {totalItems === 0 ? 0 : startIndex + 1}–{Math.min(startIndex + rowsPerPage, totalItems)} of {totalItems} items
             </div>
@@ -716,7 +716,7 @@ const ReportsAdminPage = () => {
               <button
                 onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                 disabled={currentPage === 1}
-                className="px-3 py-1 rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-neutral-50 transition-colors text-neutral-700 dark:text-neutral-200"
+                className="px-3 py-1 rounded-md border border-neutral-300 bg-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-neutral-50 transition-colors text-neutral-700"
                 id="pagination-prev-btn"
               >
                 Prev
@@ -729,7 +729,7 @@ const ReportsAdminPage = () => {
                   className={`w-7 h-7 rounded-md font-medium text-xs transition-colors ${
                     currentPage === pageNumber
                       ? 'bg-neutral-900 text-white font-bold'
-                      : 'border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-700 dark:text-neutral-200 hover:bg-neutral-50'
+                      : 'border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50'
                   }`}
                 >
                   {pageNumber}
@@ -739,7 +739,7 @@ const ReportsAdminPage = () => {
               <button
                 onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                 disabled={currentPage === totalPages || totalPages === 0}
-                className="px-3 py-1 rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-neutral-50 transition-colors text-neutral-700 dark:text-neutral-200"
+                className="px-3 py-1 rounded-md border border-neutral-300 bg-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-neutral-50 transition-colors text-neutral-700"
                 id="pagination-next-btn"
               >
                 Next

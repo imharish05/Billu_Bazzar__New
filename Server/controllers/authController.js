@@ -256,7 +256,21 @@ const adminLogin = async (req, res) => {
     await admin.update({ lastLogin: new Date() });
     const token = signAccessToken({ id: admin.id });
     const refreshToken = signRefreshToken({ id: admin.id });
-    res.json({ success: true, token, refreshToken });
+    
+    let permissions = admin.role?.permissions || {};
+    if (typeof permissions === 'string') {
+      try { permissions = JSON.parse(permissions); } catch (e) { permissions = {}; }
+    }
+
+    const adminData = {
+      id: admin.id,
+      name: admin.name,
+      email: admin.email,
+      role: admin.role?.name || 'Staff User',
+      permissions
+    };
+
+    res.json({ success: true, token, refreshToken, admin: adminData });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -317,7 +331,20 @@ const getMe = async (req, res) => {
       attributes: { exclude: ['password'] }
     });
     if (admin && admin.isActive) {
-      return res.json({ success: true, admin: { id: admin.id, name: admin.name, email: admin.email, role: admin.role?.name } });
+      let permissions = admin.role?.permissions || {};
+      if (typeof permissions === 'string') {
+        try { permissions = JSON.parse(permissions); } catch (e) { permissions = {}; }
+      }
+      return res.json({
+        success: true,
+        admin: {
+          id: admin.id,
+          name: admin.name,
+          email: admin.email,
+          role: admin.role?.name || 'Staff User',
+          permissions
+        }
+      });
     }
 
     return res.status(401).json({ success: false, message: 'User not found or inactive' });

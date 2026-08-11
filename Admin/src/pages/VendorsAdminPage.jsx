@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { useSelector } from 'react-redux';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Edit2, Trash2, X, Store, Star, Mail, Phone, MapPin, UserCheck, FileText, Globe } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
@@ -6,8 +7,14 @@ import Switch from '../components/Switch';
 import { PaginationTop, PaginationBottom } from '../components/Pagination';
 import api from '../services/api';
 import toast from 'react-hot-toast';
+import { checkPermission } from '../utils/rbac';
 
 const VendorsAdminPage = () => {
+  const { admin } = useSelector((s) => s.auth);
+  const canAddVendor = checkPermission(admin, 'add_vendor');
+  const canEditVendor = checkPermission(admin, 'edit_vendor');
+  const canDeleteVendor = checkPermission(admin, 'delete_vendor');
+  const canShowActions = canEditVendor || canDeleteVendor;
   const [vendors, setVendors] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -18,6 +25,8 @@ const VendorsAdminPage = () => {
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleting, setDeleting] = useState(false);
   
   const [form, setForm] = useState({
     name: '',
@@ -161,39 +170,19 @@ const VendorsAdminPage = () => {
     }
   };
 
-  const executeDelete = async (id) => {
+  const confirmDeleteVendor = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
     try {
-      const deleteRes = await api.delete(`/vendors/${id}`);
+      const deleteRes = await api.delete(`/vendors/${deleteTarget.id}`);
       toast.success(deleteRes.data.message || 'Vendor deleted successfully.');
+      setDeleteTarget(null);
       loadVendors();
     } catch (err) {
       toast.error(err.response?.data?.message || err.message || 'Failed to delete vendor');
+    } finally {
+      setDeleting(false);
     }
-  };
-
-  const handleDelete = (id, name) => {
-    toast((t) => (
-      <div className="flex flex-col items-center text-center gap-2 p-1">
-        <p className="text-sm font-semibold text-neutral-800">Confirm Deletion</p>
-        <p className="text-xs text-neutral-600 max-w-xs">
-          Are you sure you want to permanently delete vendor <strong>{name}</strong>?
-        </p>
-        <div className="flex justify-center items-center gap-3 mt-2 w-full">
-          <button
-            onClick={() => { toast.dismiss(t.id); executeDelete(id); }}
-            className="px-3.5 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold uppercase tracking-wider transition-colors rounded shadow-sm"
-          >
-            Yes, Delete
-          </button>
-          <button
-            onClick={() => toast.dismiss(t.id)}
-            className="px-3.5 py-1.5 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 text-xs font-semibold uppercase tracking-wider transition-colors rounded border border-neutral-200"
-          >
-            Cancel
-          </button>
-        </div>
-      </div>
-    ), { duration: 6000, position: 'top-center', style: { minWidth: '350px' } });
   };
 
   return (
@@ -203,9 +192,11 @@ const VendorsAdminPage = () => {
           <h1 className="font-playfair text-2xl font-bold">Procurement Vendors</h1>
           <p className="text-sm text-brand-grey">Internal vendor registry for product sourcing (Hidden from customer store).</p>
         </div>
-        <button onClick={() => openModal()} className="btn-primary flex items-center gap-2" id="add-vendor-btn">
-          <Plus size={16} /> Add Vendor
-        </button>
+        {canAddVendor && (
+          <button onClick={() => openModal()} className="btn-primary flex items-center gap-2" id="add-vendor-btn">
+            <Plus size={16} /> Add Vendor
+          </button>
+        )}
       </div>
 
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">
@@ -226,7 +217,9 @@ const VendorsAdminPage = () => {
           <div className="p-12 text-center">
             <Store size={48} className="mx-auto text-brand-grey/50 mb-3" />
             <p className="font-playfair text-xl text-brand-grey">No vendors registered yet</p>
-            <button onClick={() => openModal()} className="btn-primary mt-4" id="add-first-vendor">Add First Vendor</button>
+            {canAddVendor && (
+              <button onClick={() => openModal()} className="btn-primary mt-4" id="add-first-vendor">Add First Vendor</button>
+            )}
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -239,7 +232,7 @@ const VendorsAdminPage = () => {
                   <th className="px-5 py-3">Contact Details</th>
                   <th className="px-5 py-3">Address Summary</th>
                   <th className="px-5 py-3 w-28">Status</th>
-                  <th className="px-5 py-3 w-28 text-right">Actions</th>
+                  {canShowActions && <th className="px-5 py-3 w-28 text-right">Actions</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-brand-light text-sm">
@@ -295,7 +288,8 @@ const VendorsAdminPage = () => {
                         <div className="flex items-center gap-2">
                           <Switch
                             checked={v.isActive}
-                            onChange={() => handleToggleStatus(v)}
+                            disabled={!canEditVendor}
+                            onChange={() => canEditVendor && handleToggleStatus(v)}
                             id={`toggle-vendor-${v.id}`}
                           />
                           <span className={`text-xs font-semibold ${v.isActive ? 'text-green-700' : 'text-neutral-500'}`}>
@@ -303,16 +297,22 @@ const VendorsAdminPage = () => {
                           </span>
                         </div>
                       </td>
-                      <td className="px-5 py-4 text-right">
-                        <div className="flex justify-end gap-1.5">
-                          <button onClick={() => openModal(v)} className="p-2 text-brand-grey hover:text-brand-gold hover:bg-brand-light/30 rounded transition-colors" id={`edit-vendor-${v.id}`} title="Edit Vendor">
-                            <Edit2 size={14} />
-                          </button>
-                          <button onClick={() => handleDelete(v.id, v.name)} className="p-2 text-brand-grey hover:text-red-500 hover:bg-red-50 rounded transition-colors" id={`del-vendor-${v.id}`} title="Delete Vendor">
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      </td>
+                      {canShowActions && (
+                        <td className="px-5 py-4 text-right">
+                          <div className="flex justify-end gap-1.5">
+                            {canEditVendor && (
+                              <button onClick={() => openModal(v)} className="p-2 text-brand-grey hover:text-brand-gold hover:bg-brand-light/30 rounded transition-colors" id={`edit-vendor-${v.id}`} title="Edit Vendor">
+                                <Edit2 size={14} />
+                              </button>
+                            )}
+                            {canDeleteVendor && (
+                              <button onClick={() => setDeleteTarget(v)} className="p-2 text-brand-grey hover:text-red-500 hover:bg-red-50 rounded transition-colors" id={`del-vendor-${v.id}`} title="Delete Vendor">
+                                <Trash2 size={14} />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   );
                 })}
@@ -411,6 +411,68 @@ const VendorsAdminPage = () => {
                   </button>
                 </div>
               </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Delete Vendor Confirmation Modal */}
+      <AnimatePresence>
+        {deleteTarget && (
+          <div
+            className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
+            onClick={() => !deleting && setDeleteTarget(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden border border-neutral-100"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="p-6 text-center">
+                <div className="w-14 h-14 rounded-full bg-red-50 border border-red-100 text-red-600 flex items-center justify-center mx-auto mb-4 shadow-sm">
+                  <Trash2 size={24} />
+                </div>
+
+                <h3 className="font-playfair text-xl font-bold text-neutral-900 mb-2">
+                  Confirm Vendor Deletion
+                </h3>
+
+                <div className="text-xs text-neutral-600 space-y-2 mb-6 leading-relaxed bg-neutral-50 p-4 rounded-xl border border-neutral-200/80 text-left">
+                  <p>
+                    Are you sure you want to delete vendor <strong className="text-neutral-900">{deleteTarget.name}</strong>?
+                  </p>
+                  {deleteTarget.products && deleteTarget.products.length > 0 ? (
+                    <div className="text-red-700 bg-red-50 border border-red-200 p-3 rounded-lg mt-2 text-[11px] font-medium leading-normal">
+                      ⚠️ <strong>Warning:</strong> Deleting this vendor will also permanently delete <strong>{deleteTarget.products.length} associated product{deleteTarget.products.length === 1 ? '' : 's'}</strong> assigned to them.
+                    </div>
+                  ) : (
+                    <p className="text-neutral-500 italic pt-1.5 border-t border-neutral-200/60">
+                      This vendor currently has no associated products.
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-3 justify-end pt-2 border-t border-neutral-100">
+                  <button
+                    type="button"
+                    disabled={deleting}
+                    onClick={() => setDeleteTarget(null)}
+                    className="flex-1 py-2.5 px-4 bg-white border border-neutral-300 hover:bg-neutral-50 text-neutral-700 text-xs font-semibold rounded-lg transition-all shadow-sm"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={deleting}
+                    onClick={confirmDeleteVendor}
+                    className="flex-1 py-2.5 px-4 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold rounded-lg transition-all shadow-sm flex items-center justify-center gap-1.5"
+                  >
+                    {deleting ? 'Deleting...' : 'Yes, Delete Vendor'}
+                  </button>
+                </div>
+              </div>
             </motion.div>
           </div>
         )}

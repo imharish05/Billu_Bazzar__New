@@ -112,6 +112,7 @@ const OrdersPage = () => {
                       src={firstItem.productImage || firstItem.image || '/placeholder.jpg'}
                       alt={firstItem.productName || firstItem.name || 'Product'}
                       className="w-12 h-12 object-cover rounded border border-neutral-100 flex-shrink-0"
+                      onError={(e) => { e.target.onerror = null; e.target.src = '/placeholder.jpg'; }}
                     />
                     <div className="min-w-0 flex-1">
                       <p className="text-xs font-medium text-neutral-800 truncate">

@@ -224,13 +224,13 @@ const remove = async (req, res) => {
       const { WarehouseStock, CartItem, Wishlist, Review, StockAlert, OrderItem, InventoryMovementLog, ProductVariant } = require('../models');
 
       if (InventoryMovementLog) await InventoryMovementLog.destroy({ where: { productId: productIds }, transaction });
+      await OrderItem.update({ productId: null }, { where: { productId: productIds }, transaction });
       if (ProductVariant) await ProductVariant.destroy({ where: { productId: productIds }, transaction });
       await WarehouseStock.destroy({ where: { productId: productIds }, transaction });
       await CartItem.destroy({ where: { productId: productIds }, transaction });
       await Wishlist.destroy({ where: { productId: productIds }, transaction });
       await Review.destroy({ where: { productId: productIds }, transaction });
       await StockAlert.destroy({ where: { productId: productIds }, transaction });
-      await OrderItem.destroy({ where: { productId: productIds }, transaction });
 
       await Product.destroy({ where: { id: productIds }, transaction });
     }

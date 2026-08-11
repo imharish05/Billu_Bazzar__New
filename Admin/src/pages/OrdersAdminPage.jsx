@@ -8,6 +8,7 @@ import { PaginationTop, PaginationBottom } from '../components/Pagination';
 import { fetchAdminOrders, updateOrderStatus } from '../redux/slices/ordersSlice';
 import currencyJs from 'currency.js';
 import { toast } from 'react-hot-toast';
+import { checkPermission } from '../utils/rbac';
 
 const fmt = (v) => currencyJs(v, { symbol: '₹', precision: 0 }).format();
 
@@ -43,6 +44,9 @@ const OrdersAdminPage = () => {
   const dispatch = useDispatch();
   const [searchParams, setSearchParams] = useSearchParams();
   const { items: orders, loading, total, totalPages } = useSelector(s => s.orders);
+  const { admin } = useSelector(s => s.auth);
+  const canUpdateOrder = checkPermission(admin, 'update_orders');
+
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
@@ -71,7 +75,7 @@ const OrdersAdminPage = () => {
 
   const handleStatusUpdate = async (id, status) => {
     try {
-      const updatedOrder = await dispatch(updateOrderStatus({ id, status })).unwrap();
+      await dispatch(updateOrderStatus({ id, status })).unwrap();
       toast.success(`Order status updated to ${status}`);
     } catch (err) {
       toast.error(err || 'Failed to update order status');
@@ -83,6 +87,10 @@ const OrdersAdminPage = () => {
     : (activeStatus === 'PENDING' 
         ? orders.filter(o => o.status === 'PENDING' || o.status === 'PAID' || o.status === 'CONFIRMED' || o.status === 'PROCESSING') 
         : orders.filter(o => o.status === activeStatus));
+
+  const orderHeaders = ['Order #', 'Customer', 'Items', 'Amount', 'Payment'];
+  if (canUpdateOrder) orderHeaders.push('Status');
+  orderHeaders.push('Date', 'Actions');
 
   return (
     <AdminLayout title="Orders">
@@ -117,7 +125,7 @@ const OrdersAdminPage = () => {
           <table className="w-full text-sm" aria-label="Orders table">
             <thead>
               <tr className="bg-brand-light/40 text-left">
-                {['Order #', 'Customer', 'Items', 'Amount', 'Payment', 'Status', 'Date', 'Actions'].map(h => (
+                {orderHeaders.map(h => (
                   <th key={h} className="px-4 py-3 text-xs font-semibold text-brand-grey uppercase tracking-wider">{h}</th>
                 ))}
               </tr>
@@ -126,7 +134,7 @@ const OrdersAdminPage = () => {
               {loading ? (
                 [...Array(8)].map((_, i) => (
                   <tr key={i} className="border-b border-brand-light">
-                    {[...Array(8)].map((_, j) => <td key={j} className="px-4 py-3"><div className="skeleton h-4 w-16" /></td>)}
+                    {[...Array(orderHeaders.length)].map((_, j) => <td key={j} className="px-4 py-3"><div className="skeleton h-4 w-16" /></td>)}
                   </tr>
                 ))
               ) : filtered.map(order => (
@@ -146,19 +154,21 @@ const OrdersAdminPage = () => {
                   </td>
                   <td className="px-4 py-3 font-semibold">{fmt(order.totalAmount)}</td>
                   <td className="px-4 py-3"><span className={`text-xs px-2 py-0.5 rounded-full ${PAY_COLORS[order.paymentStatus] || 'bg-gray-100'}`}>{order.paymentStatus}</span></td>
-                  <td className="px-4 py-3">
-                    <select
-                      value={order.status}
-                      onChange={e => handleStatusUpdate(order.id, e.target.value)}
-                      className={`text-xs px-2 py-1 rounded-full border-0 cursor-pointer focus:outline-none ${STATUS_COLORS[order.status] || 'bg-gray-100'}`}
-                      id={`status-${order.id}`}
-                      aria-label="Order status"
-                    >
-                      {['PENDING','CONFIRMED','PROCESSING','SHIPPED','OUT_FOR_DELIVERY','DELIVERED','CANCELLED','RETURNED'].map(s => (
-                        <option key={s} value={s}>{STATUS_LABELS[s] || s}</option>
-                      ))}
-                    </select>
-                  </td>
+                  {canUpdateOrder && (
+                    <td className="px-4 py-3">
+                      <select
+                        value={order.status}
+                        onChange={e => handleStatusUpdate(order.id, e.target.value)}
+                        className={`text-xs px-2 py-1 rounded-full border-0 cursor-pointer focus:outline-none ${STATUS_COLORS[order.status] || 'bg-gray-100'}`}
+                        id={`status-${order.id}`}
+                        aria-label="Order status"
+                      >
+                        {['PENDING','CONFIRMED','PROCESSING','SHIPPED','OUT_FOR_DELIVERY','DELIVERED','CANCELLED','RETURNED'].map(s => (
+                          <option key={s} value={s}>{STATUS_LABELS[s] || s}</option>
+                        ))}
+                      </select>
+                    </td>
+                  )}
                   <td className="px-4 py-3 text-brand-grey text-xs">{new Date(order.createdAt).toLocaleDateString('en-IN')}</td>
                   <td className="px-4 py-3">
                     <button

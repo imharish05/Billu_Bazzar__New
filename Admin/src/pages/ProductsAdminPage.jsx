@@ -9,6 +9,7 @@ import { fetchAdminProducts, createProduct, updateProduct, deleteProduct } from 
 import currencyJs from 'currency.js';
 import toast from 'react-hot-toast';
 import api from '../services/api';
+import { checkPermission } from '../utils/rbac';
 
 const fmt = (v) => currencyJs(v, { symbol: '₹', precision: 0 }).format();
 
@@ -2230,13 +2231,24 @@ const ProductsAdminPage = () => {
     });
   };
 
+  const { admin } = useSelector((s) => s.auth);
+  const canAddProduct = checkPermission(admin, 'add_product');
+  const canEditProduct = checkPermission(admin, 'edit_product');
+  const canDeleteProduct = checkPermission(admin, 'delete_product');
+  const canShowActions = canEditProduct || canDeleteProduct;
+
+  const tableHeaders = ['Image', 'Name', 'Category', 'Price', 'Stock', 'Vendor', 'Warehouse', 'Status'];
+  if (canShowActions) tableHeaders.push('Actions');
+
   return (
     <AdminLayout title="Products">
-      <div className="mb-6 flex justify-end">
-        <button onClick={() => { setEditing(null); setModalOpen(true); }} className="btn-primary flex items-center gap-2 whitespace-nowrap" id="add-product-btn">
-          <Plus size={16} /> Add Product
-        </button>
-      </div>
+      {canAddProduct && (
+        <div className="mb-6 flex justify-end">
+          <button onClick={() => { setEditing(null); setModalOpen(true); }} className="btn-primary flex items-center gap-2 whitespace-nowrap" id="add-product-btn">
+            <Plus size={16} /> Add Product
+          </button>
+        </div>
+      )}
 
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">
         <PaginationTop
@@ -2252,7 +2264,7 @@ const ProductsAdminPage = () => {
           <table className="w-full text-sm" aria-label="Products table">
             <thead>
               <tr className="bg-brand-light/40 text-left">
-                {['Image', 'Name', 'Category', 'Price', 'Stock', 'Vendor', 'Warehouse', 'Status', 'Actions'].map(h => (
+                {tableHeaders.map(h => (
                   <th key={h} className="px-4 py-3 text-xs font-semibold text-brand-grey uppercase tracking-wider">{h}</th>
                 ))}
               </tr>
@@ -2261,8 +2273,7 @@ const ProductsAdminPage = () => {
               {loading ? (
                 [...Array(8)].map((_, i) => (
                   <tr key={i} className="border-b border-brand-light">
-                    {[...Array(9)].map((_, j) => <td key={j} className="px-4 py-3"><div className="skeleton h-4 w-16" /></td>)}
-
+                    {[...Array(tableHeaders.length)].map((_, j) => <td key={j} className="px-4 py-3"><div className="skeleton h-4 w-16" /></td>)}
                   </tr>
                 ))
               ) : items.map(product => (
@@ -2270,42 +2281,28 @@ const ProductsAdminPage = () => {
                   <td className="px-4 py-3">
                     <img src={product.defaultProductImage || product.images?.[0] || product.variants?.[0]?.image || 'https://images.unsplash.com/photo-1469334031218-e382a71b716b?w=80'} alt={product.name} className="w-10 h-12 object-cover rounded" />
                   </td>
-                  <td className="px-4 py-3">
-                    <p className="font-medium line-clamp-1">{product.name}</p>
-                    <p className="text-xs text-brand-grey">{product.sku}</p>
-                  </td>
-                  <td className="px-4 py-3 text-brand-grey">
-                    <div className="text-xs space-y-0.5">
-                      <span className="font-medium text-brand-text block">{product.category?.name || '—'}</span>
-                      {product.subcategory && (
-                        <span className="text-[10px] text-brand-grey block">› {product.subcategory.name}</span>
-                      )}
-                      {product.subsubcategory && (
-                        <span className="text-[9px] text-brand-gold block">» {product.subsubcategory.name}</span>
-                      )}
-                    </div>
-                  </td>
+                  <td className="px-4 py-3 font-medium text-brand-text max-w-xs truncate" title={product.name}>{product.name}</td>
+                  <td className="px-4 py-3 text-brand-grey">{product.category?.name || '—'}</td>
                   <td className="px-4 py-3 font-semibold">{fmt(product.price)}</td>
                   <td className="px-4 py-3">
-                    <span className={`text-xs font-medium ${product.stock <= 5 ? 'text-red-500' : 'text-green-600'}`}>{product.stock}</span>
+                    <span className={`font-semibold ${product.stock > 0 ? 'text-green-600' : 'text-red-500'}`}>
+                      {product.stock > 0 ? `${product.stock} in stock` : 'Out of stock'}
+                    </span>
                   </td>
-                  {/* Vendor */}
-                  <td className="px-4 py-3">
-                    {product.vendor ? (
-                      <div className="flex items-center gap-1.5">
-                        {product.vendor.logo && (
-                          <img src={product.vendor.logo} alt={product.vendor.name} className="w-5 h-5 rounded-full object-cover" />
-                        )}
-                        <span className="text-xs font-medium text-brand-text truncate max-w-[80px]">{product.vendor.name}</span>
-                      </div>
+                  <td className="px-4 py-3 text-brand-grey">
+                    {product.vendor?.storeName || product.vendor?.name ? (
+                      <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-900 border border-amber-200/60 text-xs px-2 py-0.5 rounded font-medium">
+                        {product.vendor?.storeName || product.vendor?.name}
+                      </span>
                     ) : (
                       <span className="text-xs text-brand-grey">—</span>
                     )}
                   </td>
-                  {/* Warehouse */}
-                  <td className="px-4 py-3">
-                    {product.warehouse ? (
-                      <span className="text-xs px-2 py-0.5 rounded bg-blue-50 text-blue-700 font-medium">{product.warehouse.name}</span>
+                  <td className="px-4 py-3 text-brand-grey">
+                    {product.warehouse?.name ? (
+                      <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-900 border border-blue-200/60 text-xs px-2 py-0.5 rounded font-medium">
+                        {product.warehouse?.name}
+                      </span>
                     ) : (
                       <span className="text-xs text-brand-grey">—</span>
                     )}
@@ -2315,16 +2312,22 @@ const ProductsAdminPage = () => {
                       {product.isActive ? 'Active' : 'Inactive'}
                     </span>
                   </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-1.5">
-                      <button onClick={() => { setEditing(product); setModalOpen(true); }} className="p-1.5 text-brand-grey hover:text-brand-gold transition-colors" title="Edit">
-                        <Edit2 size={14} />
-                      </button>
-                      <button onClick={() => handleDelete(product.id)} className="p-1.5 text-brand-grey hover:text-red-400 transition-colors" title="Delete">
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </td>
+                  {canShowActions && (
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1.5">
+                        {canEditProduct && (
+                          <button onClick={() => { setEditing(product); setModalOpen(true); }} className="p-1.5 text-brand-grey hover:text-brand-gold transition-colors" title="Edit">
+                            <Edit2 size={14} />
+                          </button>
+                        )}
+                        {canDeleteProduct && (
+                          <button onClick={() => handleDelete(product.id)} className="p-1.5 text-brand-grey hover:text-red-400 transition-colors" title="Delete">
+                            <Trash2 size={14} />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>

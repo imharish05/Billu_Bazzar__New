@@ -299,31 +299,35 @@ const clearCart = async (req, res) => {
 };
 
 const syncCart = async (req, res) => {
-  console.log('[syncCart] --- Cart Sync Triggered ---');
-  console.log('[syncCart] Incoming items payload:', JSON.stringify(req.body.items));
-  console.log('[syncCart] Customer authenticated:', req.customer ? `Yes (ID: ${req.customer.id})` : 'No (Guest)');
-  console.log('[syncCart] Header x-session-id:', req.headers['x-session-id']);
   try {
     const { items } = req.body;
     if (!Array.isArray(items)) {
-      console.log('[syncCart] Sync rejected: items is not an array');
       return res.status(400).json({ success: false, message: 'Items must be an array' });
     }
     if (items.length === 0) {
-      console.log('[syncCart] Sync rejected: items array is empty');
       return res.status(400).json({ success: false, message: 'Cannot sync an empty cart' });
     }
+
+    const productIds = [...new Set(items.map(i => parseInt(i.productId, 10)).filter(id => !isNaN(id)))];
+    const variantIds = [...new Set(items.map(i => i.variantId ? parseInt(i.variantId, 10) : null).filter(Boolean))];
+
+    const [products, variants] = await Promise.all([
+      Product.findAll({ where: { id: productIds } }),
+      variantIds.length > 0 ? ProductVariant.findAll({ where: { id: variantIds } }) : []
+    ]);
+
+    const productMap = new Map(products.map(p => [p.id, p]));
+    const variantMap = new Map(variants.map(v => [v.id, v]));
 
     // Guard: Prevent mixed currency syncs
     let activeCurrency = null;
     for (const item of items) {
-      const p = await Product.findByPk(item.productId);
+      const p = productMap.get(parseInt(item.productId, 10));
       if (p && p.isActive) {
         const itemCurrency = p.currency || 'INR';
         if (!activeCurrency) {
           activeCurrency = itemCurrency;
         } else if (activeCurrency !== itemCurrency) {
-          console.log(`[syncCart] Sync rejected: Mixed currencies detected (${activeCurrency} and ${itemCurrency})`);
           return res.status(400).json({
             success: false,
             message: `Mixed currency carts are not allowed. You cannot sync a cart containing both INR and AED items.`
@@ -333,12 +337,11 @@ const syncCart = async (req, res) => {
     }
 
     const cart = await getOrCreateCart(req);
-    console.log(`[syncCart] Resolved Cart ID: ${cart.id}, sessionId: ${cart.sessionId}`);
 
     // Delete existing cart items to replace them with the current client cart snapshot
-    const deletedCount = await CartItem.destroy({ where: { cartId: cart.id } });
-    console.log(`[syncCart] Wiped ${deletedCount} existing CartItems from Cart ID ${cart.id}`);
+    await CartItem.destroy({ where: { cartId: cart.id } });
 
+    const itemsToCreate = [];
     const auditedItems = [];
     const adjustments = [];
 
@@ -347,24 +350,13 @@ const syncCart = async (req, res) => {
       const variantId = item.variantId ? parseInt(item.variantId, 10) : null;
       let quantity = parseInt(item.quantity, 10);
 
-      if (isNaN(productId) || isNaN(quantity) || quantity <= 0) {
-        console.log(`[syncCart] Skipped item due to invalid productId (${productId}) or quantity (${quantity})`);
-        continue;
-      }
+      if (isNaN(productId) || isNaN(quantity) || quantity <= 0) continue;
 
-      const product = await Product.findByPk(productId);
-      if (!product) {
-        console.log(`[syncCart] Skipped item: Product ID ${productId} not found in database`);
+      const product = productMap.get(productId);
+      if (!product || !product.isActive) {
         adjustments.push({ productId, message: `Product is unavailable.` });
         continue;
       }
-      if (!product.isActive) {
-        console.log(`[syncCart] Skipped item: Product ID ${productId} ("${product.name}") is inactive`);
-        adjustments.push({ productId, message: `Product is unavailable.` });
-        continue;
-      }
-
-      console.log(`[syncCart] Processing item Product ID ${productId} ("${product.name}"), currency: ${product.currency}`);
 
       let physicalStock = 0;
       let selectedVariantJson = item.selectedVariant || {};
@@ -372,8 +364,8 @@ const syncCart = async (req, res) => {
       let variant = null;
 
       if (variantId) {
-        variant = await ProductVariant.findOne({ where: { id: variantId, productId } });
-        if (variant) {
+        variant = variantMap.get(variantId);
+        if (variant && variant.productId === productId) {
           physicalStock = variant.stock;
           selectedVariantJson = variant.attributes;
           if (variant.price) itemPrice = variant.price;
@@ -397,7 +389,7 @@ const syncCart = async (req, res) => {
       }
 
       if (quantity > 0) {
-        const createdItem = await CartItem.create({
+        itemsToCreate.push({
           cartId: cart.id,
           productId,
           variantId,
@@ -405,12 +397,15 @@ const syncCart = async (req, res) => {
           priceAtAdd: itemPrice,
           selectedVariant: selectedVariantJson
         });
-        console.log(`[syncCart] Saved CartItem ID: ${createdItem.id} (Product ID ${productId}) to Cart ID ${cart.id}`);
-        
+
         const liveGstRate = (variantId && variant ? variant.gstRate : null) ?? product.gstRate ?? '0%';
 
         auditedItems.push({
-          ...createdItem.toJSON(),
+          productId,
+          variantId,
+          quantity,
+          priceAtAdd: itemPrice,
+          selectedVariant: selectedVariantJson,
           product: {
             id: product.id,
             name: product.name,
@@ -435,7 +430,15 @@ const syncCart = async (req, res) => {
       }
     }
 
-    // Recalculate subtotal
+    if (itemsToCreate.length > 0) {
+      const createdRecords = await CartItem.bulkCreate(itemsToCreate, { returning: true });
+      createdRecords.forEach((rec, idx) => {
+        if (auditedItems[idx]) {
+          auditedItems[idx].id = rec.id;
+        }
+      });
+    }
+
     const subtotal = auditedItems.reduce((sum, item) => sum + (parseFloat(item.priceAtAdd) * item.quantity), 0);
 
     res.json({
@@ -474,7 +477,8 @@ const getAbandonedCarts = async (req, res) => {
           attributes: ['id', 'name', 'email', 'phone']
         }
       ],
-      order: [['updatedAt', 'DESC']]
+      order: [['updatedAt', 'DESC']],
+      limit: 100
     });
 
     res.json({ success: true, carts });

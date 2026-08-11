@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useSearchParams, Link, useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { SlidersHorizontal, ChevronDown, Grid2X2, List, X } from 'lucide-react';
+import { SlidersHorizontal, ChevronDown, Grid2X2, List, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { fetchProducts } from '../redux/slices/productsSlice';
 import { fetchCategories } from '../redux/slices/categoriesSlice';
 import ProductCard from '../components/ProductCard';
@@ -492,17 +492,42 @@ const ProductListingPage = () => {
 
                 {/* Pagination */}
                 {totalPages > 1 && (
-                  <div className="flex justify-center gap-2 mt-12">
+                  <div className="flex items-center justify-center gap-2 mt-12" aria-label="Pagination Navigation">
+                    {/* Previous Page Button */}
+                    <button
+                      type="button"
+                      onClick={() => setFilters(prev => ({ ...prev, page: Math.max(1, prev.page - 1) }))}
+                      disabled={filters.page <= 1}
+                      className="w-10 h-10 flex items-center justify-center font-medium text-sm transition-all border border-brand-light text-brand-grey hover:border-brand-gold hover:text-brand-gold disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-brand-light disabled:hover:text-brand-grey"
+                      aria-label="Previous page"
+                      id="pagination-prev"
+                    >
+                      <ChevronLeft size={18} />
+                    </button>
+
+                    {/* Page Numbers */}
                     {[...Array(totalPages)].map((_, i) => (
                       <button
                         key={i}
                         onClick={() => setFilters(prev => ({ ...prev, page: i + 1 }))}
-                        className={`w-10 h-10 font-medium text-sm transition-all ${filters.page === i + 1 ? 'bg-brand-text text-white' : 'border border-brand-light text-brand-grey hover:border-brand-gold hover:text-brand-gold'}`}
+                        className={`w-10 h-10 flex items-center justify-center font-medium text-sm transition-all ${filters.page === i + 1 ? 'bg-brand-text text-white' : 'border border-brand-light text-brand-grey hover:border-brand-gold hover:text-brand-gold'}`}
                         id={`page-${i+1}`}
                       >
                         {i + 1}
                       </button>
                     ))}
+
+                    {/* Next Page Button */}
+                    <button
+                      type="button"
+                      onClick={() => setFilters(prev => ({ ...prev, page: Math.min(totalPages, prev.page + 1) }))}
+                      disabled={filters.page >= totalPages}
+                      className="w-10 h-10 flex items-center justify-center font-medium text-sm transition-all border border-brand-light text-brand-grey hover:border-brand-gold hover:text-brand-gold disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-brand-light disabled:hover:text-brand-grey"
+                      aria-label="Next page"
+                      id="pagination-next"
+                    >
+                      <ChevronRight size={18} />
+                    </button>
                   </div>
                 )}
               </>

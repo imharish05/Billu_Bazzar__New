@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
+import { useSelector } from 'react-redux';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Edit2, Trash2, X } from 'lucide-react';
 import {
@@ -20,8 +21,14 @@ import SortableRow from '../components/SortableRow';
 import { PaginationTop, PaginationBottom } from '../components/Pagination';
 import api from '../services/api';
 import toast from 'react-hot-toast';
+import { checkPermission } from '../utils/rbac';
 
 const SubCategoriesAdminPage = () => {
+  const { admin } = useSelector((s) => s.auth);
+  const canAddSubCategory = checkPermission(admin, 'add_sub_category');
+  const canEditSubCategory = checkPermission(admin, 'edit_sub_category');
+  const canDeleteCategory = checkPermission(admin, 'delete_category');
+  const canShowActions = canEditSubCategory || canDeleteCategory;
   const [parentCategories, setParentCategories] = useState([]);
   const [subCategories, setSubCategories] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -185,9 +192,11 @@ const SubCategoriesAdminPage = () => {
     <AdminLayout title="Sub-categories">
       <div className="flex justify-between items-center mb-6">
         <p className="text-sm text-brand-grey">{subCategories.length} sub-categories · drag rows to reorder</p>
-        <button onClick={() => openModal()} className="btn-primary flex items-center gap-2" id="add-subcat-btn" disabled={parentCategories.length === 0}>
-          <Plus size={16} /> Add Sub-category
-        </button>
+        {canAddSubCategory && (
+          <button onClick={() => openModal()} className="btn-primary flex items-center gap-2" id="add-subcat-btn" disabled={parentCategories.length === 0}>
+            <Plus size={16} /> Add Sub-category
+          </button>
+        )}
       </div>
 
       {parentCategories.length === 0 && !loading && (
@@ -213,7 +222,9 @@ const SubCategoriesAdminPage = () => {
         ) : subCategories.length === 0 ? (
           <div className="p-12 text-center">
             <p className="font-playfair text-xl text-brand-grey">No sub-categories yet</p>
-            <button onClick={() => openModal()} className="btn-primary mt-4" id="add-first-subcat" disabled={parentCategories.length === 0}>Add First Sub-category</button>
+            {canAddSubCategory && (
+              <button onClick={() => openModal()} className="btn-primary mt-4" id="add-first-subcat" disabled={parentCategories.length === 0}>Add First Sub-category</button>
+            )}
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -232,7 +243,7 @@ const SubCategoriesAdminPage = () => {
                     <th className="px-5 py-3">Category Name</th>
                     <th className="px-5 py-3">Sub-category Name</th>
                     <th className="px-5 py-3 w-32">Status</th>
-                    <th className="px-5 py-3 w-28 text-right">Actions</th>
+                    {canShowActions && <th className="px-5 py-3 w-28 text-right">Actions</th>}
                   </tr>
                 </thead>
                 <SortableContext
@@ -256,16 +267,22 @@ const SubCategoriesAdminPage = () => {
                             {sub.isActive ? 'Active' : 'Inactive'}
                           </span>
                         </td>
-                        <td className="px-5 py-4 text-right">
-                          <div className="flex justify-end gap-1.5">
-                            <button onClick={() => openModal(sub)} className="p-2 text-brand-grey hover:text-brand-gold hover:bg-brand-light/30 rounded transition-colors" id={`edit-sub-${sub.id}`} title="Edit">
-                              <Edit2 size={14} />
-                            </button>
-                            <button onClick={() => handleDelete(sub.id)} className="p-2 text-brand-grey hover:text-red-500 hover:bg-red-50 rounded transition-colors" id={`del-sub-${sub.id}`} title="Delete">
-                              <Trash2 size={14} />
-                            </button>
-                          </div>
-                        </td>
+                        {canShowActions && (
+                          <td className="px-5 py-4 text-right">
+                            <div className="flex justify-end gap-1.5">
+                              {canEditSubCategory && (
+                                <button onClick={() => openModal(sub)} className="p-2 text-brand-grey hover:text-brand-gold hover:bg-brand-light/30 rounded transition-colors" id={`edit-sub-${sub.id}`} title="Edit">
+                                  <Edit2 size={14} />
+                                </button>
+                              )}
+                              {canDeleteCategory && (
+                                <button onClick={() => handleDelete(sub.id)} className="p-2 text-brand-grey hover:text-red-500 hover:bg-red-50 rounded transition-colors" id={`del-sub-${sub.id}`} title="Delete">
+                                  <Trash2 size={14} />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        )}
                       </SortableRow>
                     ))}
                   </tbody>

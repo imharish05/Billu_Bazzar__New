@@ -104,6 +104,10 @@ const create = async (req, res) => {
       }
     }
     if (req.file) {
+      if (req.file.size > 5 * 1024 * 1024) {
+        try { fs.unlinkSync(req.file.path); } catch (e) {}
+        return res.status(400).json({ success: false, message: 'Image file size exceeds 5MB limit.' });
+      }
       const normalizedPath = req.file.path.replace(/\\/g, '/');
       const uploadsIndex = normalizedPath.indexOf('uploads');
       data.image = '/' + normalizedPath.substring(uploadsIndex);
@@ -144,6 +148,10 @@ const update = async (req, res) => {
       }
     }
     if (req.file) {
+      if (req.file.size > 5 * 1024 * 1024) {
+        try { fs.unlinkSync(req.file.path); } catch (e) {}
+        return res.status(400).json({ success: false, message: 'Image file size exceeds 5MB limit.' });
+      }
       deleteLocalFile(banner.image);
       const normalizedPath = req.file.path.replace(/\\/g, '/');
       const uploadsIndex = normalizedPath.indexOf('uploads');

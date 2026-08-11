@@ -6,12 +6,13 @@ import {
   LayoutDashboard, Package, Tag, ShoppingBag, Users, Image, Ticket,
   Warehouse, UserCheck, BarChart3, Settings, LogOut, Menu, X,
   Store, CreditCard, Gift, MessageSquare, Globe, Bell, ShoppingCart, Star, Trash2,
-  ChevronDown, ChevronRight, Truck, XCircle, MapPin, Mail
+  ChevronDown, ChevronRight, Truck, XCircle, MapPin, Mail, ShieldCheck
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Logo from './Logo';
 import { logout } from '../redux/slices/authSlice';
 import api from '../services/api';
+import { checkPermission } from '../utils/rbac';
 
 const playNewOrderChime = () => {
   try {
@@ -185,13 +186,71 @@ const NAV_SECTIONS = [
     ],
   },
   {
-    heading: null,
+    heading: 'SETTINGS',
     items: [
       { to: '/site-settings', label: 'Site Settings', icon: Globe },
+      { to: '/roles', label: 'Roles & Permissions', icon: ShieldCheck },
+      { to: '/admin-users', label: 'Admin Users', icon: Users },
       { to: '/settings', label: 'Settings', icon: Settings },
     ],
   },
 ];
+
+const canAccessNav = (adminObj, path) => {
+  if (!adminObj) return true;
+
+  let roleName = '';
+  if (typeof adminObj.role === 'string') {
+    roleName = adminObj.role;
+  } else if (adminObj.role && typeof adminObj.role === 'object' && adminObj.role.name) {
+    roleName = adminObj.role.name;
+  } else if (adminObj.roleName) {
+    roleName = adminObj.roleName;
+  }
+
+  const normalizedRole = String(roleName).toLowerCase().replace(/[\s_-]/g, '');
+
+  if (
+    normalizedRole === 'superadmin' || 
+    normalizedRole === 'admin' || 
+    normalizedRole === 'systemadmin' || 
+    adminObj.permissions?.all === true ||
+    (adminObj.role && typeof adminObj.role === 'object' && adminObj.role.permissions?.all === true)
+  ) {
+    return true;
+  }
+  const perms = adminObj.permissions || (adminObj.role && typeof adminObj.role === 'object' ? adminObj.role.permissions : {}) || {};
+  switch (path) {
+    case '/dashboard': return true;
+    case '/products':
+    case '/variants': return !!perms.view_products || !!perms.products?.read;
+    case '/stock-alerts': return !!perms.view_stock_alerts || !!perms.view_products || !!perms.products?.read;
+    case '/reviews': return !!perms.view_reviews || !!perms.view_products || !!perms.products?.read;
+    case '/categories':
+    case '/sub-categories':
+    case '/sub-sub-categories': return !!perms.view_categories || !!perms.categories?.read;
+    case '/orders':
+    case '/abandoned-carts': return !!perms.view_orders || !!perms.orders?.read;
+    case '/coupons': return !!perms.view_coupons || !!perms.coupons?.read;
+    case '/banners':
+    case '/slider-messages': return !!perms.view_banners || !!perms.banners?.read;
+    case '/vendors': return !!perms.view_vendors || !!perms.vendors?.read;
+    case '/warehouses': return !!perms.view_warehouses || !!perms.warehouses?.read || !!perms.inventory?.read;
+    case '/delivery-zones': return !!perms.view_delivery_zones || !!perms.view_warehouses || !!perms.warehouses?.read;
+    case '/gift-services': return !!perms.view_gift_services || !!perms.view_coupons;
+    case '/affiliates': return !!perms.manage_affiliates || !!perms.view_coupons;
+    case '/loyalty': return !!perms.manage_loyalty || !!perms.view_coupons;
+    case '/customers':
+    case '/contact-enquiries': return !!perms.view_customers || !!perms.customers?.read;
+    case '/payments': return !!perms.view_payments || !!perms.payments?.read;
+    case '/reports': return !!perms.view_reports || !!perms.reports?.read;
+    case '/roles': return !!perms.manage_roles || !!perms.settings?.update;
+    case '/admin-users': return !!perms.manage_admin_users || !!perms.settings?.update;
+    case '/site-settings':
+    case '/settings': return !!perms.view_site_settings || !!perms.edit_site_settings || !!perms.settings?.read;
+    default: return true;
+  }
+};
 
 const AdminLayout = ({ children, title = '' }) => {
   const dispatch = useDispatch();
@@ -246,6 +305,7 @@ const AdminLayout = ({ children, title = '' }) => {
   }, []);
 
   const loadOrderCounts = useCallback(async () => {
+    if (!checkPermission(admin, 'view_orders')) return;
     try {
       const res = await api.get('/orders/status-counts');
       if (res.data.success) {
@@ -254,9 +314,10 @@ const AdminLayout = ({ children, title = '' }) => {
     } catch (err) {
       console.error('Failed to load order status counts:', err);
     }
-  }, []);
+  }, [admin]);
 
   const checkNewOrders = useCallback(async () => {
+    if (!checkPermission(admin, 'view_orders')) return;
     try {
       const res = await api.get('/orders?limit=10');
       if (res.data.success && Array.isArray(res.data.orders) && res.data.orders.length > 0) {
@@ -311,12 +372,6 @@ const AdminLayout = ({ children, title = '' }) => {
     loadOrderCounts();
     checkNewOrders();
 
-    // Poll every 8 seconds for real-time new order notifications
-    const interval = setInterval(() => {
-      checkNewOrders();
-      loadNotifications();
-    }, 8000);
-
     const handleOrderStatusChange = () => {
       loadOrderCounts();
       checkNewOrders();
@@ -325,7 +380,6 @@ const AdminLayout = ({ children, title = '' }) => {
 
     window.addEventListener('adminOrderStatusChanged', handleOrderStatusChange);
     return () => {
-      clearInterval(interval);
       window.removeEventListener('adminOrderStatusChanged', handleOrderStatusChange);
     };
   }, [loadNotifications, loadOrderCounts, checkNewOrders]);
@@ -398,15 +452,19 @@ const AdminLayout = ({ children, title = '' }) => {
 
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto py-4 px-2" aria-label="Admin navigation">
-        {NAV_SECTIONS.map((section, si) => (
-          <div key={si}>
-            {section.heading && (
-              <p className="px-3 py-2 text-[10px] font-bold text-brand-grey uppercase tracking-[0.15em]">
-                {section.heading}
-              </p>
-            )}
-            {section.items.map((item) => {
-              if (item.isAccordion) {
+        {NAV_SECTIONS.map((section, si) => {
+          const visibleItems = section.items.filter(item => item.isAccordion ? canAccessNav(admin, '/orders') : canAccessNav(admin, item.to));
+          if (visibleItems.length === 0) return null;
+
+          return (
+            <div key={si}>
+              {section.heading && (
+                <p className="px-3 py-2 text-[10px] font-bold text-brand-grey uppercase tracking-[0.15em]">
+                  {section.heading}
+                </p>
+              )}
+              {visibleItems.map((item) => {
+                if (item.isAccordion) {
                 return (
                   <div key={item.label} className="mb-0.5">
                     {/* Orders Parent Toggle */}
@@ -501,7 +559,8 @@ const AdminLayout = ({ children, title = '' }) => {
               );
             })}
           </div>
-        ))}
+        );
+      })}
       </nav>
 
       {/* Bottom user section */}

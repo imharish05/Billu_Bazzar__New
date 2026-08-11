@@ -40,6 +40,7 @@ router.post('/verify-checkout-otp', authLimiter, verifyCheckoutOtp);
 router.post('/refresh',           refresh);
 router.post('/get-refresh-token', getRefreshToken);
 router.get('/getme',              getMe);
+router.get('/me',                 getMe);
 router.get('/profile',            verifyCustomer, getProfile);
 router.put('/profile',            verifyCustomer, updateProfile);
 

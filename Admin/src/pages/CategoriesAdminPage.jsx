@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
+import { useSelector } from 'react-redux';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Edit2, Trash2, X, Upload } from 'lucide-react';
 import {
@@ -20,8 +21,15 @@ import SortableRow from '../components/SortableRow';
 import { PaginationTop, PaginationBottom } from '../components/Pagination';
 import api from '../services/api';
 import toast from 'react-hot-toast';
+import { checkPermission } from '../utils/rbac';
 
 const CategoriesAdminPage = () => {
+  const { admin } = useSelector((s) => s.auth);
+  const canAddCategory = checkPermission(admin, 'add_category');
+  const canEditCategory = checkPermission(admin, 'edit_category');
+  const canDeleteCategory = checkPermission(admin, 'delete_category');
+  const canShowActions = canEditCategory || canDeleteCategory;
+
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -197,9 +205,11 @@ const CategoriesAdminPage = () => {
     <AdminLayout title="Categories">
       <div className="flex justify-between items-center mb-6">
         <p className="text-sm text-brand-grey">{categories.length} parent categories · drag rows to reorder</p>
-        <button onClick={() => openModal()} className="btn-primary flex items-center gap-2" id="add-cat-btn">
-          <Plus size={16} /> Add Category
-        </button>
+        {canAddCategory && (
+          <button onClick={() => openModal()} className="btn-primary flex items-center gap-2" id="add-cat-btn">
+            <Plus size={16} /> Add Category
+          </button>
+        )}
       </div>
 
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">
@@ -238,7 +248,7 @@ const CategoriesAdminPage = () => {
                     <th className="px-5 py-3">Category Name</th>
                     <th className="px-5 py-3 w-32">Status</th>
                     <th className="px-5 py-3 w-32">Header</th>
-                    <th className="px-5 py-3 w-28 text-right">Actions</th>
+                    {canShowActions && <th className="px-5 py-3 w-28 text-right">Actions</th>}
                   </tr>
                 </thead>
                 <SortableContext
@@ -276,16 +286,22 @@ const CategoriesAdminPage = () => {
                             {cat.showHeader ? 'Show' : 'Hide'}
                           </span>
                         </td>
-                        <td className="px-5 py-4 text-right">
-                          <div className="flex justify-end gap-1.5">
-                            <button onClick={() => openModal(cat)} className="p-2 text-brand-grey hover:text-brand-gold hover:bg-brand-light/30 rounded transition-colors" id={`edit-cat-${cat.id}`} title="Edit">
-                              <Edit2 size={14} />
-                            </button>
-                            <button onClick={() => handleDelete(cat.id)} className="p-2 text-brand-grey hover:text-red-500 hover:bg-red-50 rounded transition-colors" id={`del-cat-${cat.id}`} title="Delete">
-                              <Trash2 size={14} />
-                            </button>
-                          </div>
-                        </td>
+                        {canShowActions && (
+                          <td className="px-5 py-4 text-right">
+                            <div className="flex justify-end gap-1.5">
+                              {canEditCategory && (
+                                <button onClick={() => openModal(cat)} className="p-2 text-brand-grey hover:text-brand-gold hover:bg-brand-light/30 rounded transition-colors" id={`edit-cat-${cat.id}`} title="Edit">
+                                  <Edit2 size={14} />
+                                </button>
+                              )}
+                              {canDeleteCategory && (
+                                <button onClick={() => handleDelete(cat.id)} className="p-2 text-brand-grey hover:text-red-500 hover:bg-red-50 rounded transition-colors" id={`del-cat-${cat.id}`} title="Delete">
+                                  <Trash2 size={14} />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        )}
                       </SortableRow>
                     ))}
                   </tbody>

@@ -1,12 +1,24 @@
 import { useEffect, useState } from 'react';
+import { useSelector } from 'react-redux';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, X, Copy, Edit, Trash2 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import AdminLayout from '../components/AdminLayout';
+import Switch from '../components/Switch';
 import { PaginationTop, PaginationBottom } from '../components/Pagination';
 import api from '../services/api';
+import { checkPermission } from '../utils/rbac';
 
 const CouponsAdminPage = () => {
+  const { admin } = useSelector((s) => s.auth);
+  const canAddCoupon = checkPermission(admin, 'add_coupon');
+  const canEditCoupon = checkPermission(admin, 'edit_coupon');
+  const canDeleteCoupon = checkPermission(admin, 'delete_coupon');
+  const canShowActions = canEditCoupon || canDeleteCoupon;
+
+  const couponHeaders = ['Code', 'Type', 'Value', 'Min Order', 'Limit (Per Person)', 'Total Used', 'Valid Until', 'Status'];
+  if (canShowActions) couponHeaders.push('Actions');
+
   const [coupons, setCoupons] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -93,6 +105,21 @@ const CouponsAdminPage = () => {
     ), { duration: 6000, position: 'top-center', style: { minWidth: '350px' } });
   };
 
+  const handleToggleActive = async (coupon) => {
+    if (!canEditCoupon) return;
+    try {
+      const nextStatus = !coupon.isActive;
+      setCoupons((prev) => prev.map((c) => (c.id === coupon.id ? { ...c, isActive: nextStatus } : c)));
+      await api.put(`/coupons/${coupon.id}`, { isActive: nextStatus });
+      toast.success(`Coupon status updated to ${nextStatus ? 'Active' : 'Inactive'}`);
+      load();
+    } catch (err) {
+      console.error(err);
+      toast.error(err.response?.data?.message || 'Failed to toggle status');
+      load();
+    }
+  };
+
   const handleSave = async (e) => {
     e.preventDefault();
     try {
@@ -118,19 +145,13 @@ const CouponsAdminPage = () => {
     }
   };
 
-  // Seed fallback data if API returns empty
-  const displayCoupons = coupons.length ? coupons : [
-    { id: 1, code: 'WELCOME20', type: 'PERCENT', value: 20, minOrderValue: 500, usageCount: 142, usageLimit: 1, validTo: '2025-12-31', isActive: true },
-    { id: 2, code: 'LUXE15', type: 'PERCENT', value: 15, minOrderValue: 2000, usageCount: 67, usageLimit: 2, validTo: '2025-10-31', isActive: true },
-    { id: 3, code: 'FLAT500', type: 'FLAT', value: 500, minOrderValue: 3000, usageCount: 23, usageLimit: 5, validTo: '2025-09-30', isActive: false },
-    { id: 4, code: 'BILLU10', type: 'PERCENT', value: 10, minOrderValue: 0, usageCount: 89, usageLimit: null, validTo: '2025-12-31', isActive: true },
-  ];
-
   return (
     <AdminLayout title="Coupons">
       <div className="flex justify-between items-center mb-6">
-        <p className="text-sm text-brand-grey">{displayCoupons.length} coupons</p>
-        <button onClick={openAddModal} className="btn-primary flex items-center gap-2" id="add-coupon-btn"><Plus size={16} /> Add Coupon</button>
+        <p className="text-sm text-brand-grey">{total} {total === 1 ? 'coupon' : 'coupons'}</p>
+        {canAddCoupon && (
+          <button onClick={openAddModal} className="btn-primary flex items-center gap-2" id="add-coupon-btn"><Plus size={16} /> Add Coupon</button>
+        )}
       </div>
 
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">
@@ -147,50 +168,76 @@ const CouponsAdminPage = () => {
           <table className="w-full text-sm" aria-label="Coupons table">
             <thead>
               <tr className="bg-brand-light/40 text-left">
-                {['Code', 'Type', 'Value', 'Min Order', 'Limit (Per Person)', 'Total Used', 'Valid Until', 'Status', 'Actions'].map(h => (
+                {couponHeaders.map(h => (
                   <th key={h} className="px-4 py-3 text-xs font-semibold text-brand-grey uppercase tracking-wider">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {loading ? [...Array(4)].map((_, i) => <tr key={i} className="border-b border-brand-light">{[...Array(9)].map((_,j)=><td key={j} className="px-4 py-3"><div className="skeleton h-4 w-20"/></td>)}</tr>)
-              : displayCoupons.map(coupon => (
-                <tr key={coupon.id} className="border-b border-brand-light hover:bg-brand-light/20 transition-colors">
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono font-bold text-brand-text bg-brand-light px-2 py-0.5 rounded text-xs">{coupon.code}</span>
-                      <button onClick={() => navigator.clipboard.writeText(coupon.code)} className="text-brand-grey hover:text-brand-gold" aria-label="Copy coupon code" id={`copy-${coupon.code}`}><Copy size={12} /></button>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3"><span className={`text-xs px-2 py-0.5 rounded-full ${coupon.type === 'PERCENT' ? 'bg-blue-50 text-blue-700' : 'bg-purple-50 text-purple-700'}`}>{coupon.type}</span></td>
-                  <td className="px-4 py-3 font-semibold">{coupon.type === 'PERCENT' ? `${coupon.value}%` : `₹${coupon.value}`}</td>
-                  <td className="px-4 py-3 text-brand-grey">₹{coupon.minOrderValue || 0}</td>
-                  <td className="px-4 py-3 font-medium text-brand-text">
-                    {coupon.usageLimit ? (
-                      <span className="bg-amber-50 text-amber-900 border border-amber-200/60 px-2 py-0.5 rounded text-xs font-semibold">
-                        {coupon.usageLimit} {coupon.usageLimit === 1 ? 'use' : 'uses'} / person
-                      </span>
-                    ) : (
-                      <span className="bg-emerald-50 text-emerald-800 border border-emerald-200/60 px-2 py-0.5 rounded text-xs font-semibold">
-                        ∞ Infinite
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-brand-grey font-medium">{coupon.usageCount || 0}</td>
-                  <td className="px-4 py-3 text-brand-grey text-xs">{coupon.validUntil ? new Date(coupon.validUntil).toLocaleDateString('en-IN') : (coupon.validTo ? new Date(coupon.validTo).toLocaleDateString('en-IN') : '—')}</td>
-                  <td className="px-4 py-3"><span className={`text-xs px-2 py-0.5 rounded-full ${coupon.isActive ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{coupon.isActive ? 'Active' : 'Inactive'}</span></td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <button onClick={() => handleEdit(coupon)} className="p-1.5 text-brand-grey hover:text-brand-gold transition-colors" title="Edit" id={`edit-${coupon.code}`}>
-                        <Edit size={14} />
-                      </button>
-                      <button onClick={() => handleDelete(coupon.id)} className="p-1.5 text-brand-grey hover:text-red-500 transition-colors" title="Delete" id={`delete-${coupon.code}`}>
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
+              {loading ? [...Array(4)].map((_, i) => <tr key={i} className="border-b border-brand-light">{[...Array(couponHeaders.length)].map((_,j)=><td key={j} className="px-4 py-3"><div className="skeleton h-4 w-20"/></td>)}</tr>)
+              : coupons.length === 0 ? (
+                <tr>
+                  <td colSpan={couponHeaders.length} className="text-center py-10 text-brand-grey text-sm font-medium">
+                    No coupons found. Click <span className="font-semibold text-brand-gold">'+ Add Coupon'</span> to create one.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                coupons.map(coupon => (
+                  <tr key={coupon.id} className="border-b border-brand-light hover:bg-brand-light/20 transition-colors">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-bold text-brand-text bg-brand-light px-2 py-0.5 rounded text-xs">{coupon.code}</span>
+                        <button onClick={() => navigator.clipboard.writeText(coupon.code)} className="text-brand-grey hover:text-brand-gold" aria-label="Copy coupon code" id={`copy-${coupon.code}`}><Copy size={12} /></button>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3"><span className={`text-xs px-2 py-0.5 rounded-full ${coupon.type === 'PERCENT' ? 'bg-blue-50 text-blue-700' : 'bg-purple-50 text-purple-700'}`}>{coupon.type}</span></td>
+                    <td className="px-4 py-3 font-semibold">{coupon.type === 'PERCENT' ? `${coupon.value}%` : `₹${coupon.value}`}</td>
+                    <td className="px-4 py-3 text-brand-grey">₹{coupon.minOrderValue || 0}</td>
+                    <td className="px-4 py-3 font-medium text-brand-text">
+                      {coupon.usageLimit ? (
+                        <span className="bg-amber-50 text-amber-900 border border-amber-200/60 px-2 py-0.5 rounded text-xs font-semibold">
+                          {coupon.usageLimit} {coupon.usageLimit === 1 ? 'use' : 'uses'} / person
+                        </span>
+                      ) : (
+                        <span className="bg-emerald-50 text-emerald-800 border border-emerald-200/60 px-2 py-0.5 rounded text-xs font-semibold">
+                          ∞ Infinite
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-brand-grey font-medium">{coupon.usageCount || 0}</td>
+                    <td className="px-4 py-3 text-brand-grey text-xs">{coupon.validUntil ? new Date(coupon.validUntil).toLocaleDateString('en-IN') : (coupon.validTo ? new Date(coupon.validTo).toLocaleDateString('en-IN') : '—')}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          checked={coupon.isActive}
+                          disabled={!canEditCoupon}
+                          onChange={() => canEditCoupon && handleToggleActive(coupon)}
+                          id={`toggle-coupon-${coupon.id}`}
+                        />
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${coupon.isActive ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                          {coupon.isActive ? 'Active' : 'Inactive'}
+                        </span>
+                      </div>
+                    </td>
+                    {canShowActions && (
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          {canEditCoupon && (
+                            <button onClick={() => handleEdit(coupon)} className="p-1.5 text-brand-grey hover:text-brand-gold transition-colors" title="Edit" id={`edit-${coupon.code}`}>
+                              <Edit size={14} />
+                            </button>
+                          )}
+                          {canDeleteCoupon && (
+                            <button onClick={() => handleDelete(coupon.id)} className="p-1.5 text-brand-grey hover:text-red-500 transition-colors" title="Delete" id={`delete-${coupon.code}`}>
+                              <Trash2 size={14} />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -264,6 +311,22 @@ const CouponsAdminPage = () => {
                     <div>
                       <label className="block text-xs font-medium text-brand-grey mb-1.5" htmlFor="coup-to">Valid To</label>
                       <input id="coup-to" type="date" value={form.validTo} onChange={e=>setForm(p=>({...p,validTo:e.target.value}))} className="w-full border border-brand-light px-3 py-2 text-sm focus:outline-none focus:border-brand-gold"/>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between p-3 bg-brand-light/30 rounded-lg border border-brand-light">
+                    <div>
+                      <span className="block text-xs font-semibold text-brand-text">Active Status</span>
+                      <span className="block text-[11px] text-brand-grey">Enable or disable coupon for checkout</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        checked={form.isActive}
+                        onChange={(e) => setForm((p) => ({ ...p, isActive: typeof e === 'boolean' ? e : Boolean(e?.target?.checked) }))}
+                        id="coup-is-active"
+                      />
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${form.isActive ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                        {form.isActive ? 'Active' : 'Inactive'}
+                      </span>
                     </div>
                   </div>
                   <div className="flex gap-3 pt-2 border-t border-brand-light">

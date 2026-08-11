@@ -915,11 +915,174 @@ const sendContactEnquiryAdminNotification = async (enquiryData) => {
   }
 };
 
+/**
+ * Sends Marketing Automation Report / Abandoned Cart Recovery Email
+ */
+const sendMarketingAutomationReport = async ({
+  to,
+  customerName = 'Valued Customer',
+  items = [],
+  cartTotal = 0,
+  currency = 'INR',
+  reportType = 'all',
+  customNote = '',
+  couponCode = 'RECOVER10'
+}) => {
+  try {
+    const transporter = createTransporter();
+    const currencySymbol = currency === 'AED' ? 'AED ' : '₹';
+    const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+    const cartCheckoutUrl = `${clientUrl}/cart`;
+    const serverBase = (process.env.SERVER_URL || process.env.VITE_API_URL || 'http://localhost:5000').replace(/\/$/, '');
+
+    let itemsHtml = '';
+    if (Array.isArray(items) && items.length > 0) {
+      itemsHtml = items.map(item => {
+        const prod = item.product || {};
+        const variant = item.variant || {};
+        const pName = prod.name || 'Selected Item';
+        const price = parseFloat(variant.price || item.priceAtAdd || prod.price || 0);
+        const qty = item.quantity || 1;
+
+        return `
+          <tr>
+            <td style="padding: 14px 16px; border-bottom: 1px solid #F3F4F6; vertical-align: middle;">
+              <p style="margin: 0 0 3px; font-weight: 600; font-size: 13px; color: #1F2937; line-height: 1.4;">${pName}</p>
+              ${variant.sku ? `<p style="margin: 0; font-size: 11px; color: #6B7280;">SKU: ${variant.sku}</p>` : ''}
+            </td>
+            <td style="padding: 14px 16px; border-bottom: 1px solid #F3F4F6; text-align: center; font-size: 13px; color: #4B5563; vertical-align: middle;">
+              ${qty}
+            </td>
+            <td style="padding: 14px 16px; border-bottom: 1px solid #F3F4F6; text-align: right; font-size: 13px; font-weight: 700; color: #1F2937; vertical-align: middle;">
+              ${currencySymbol}${(price * qty).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+        <title>Your Billu Bazaar Cart Reminder</title>
+      </head>
+      <body style="margin:0;padding:0;background-color:#F9F9F8;font-family:${SANS_SERIF_FONT};">
+        <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#F9F9F8;padding:40px 15px;">
+          <tr>
+            <td align="center">
+              <table width="580" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:10px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.06);border:1px solid #E5E7EB;">
+                <tr>
+                  <td style="background-color:#1A1A1A;padding:24px 40px;text-align:center;">
+                    <p style="margin:0;font-size:22px;font-weight:800;color:#ffffff;letter-spacing:0.12em;">
+                      BILLU <span style="color:#C9A24B;">BAZAAR</span>
+                    </p>
+                    <p style="margin:4px 0 0;font-size:10px;color:#A1A1A1;text-transform:uppercase;letter-spacing:0.2em;">
+                      Shopping Concierge
+                    </p>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="background:#C9A24B;height:3px;"></td>
+                </tr>
+                <tr>
+                  <td style="padding:36px 40px 20px;text-align:center;">
+                    <span style="background-color:#FFF8E7;color:#8A6714;border:1px solid #E6C265;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;padding:5px 14px;display:inline-block;border-radius:20px;margin-bottom:16px;">
+                      🛒 Complete Your Purchase
+                    </span>
+                    <h1 style="margin:0 0 12px;font-size:22px;font-weight:700;color:#111111;">
+                      Hi ${customerName}, You Left Items In Your Cart!
+                    </h1>
+                    <p style="margin:0 auto;font-size:14px;color:#666666;line-height:1.6;max-width:440px;">
+                      Don't miss out on your selected items. We saved your shopping cart so you can easily pick up where you left off.
+                    </p>
+                  </td>
+                </tr>
+                ${customNote ? `
+                <tr>
+                  <td style="padding:0 40px 20px;">
+                    <div style="background-color:#FFFBEB;border-left:4px solid #C9A24B;padding:16px;border-radius:0 8px 8px 0;font-size:13px;color:#92400E;line-height:1.6;">
+                      <strong>Message from Billu Bazaar:</strong><br/>
+                      ${customNote}
+                    </div>
+                  </td>
+                </tr>
+                ` : ''}
+                ${itemsHtml ? `
+                <tr>
+                  <td style="padding:10px 40px 20px;">
+                    <p style="margin:0 0 10px;font-size:13px;font-weight:700;color:#111827;">Your Saved Cart Items</p>
+                    <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;border:1px solid #F3F4F6;border-radius:6px;overflow:hidden;">
+                      <thead>
+                        <tr style="background-color:#F9FAFB;border-bottom:1px solid #E5E7EB;">
+                          <th style="padding:8px 16px;text-align:left;font-size:11px;font-weight:600;color:#6B7280;text-transform:uppercase;">Item</th>
+                          <th style="padding:8px 16px;text-align:center;font-size:11px;font-weight:600;color:#6B7280;text-transform:uppercase;width:50px;">Qty</th>
+                          <th style="padding:8px 16px;text-align:right;font-size:11px;font-weight:600;color:#6B7280;text-transform:uppercase;width:100px;">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        ${itemsHtml}
+                      </tbody>
+                    </table>
+                  </td>
+                </tr>
+                ` : ''}
+                ${couponCode ? `
+                <tr>
+                  <td style="padding:10px 40px 24px;" align="center">
+                    <div style="background:#FFFDF8;border:2px dashed #C9A24B;border-radius:10px;padding:18px 24px;display:inline-block;text-align:center;">
+                      <p style="margin:0 0 4px;font-size:11px;color:#8A6714;text-transform:uppercase;letter-spacing:0.1em;font-weight:700;">Special Recovery Discount</p>
+                      <p style="margin:0 0 6px;font-size:24px;font-weight:bold;color:#1A1A1A;letter-spacing:0.15em;">${couponCode}</p>
+                      <p style="margin:0;font-size:12px;color:#6B7280;">Use this code at checkout for an extra discount!</p>
+                    </div>
+                  </td>
+                </tr>
+                ` : ''}
+                <tr>
+                  <td style="padding:0 40px 30px;" align="center">
+                    <a href="${cartCheckoutUrl}" target="_blank" style="background-color:#1A1A1A;color:#C9A24B;padding:14px 32px;text-decoration:none;font-weight:700;font-size:13px;border-radius:6px;display:inline-block;letter-spacing:0.1em;text-transform:uppercase;box-shadow:0 4px 12px rgba(0,0,0,0.15);">
+                      Complete My Order Now →
+                    </a>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="background-color:#FAF9F6;padding:24px 40px;text-align:center;color:#888888;font-size:11px;line-height:1.6;border-top:1px solid #EAEAEA;">
+                    <p style="margin:0 0 4px;color:#C9A24B;font-weight:700;letter-spacing:0.1em;font-size:12px;">BILLU BAZAAR</p>
+                    <p style="margin:0;color:#9CA3AF;">© ${new Date().getFullYear()} Billu Bazaar. All rights reserved.</p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </body>
+      </html>
+    `;
+
+    const mailOptions = {
+      from: `"Billu Bazaar Shopping Concierge" <${process.env.EMAIL_USER}>`,
+      to,
+      subject: `🛒 ${customerName}, your Billu Bazaar shopping cart is waiting for you!`,
+      html: htmlContent,
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    console.log(`✅ Marketing automation email sent to ${to} — MsgID: ${info.messageId}`);
+    return info;
+  } catch (err) {
+    console.error(`❌ Failed to send marketing automation email to ${to}:`, err.message);
+    throw err;
+  }
+};
+
 module.exports = {
   sendOtpEmail,
   sendFraudOtpEmail,
   sendOrderStatusNotification,
   sendRestockAlertEmail,
   sendContactEnquiryAdminNotification,
+  sendMarketingAutomationReport,
 };
 

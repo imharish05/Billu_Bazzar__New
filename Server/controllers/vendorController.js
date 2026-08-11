@@ -178,22 +178,58 @@ const update = async (req, res) => {
 };
 
 const remove = async (req, res) => {
+  const transaction = await Vendor.sequelize.transaction();
   try {
-    const vendor = await Vendor.findByPk(req.params.id);
-    if (!vendor) return res.status(404).json({ success: false, message: 'Vendor not found' });
-
-    // Enforce check: Do not delete if products are linked
-    const productsCount = await Product.count({ where: { vendorId: vendor.id } });
-    if (productsCount > 0) {
-      return res.status(400).json({
-        success: false,
-        message: `Cannot delete vendor "${vendor.name}" because they have ${productsCount} products associated with them. Please delete or reassign the products first.`
-      });
+    const vendor = await Vendor.findByPk(req.params.id, { transaction });
+    if (!vendor) {
+      await transaction.rollback();
+      return res.status(404).json({ success: false, message: 'Vendor not found' });
     }
 
-    await vendor.destroy();
-    res.json({ success: true, message: 'Vendor deleted successfully.' });
+    // Fetch associated products
+    const products = await Product.findAll({ where: { vendorId: vendor.id }, transaction });
+    const productIds = products.map(p => p.id);
+
+    if (productIds.length > 0) {
+      const { ProductVariant, WarehouseStock, CartItem, Wishlist, Review, StockAlert, OrderItem, InventoryMovementLog } = require('../models');
+
+      // 1. Clean up variant dependencies
+      const variants = await ProductVariant.findAll({ where: { productId: productIds }, transaction });
+      const variantIds = variants.map(v => v.id);
+
+      if (variantIds.length > 0) {
+        await OrderItem.update({ variantId: null }, { where: { variantId: variantIds }, transaction });
+        await WarehouseStock.destroy({ where: { variantId: variantIds }, transaction });
+        await CartItem.destroy({ where: { variantId: variantIds }, transaction });
+        await Wishlist.destroy({ where: { variantId: variantIds }, transaction });
+        await InventoryMovementLog.destroy({ where: { variantId: variantIds }, transaction });
+      }
+
+      // 2. Clean up product dependencies
+      await OrderItem.update({ productId: null }, { where: { productId: productIds }, transaction });
+      await WarehouseStock.destroy({ where: { productId: productIds }, transaction });
+      await CartItem.destroy({ where: { productId: productIds }, transaction });
+      await Wishlist.destroy({ where: { productId: productIds }, transaction });
+      await Review.destroy({ where: { productId: productIds }, transaction });
+      await StockAlert.destroy({ where: { productId: productIds }, transaction });
+      await InventoryMovementLog.destroy({ where: { productId: productIds }, transaction });
+
+      // 3. Delete ProductVariants & Products
+      await ProductVariant.destroy({ where: { productId: productIds }, transaction });
+      await Product.destroy({ where: { id: productIds }, transaction });
+    }
+
+    // Delete vendor record
+    await vendor.destroy({ transaction });
+    await transaction.commit();
+
+    res.json({
+      success: true,
+      message: `Vendor "${vendor.name}" and ${productIds.length} associated product(s) deleted successfully.`
+    });
   } catch (err) {
+    await transaction.rollback();
+    console.error(`[Delete Vendor Error]:`, err);
     res.status(500).json({ success: false, message: err.message });
   }
 };

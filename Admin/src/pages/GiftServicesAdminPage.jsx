@@ -1,11 +1,15 @@
 import { useEffect, useState } from 'react';
+import { useSelector } from 'react-redux';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, X, Edit, Trash2, Gift } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import AdminLayout from '../components/AdminLayout';
 import api from '../services/api';
+import { checkPermission } from '../utils/rbac';
 
 const GiftServicesAdminPage = () => {
+  const { admin } = useSelector((s) => s.auth);
+  const canManageGiftService = checkPermission(admin, 'view_gift_services');
   const [giftService, setGiftService] = useState(null);
   const [giftLoading, setGiftLoading] = useState(true);
   const [giftModalOpen, setGiftModalOpen] = useState(false);
@@ -134,7 +138,7 @@ const GiftServicesAdminPage = () => {
               Manage single-entry premium gift service details, pricing amount, subtext label, and visibility in cart/checkout.
             </p>
           </div>
-          {!giftService && !giftLoading && (
+          {!giftService && !giftLoading && canManageGiftService && (
             <button
               onClick={openAddGiftModal}
               className="btn-primary flex items-center gap-2 text-xs py-2.5 px-4"
@@ -170,24 +174,26 @@ const GiftServicesAdminPage = () => {
                 </div>
               </div>
 
-              <div className="flex items-center gap-3 self-end md:self-auto">
-                <button
-                  onClick={openEditGiftModal}
-                  className="flex items-center gap-2 px-4 py-2 text-xs font-semibold bg-white text-brand-text hover:text-brand-gold border border-brand-light rounded-lg shadow-xs transition-colors"
-                  title="Edit Gift Service"
-                  id="edit-gift-service-btn"
-                >
-                  <Edit size={15} /> Edit
-                </button>
-                <button
-                  onClick={handleDeleteGiftService}
-                  className="flex items-center gap-2 px-4 py-2 text-xs font-semibold bg-white text-red-600 hover:bg-red-50 border border-red-200 rounded-lg shadow-xs transition-colors"
-                  title="Delete Gift Service"
-                  id="delete-gift-service-btn"
-                >
-                  <Trash2 size={15} /> Delete
-                </button>
-              </div>
+              {canManageGiftService && (
+                <div className="flex items-center gap-3 self-end md:self-auto">
+                  <button
+                    onClick={openEditGiftModal}
+                    className="flex items-center gap-2 px-4 py-2 text-xs font-semibold bg-white text-brand-text hover:text-brand-gold border border-brand-light rounded-lg shadow-xs transition-colors"
+                    title="Edit Gift Service"
+                    id="edit-gift-service-btn"
+                  >
+                    <Edit size={15} /> Edit
+                  </button>
+                  <button
+                    onClick={handleDeleteGiftService}
+                    className="flex items-center gap-2 px-4 py-2 text-xs font-semibold bg-white text-red-600 hover:bg-red-50 border border-red-200 rounded-lg shadow-xs transition-colors"
+                    title="Delete Gift Service"
+                    id="delete-gift-service-btn"
+                  >
+                    <Trash2 size={15} /> Delete
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
             <div className="text-center py-12 bg-brand-light/20 rounded-xl border border-dashed border-brand-light space-y-4">

@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { useSelector } from 'react-redux';
 import { useSearchParams } from 'react-router-dom';
 import { Plus, Search, Edit2, ShieldAlert, CheckCircle2, ChevronRight, X, Trash2, ArrowRightLeft } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
@@ -6,6 +7,7 @@ import Switch from '../components/Switch';
 import api from '../services/api';
 import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
+import { checkPermission } from '../utils/rbac';
 
 const EMPTY_WAREHOUSE_FORM = {
   name: '', code: '', contactName: '', contactPhone: '',
@@ -14,6 +16,10 @@ const EMPTY_WAREHOUSE_FORM = {
 };
 
 const WarehousesAdminPage = () => {
+  const { admin } = useSelector((s) => s.auth);
+  const canAddWarehouse = checkPermission(admin, 'add_warehouse');
+  const canEditWarehouse = checkPermission(admin, 'edit_warehouse');
+  const canDeleteWarehouse = checkPermission(admin, 'delete_warehouse');
   const [searchParams] = useSearchParams();
   const [warehouses, setWarehouses] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -375,17 +381,19 @@ const WarehousesAdminPage = () => {
   return (
     <AdminLayout title="Multi-Warehouse & Fulfillment Inventory">
       {/* Overview Cards Header */}
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
           <h2 className="text-lg font-semibold text-neutral-900">Warehouses Configuration</h2>
           <p className="text-xs text-brand-grey">Setup active warehouses and designate the single mandatory fulfillment hub</p>
         </div>
-        <button
-          onClick={() => openWarehouseModal()}
-          className="px-4 py-2 bg-neutral-950 text-white hover:bg-neutral-800 text-xs font-semibold uppercase tracking-wider transition-colors flex items-center gap-2 shadow-sm rounded-none"
-        >
-          <Plus size={14} /> Add Warehouse
-        </button>
+        {canAddWarehouse && (
+          <button
+            onClick={() => openWarehouseModal()}
+            className="px-4 py-2 bg-neutral-950 text-white hover:bg-neutral-800 text-xs font-semibold uppercase tracking-wider transition-colors flex items-center gap-2 shadow-sm rounded-none"
+          >
+            <Plus size={14} /> Add Warehouse
+          </button>
+        )}
       </div>
 
       {loading ? (
@@ -414,8 +422,9 @@ const WarehousesAdminPage = () => {
                     selectedWarehouse?.id === w.id ? 'border-brand-gold ring-1 ring-brand-gold/30' : 'border-neutral-200 hover:border-neutral-350'
                   }`}
                 >
-                  <div className="p-6">
-                    <div className="flex items-start justify-between mb-3">
+                  {w.isFulfillment && <div className="absolute top-0 right-0 w-2 h-full bg-brand-gold" />}
+                  <div className="p-5">
+                    <div className="flex items-start justify-between gap-3 mb-3">
                       <div>
                         <h3 className="font-semibold text-base text-neutral-900">{w.name}</h3>
                         <p className="text-xs font-mono font-medium text-brand-gold mt-0.5">{w.code}</p>
@@ -454,20 +463,24 @@ const WarehousesAdminPage = () => {
                         <p className="text-[10px] uppercase tracking-wider font-semibold text-brand-grey">Total Units in Stock</p>
                       </div>
                       <div className="flex items-center gap-1.5">
-                        <button
-                          onClick={() => openWarehouseModal(w)}
-                          className="p-2 border border-neutral-200 text-neutral-600 hover:text-brand-gold hover:border-brand-gold transition-all"
-                          title="Edit Warehouse"
-                        >
-                          <Edit2 size={12} />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteWarehouseDirect(w)}
-                          className="p-2 border border-neutral-200 text-neutral-600 hover:text-red-600 hover:border-red-200 transition-all"
-                          title="Delete Warehouse"
-                        >
-                          <Trash2 size={12} />
-                        </button>
+                        {canEditWarehouse && (
+                          <button
+                            onClick={() => openWarehouseModal(w)}
+                            className="p-2 border border-neutral-200 text-neutral-600 hover:text-brand-gold hover:border-brand-gold transition-all"
+                            title="Edit Warehouse"
+                          >
+                            <Edit2 size={12} />
+                          </button>
+                        )}
+                        {canDeleteWarehouse && (
+                          <button
+                            onClick={() => handleDeleteWarehouseDirect(w)}
+                            className="p-2 border border-neutral-200 text-neutral-600 hover:text-red-600 hover:border-red-200 transition-all"
+                            title="Delete Warehouse"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        )}
                         <button
                           onClick={() => handleSelectWarehouse(w)}
                           className="px-3 py-1.5 bg-neutral-950 text-white hover:bg-neutral-800 text-xs font-semibold uppercase tracking-wider transition-all flex items-center gap-1"

@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
+import { useSelector } from 'react-redux';
 import AdminLayout from '../components/AdminLayout';
 import api from '../services/api';
 import toast from 'react-hot-toast';
 import { PaginationTop, PaginationBottom } from '../components/Pagination';
+import { checkPermission } from '../utils/rbac';
 
 const TYPE_COLORS = {
   EARN: 'bg-green-50 text-green-700',
@@ -12,6 +14,8 @@ const TYPE_COLORS = {
 };
 
 const LoyaltyAdminPage = () => {
+  const { admin } = useSelector((s) => s.auth);
+  const canManageLoyalty = checkPermission(admin, 'manage_loyalty');
   const [ledger, setLedger] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
@@ -113,13 +117,15 @@ const LoyaltyAdminPage = () => {
           <h1 className="font-playfair text-2xl font-bold">Loyalty & Rewards</h1>
           <p className="text-sm text-brand-grey">Manage customer points, redemption rates, and ledger history.</p>
         </div>
-        <button
-          onClick={() => setShowSettings(true)}
-          className="bg-brand-text text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-brand-gold transition-colors"
-          id="configure-loyalty-btn"
-        >
-          Configure Loyalty Settings
-        </button>
+        {canManageLoyalty && (
+          <button
+            onClick={() => setShowSettings(true)}
+            className="bg-brand-text text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-brand-gold transition-colors"
+            id="configure-loyalty-btn"
+          >
+            Configure Settings
+          </button>
+        )}
       </div>
 
       <div className="bg-white rounded-xl shadow-sm overflow-hidden mb-8">

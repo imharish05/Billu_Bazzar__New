@@ -524,35 +524,30 @@ const remove = async (req, res) => {
     const variants = await ProductVariant.findAll({ where: { productId: id }, transaction });
     const variantIds = variants.map(v => v.id);
 
+    // Unlink OrderItems to NULL so customer order history is preserved without triggering MySQL FK constraints
     if (variantIds.length > 0) {
+      await OrderItem.update({ variantId: null }, { where: { variantId: variantIds }, transaction });
       await WarehouseStock.destroy({ where: { variantId: variantIds }, transaction });
       await CartItem.destroy({ where: { variantId: variantIds }, transaction });
       await Wishlist.destroy({ where: { variantId: variantIds }, transaction });
-      await OrderItem.destroy({ where: { variantId: variantIds }, transaction });
       await InventoryMovementLog.destroy({ where: { variantId: variantIds }, transaction });
     }
 
     // 2. Delete product-level dependencies
+    await OrderItem.update({ productId: null }, { where: { productId: id }, transaction });
     await WarehouseStock.destroy({ where: { productId: id }, transaction });
     await CartItem.destroy({ where: { productId: id }, transaction });
     await Wishlist.destroy({ where: { productId: id }, transaction });
     await Review.destroy({ where: { productId: id }, transaction });
     await StockAlert.destroy({ where: { productId: id }, transaction });
-    await OrderItem.destroy({ where: { productId: id }, transaction });
     await InventoryMovementLog.destroy({ where: { productId: id }, transaction });
 
     // 3. Delete ProductVariants
     await ProductVariant.destroy({ where: { productId: id }, transaction });
 
-    // 4. Clean up local files
-    if (Array.isArray(product.images)) {
-      product.images.forEach(img => deleteLocalFile(img));
-    }
-    if (product.defaultProductImage) {
-      deleteLocalFile(product.defaultProductImage);
-    }
+    // 4. Preserve product image files on disk so past customer orders retain product images in My Orders
 
-    // 5. Delete product
+    // 5. Delete product record
     await product.destroy({ transaction });
 
     await transaction.commit();

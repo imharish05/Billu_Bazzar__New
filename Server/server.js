@@ -136,10 +136,11 @@ const start = async () => {
     }
 
     try {
-      await sequelize.query("ALTER TABLE OrderItems ADD COLUMN variantId INT NULL");
-      console.log('✅ OrderItems table variantId column added');
+      await sequelize.query("ALTER TABLE OrderItems MODIFY COLUMN productId INT NULL");
+      await sequelize.query("ALTER TABLE OrderItems MODIFY COLUMN variantId INT NULL");
+      console.log('✅ OrderItems table productId & variantId columns set to NULLABLE');
     } catch (alterErr) {
-      console.log('⚠️ Manual alter note (OrderItems columns already exist):', alterErr.message);
+      console.log('⚠️ Manual alter note (OrderItems columns already nullable):', alterErr.message);
     }
 
     // Run manual database alters for Carts table to allow guest checkout customerId relaxation

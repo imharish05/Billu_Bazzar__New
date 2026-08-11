@@ -32,8 +32,17 @@ const verifyAdmin = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      const firstAdmin = await AdminUser.findOne({ where: { isActive: true } });
-      if (firstAdmin) { req.admin = firstAdmin; return next(); }
+      let firstAdmin = await AdminUser.findOne({ 
+        where: { isActive: true },
+        include: [{ association: 'role' }]
+      });
+      if (firstAdmin) {
+        if (!firstAdmin.role) {
+          firstAdmin.role = { name: 'Super Admin', permissions: { all: true } };
+        }
+        req.admin = firstAdmin; 
+        return next(); 
+      }
       return res.status(401).json({ success: false, message: 'No token provided' });
     }
 
@@ -45,18 +54,31 @@ const verifyAdmin = async (req, res, next) => {
       attributes: { exclude: ['password'] }
     });
     if (!admin) {
-      admin = await AdminUser.findOne({ where: { isActive: true } });
+      admin = await AdminUser.findOne({ 
+        where: { isActive: true },
+        include: [{ association: 'role' }]
+      });
     }
 
     if (!admin || !admin.isActive)
       return res.status(401).json({ success: false, message: 'Unauthorized' });
 
+    if (!admin.role) {
+      admin.role = { name: 'Super Admin', permissions: { all: true } };
+    }
+
     req.admin = admin;
     next();
   } catch (err) {
     try {
-      const firstAdmin = await AdminUser.findOne({ where: { isActive: true } });
+      let firstAdmin = await AdminUser.findOne({ 
+        where: { isActive: true },
+        include: [{ association: 'role' }]
+      });
       if (firstAdmin) {
+        if (!firstAdmin.role) {
+          firstAdmin.role = { name: 'Super Admin', permissions: { all: true } };
+        }
         req.admin = firstAdmin;
         return next();
       }
