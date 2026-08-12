@@ -12,7 +12,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import Logo from './Logo';
 import { logout } from '../redux/slices/authSlice';
 import api from '../services/api';
-import { checkPermission } from '../utils/rbac';
+import { checkPermission, canAccessNav } from '../utils/rbac';
 
 const playNewOrderChime = () => {
   try {
@@ -196,61 +196,6 @@ const NAV_SECTIONS = [
   },
 ];
 
-const canAccessNav = (adminObj, path) => {
-  if (!adminObj) return true;
-
-  let roleName = '';
-  if (typeof adminObj.role === 'string') {
-    roleName = adminObj.role;
-  } else if (adminObj.role && typeof adminObj.role === 'object' && adminObj.role.name) {
-    roleName = adminObj.role.name;
-  } else if (adminObj.roleName) {
-    roleName = adminObj.roleName;
-  }
-
-  const normalizedRole = String(roleName).toLowerCase().replace(/[\s_-]/g, '');
-
-  if (
-    normalizedRole === 'superadmin' || 
-    normalizedRole === 'admin' || 
-    normalizedRole === 'systemadmin' || 
-    adminObj.permissions?.all === true ||
-    (adminObj.role && typeof adminObj.role === 'object' && adminObj.role.permissions?.all === true)
-  ) {
-    return true;
-  }
-  const perms = adminObj.permissions || (adminObj.role && typeof adminObj.role === 'object' ? adminObj.role.permissions : {}) || {};
-  switch (path) {
-    case '/dashboard': return true;
-    case '/products':
-    case '/variants': return !!perms.view_products || !!perms.products?.read;
-    case '/stock-alerts': return !!perms.view_stock_alerts || !!perms.view_products || !!perms.products?.read;
-    case '/reviews': return !!perms.view_reviews || !!perms.view_products || !!perms.products?.read;
-    case '/categories':
-    case '/sub-categories':
-    case '/sub-sub-categories': return !!perms.view_categories || !!perms.categories?.read;
-    case '/orders':
-    case '/abandoned-carts': return !!perms.view_orders || !!perms.orders?.read;
-    case '/coupons': return !!perms.view_coupons || !!perms.coupons?.read;
-    case '/banners':
-    case '/slider-messages': return !!perms.view_banners || !!perms.banners?.read;
-    case '/vendors': return !!perms.view_vendors || !!perms.vendors?.read;
-    case '/warehouses': return !!perms.view_warehouses || !!perms.warehouses?.read || !!perms.inventory?.read;
-    case '/delivery-zones': return !!perms.view_delivery_zones || !!perms.view_warehouses || !!perms.warehouses?.read;
-    case '/gift-services': return !!perms.view_gift_services || !!perms.view_coupons;
-    case '/affiliates': return !!perms.manage_affiliates || !!perms.view_coupons;
-    case '/loyalty': return !!perms.manage_loyalty || !!perms.view_coupons;
-    case '/customers':
-    case '/contact-enquiries': return !!perms.view_customers || !!perms.customers?.read;
-    case '/payments': return !!perms.view_payments || !!perms.payments?.read;
-    case '/reports': return !!perms.view_reports || !!perms.reports?.read;
-    case '/roles': return !!perms.manage_roles || !!perms.settings?.update;
-    case '/admin-users': return !!perms.manage_admin_users || !!perms.settings?.update;
-    case '/site-settings':
-    case '/settings': return !!perms.view_site_settings || !!perms.edit_site_settings || !!perms.settings?.read;
-    default: return true;
-  }
-};
 
 const AdminLayout = ({ children, title = '' }) => {
   const dispatch = useDispatch();

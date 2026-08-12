@@ -83,7 +83,23 @@ const syncProductVariants = async (productId) => {
       const stock = variants.reduce((sum, v) => sum + (parseInt(v.stock, 10) || 0), 0);
       const gstRate = variants[0].gstRate || product.gstRate || '0%';
 
-      await product.update({ price, stock, gstRate });
+      // Merge all variant attributes into parent product.attributes
+      const mergedAttrs = {};
+      variants.forEach(v => {
+        const vAttrs = typeof v.attributes === 'string' ? (JSON.parse(v.attributes) || {}) : (v.attributes || {});
+        Object.entries(vAttrs).forEach(([k, val]) => {
+          if (k && val) {
+            if (!mergedAttrs[k]) mergedAttrs[k] = new Set();
+            mergedAttrs[k].add(String(val).trim());
+          }
+        });
+      });
+      const updatedAttrsObj = {};
+      Object.entries(mergedAttrs).forEach(([k, setVals]) => {
+        updatedAttrsObj[k] = Array.from(setVals).join(', ');
+      });
+
+      await product.update({ price, stock, gstRate, attributes: updatedAttrsObj });
     }
   } catch (err) {
     console.error('[syncProductVariants] Error:', err.message);

@@ -10,6 +10,7 @@ const {
   verifyRazorpayPayment
 } = require('../controllers/paymentController');
 const { optionalCustomer, verifyAdmin } = require('../middleware/auth');
+const { hasPermission } = require('../middleware/rbac');
 
 // Public geo-detection endpoint
 router.get('/geo-detect', detectGeoLocation);
@@ -25,6 +26,6 @@ router.post('/webhook/razorpay', handleRazorpayWebhook);
 router.post('/webhook/telr', handleTelrWebhook);
 
 // Admin dashboard reporting endpoints
-router.get('/admin/summary', verifyAdmin, getPaymentSummary);
+router.get('/admin/summary', verifyAdmin, hasPermission('view_payments'), getPaymentSummary);
 
 module.exports = router;

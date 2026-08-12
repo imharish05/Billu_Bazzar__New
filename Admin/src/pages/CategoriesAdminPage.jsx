@@ -127,6 +127,26 @@ const CategoriesAdminPage = () => {
   };
 
   const processFile = (file) => {
+    setUploadError(null);
+    const ALLOWED_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+    const MAX_SIZE = 5 * 1024 * 1024; // 5MB
+
+    if (!ALLOWED_TYPES.includes(file.type.toLowerCase())) {
+      const msg = 'Invalid image format. Only JPEG, PNG, and WebP are allowed.';
+      setUploadError(msg);
+      toast.error(msg);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
+    if (file.size > MAX_SIZE) {
+      const msg = `File size exceeds 5MB limit (${(file.size / (1024 * 1024)).toFixed(2)}MB). Please select an image under 5MB.`;
+      setUploadError(msg);
+      toast.error(msg);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
     setImageFile(file);
     const reader = new FileReader();
     reader.onloadend = () => setImagePreview(reader.result);
@@ -147,7 +167,16 @@ const CategoriesAdminPage = () => {
       fd.append('parentId', '');
 
       const file = imageFile || fileInputRef.current?.files?.[0];
-      if (file) fd.append('image', file);
+      if (file) {
+        if (file.size > 5 * 1024 * 1024) {
+          const msg = 'Category image size must not exceed 5MB.';
+          setUploadError(msg);
+          toast.error(msg);
+          setSaving(false);
+          return;
+        }
+        fd.append('image', file);
+      }
 
       if (editing) {
         await api.put(`/categories/${editing.id}`, fd);
@@ -202,12 +231,12 @@ const CategoriesAdminPage = () => {
   };
 
   return (
-    <AdminLayout title="Categories">
+    <AdminLayout title="Root Categories">
       <div className="flex justify-between items-center mb-6">
-        <p className="text-sm text-brand-grey">{categories.length} parent categories · drag rows to reorder</p>
+        <p className="text-sm text-brand-grey">{categories.length} root categories · drag rows to reorder</p>
         {canAddCategory && (
           <button onClick={() => openModal()} className="btn-primary flex items-center gap-2" id="add-cat-btn">
-            <Plus size={16} /> Add Category
+            <Plus size={16} /> Add Root Category
           </button>
         )}
       </div>
@@ -216,7 +245,7 @@ const CategoriesAdminPage = () => {
         <PaginationTop
           search={search}
           onSearchChange={(s) => { setSearch(s); setPage(1); }}
-          searchPlaceholder="Search categories..."
+          searchPlaceholder="Search root categories..."
           currentPage={page}
           totalItems={total}
           limit={limit}
@@ -228,8 +257,8 @@ const CategoriesAdminPage = () => {
           </div>
         ) : categories.length === 0 ? (
           <div className="p-12 text-center">
-            <p className="font-playfair text-xl text-brand-grey">No categories yet</p>
-            <button onClick={() => openModal()} className="btn-primary mt-4" id="add-first-cat">Add First Category</button>
+            <p className="font-playfair text-xl text-brand-grey">No root categories yet</p>
+            <button onClick={() => openModal()} className="btn-primary mt-4" id="add-first-cat">Add First Root Category</button>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -245,7 +274,7 @@ const CategoriesAdminPage = () => {
                     <th className="pl-3 pr-1 py-3 w-8"></th>
                     <th className="px-5 py-3 w-16">NO</th>
                     <th className="px-5 py-3 w-24">Image</th>
-                    <th className="px-5 py-3">Category Name</th>
+                    <th className="px-5 py-3">Root Category Name</th>
                     <th className="px-5 py-3 w-32">Status</th>
                     <th className="px-5 py-3 w-32">Header</th>
                     {canShowActions && <th className="px-5 py-3 w-28 text-right">Actions</th>}
@@ -260,11 +289,11 @@ const CategoriesAdminPage = () => {
                       <SortableRow key={cat.id} id={cat.id}>
                         <td className="px-5 py-4 font-medium text-brand-grey">{idx + 1}</td>
                         <td className="px-5 py-4">
-                          <div className="w-10 h-10 rounded bg-brand-light overflow-hidden border border-brand-light flex items-center justify-center">
+                          <div className="w-12 h-12 rounded-lg bg-neutral-100 overflow-hidden border border-neutral-200 flex items-center justify-center shrink-0 shadow-xs">
                             {cat.image ? (
                               <img src={cat.image} alt={cat.name} className="w-full h-full object-cover" />
                             ) : (
-                              <span className="text-brand-grey text-[10px] font-bold uppercase">{cat.name.substring(0, 2)}</span>
+                              <span className="text-brand-grey text-xs font-bold uppercase">{cat.name.substring(0, 2)}</span>
                             )}
                           </div>
                         </td>
@@ -323,7 +352,7 @@ const CategoriesAdminPage = () => {
           <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={e => e.target === e.currentTarget && !saving && setModalOpen(false)}>
             <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.96 }} className="bg-white rounded-xl w-full max-w-md shadow-xl overflow-hidden">
               <div className="flex items-center justify-between px-6 py-4 border-b border-brand-light">
-                <h2 className="font-playfair text-lg font-semibold">{editing ? 'Edit Category' : 'Add Category'}</h2>
+                <h2 className="font-playfair text-lg font-semibold">{editing ? 'Edit Root Category' : 'Add Root Category'}</h2>
                 <button onClick={() => !saving && setModalOpen(false)} className="p-1.5 hover:text-brand-gold focus-visible:outline-brand-gold transition-colors"><X size={18} /></button>
               </div>
               <form onSubmit={handleSave} className="p-6 space-y-4">
@@ -332,7 +361,7 @@ const CategoriesAdminPage = () => {
                 )}
                 
                 <div>
-                  <label className="block text-xs font-medium text-brand-grey mb-1.5" htmlFor="cat-name">Category Name *</label>
+                  <label className="block text-xs font-medium text-brand-grey mb-1.5" htmlFor="cat-name">Root Category Name *</label>
                   <input id="cat-name" type="text" value={form.name} onChange={handleNameChange} required className="w-full border border-brand-light px-3 py-2 text-sm focus:outline-none focus:border-brand-gold transition-colors" placeholder="e.g. Party Wear" />
                 </div>
 
@@ -343,7 +372,7 @@ const CategoriesAdminPage = () => {
 
                 {/* Categories Image upload zone */}
                 <div>
-                  <label className="block text-xs font-medium text-brand-grey mb-1.5">Category Image</label>
+                  <label className="block text-xs font-medium text-brand-grey mb-1.5">Root Category Image (Square 1:1 Aspect Ratio)</label>
                   <div
                     className={`border-2 border-dashed rounded-lg p-4 text-center transition-colors cursor-pointer ${
                       isDragging ? 'border-brand-gold bg-brand-gold/5' : 'border-brand-light hover:border-brand-gold'
@@ -355,25 +384,28 @@ const CategoriesAdminPage = () => {
                       e.preventDefault();
                       setIsDragging(false);
                       const file = e.dataTransfer.files?.[0];
-                      if (file && file.type.startsWith('image/')) processFile(file);
+                      if (file) processFile(file);
                     }}
                   >
                     {imagePreview ? (
-                      <div className="relative">
-                        <img src={imagePreview} alt="Preview" className="max-h-36 mx-auto object-contain rounded" />
-                        <button type="button" onClick={(e) => { e.stopPropagation(); setImagePreview(null); setImageFile(null); if (fileInputRef.current) fileInputRef.current.value = ''; }} className="absolute top-1 right-1 bg-white/80 p-1 rounded-full hover:bg-white border border-brand-light shadow-sm transition-colors">
-                          <X size={12} className="text-brand-text" />
+                      <div className="relative inline-block">
+                        <div className="w-32 h-32 rounded-lg border border-brand-light overflow-hidden bg-neutral-50 shadow-sm mx-auto">
+                          <img src={imagePreview} alt="Category Preview" className="w-full h-full object-cover" />
+                        </div>
+                        <button type="button" onClick={(e) => { e.stopPropagation(); setImagePreview(null); setImageFile(null); if (fileInputRef.current) fileInputRef.current.value = ''; }} className="absolute -top-2 -right-2 bg-white p-1 rounded-full hover:bg-neutral-100 border border-brand-light shadow-md transition-colors">
+                          <X size={14} className="text-brand-text" />
                         </button>
                       </div>
                     ) : (
                       <div className="py-4">
                         <Upload size={24} className="mx-auto text-brand-grey mb-1.5" />
                         <p className="text-xs text-brand-grey font-medium">Drag & drop image here, or click to upload</p>
-                        <p className="text-[10px] text-brand-grey/60 mt-0.5">JPEG, PNG, WebP — max 10MB</p>
+                        <p className="text-[10px] text-brand-grey/70 mt-1 font-semibold">JPEG, PNG, WebP — max 5MB</p>
+                        <p className="text-[10px] text-brand-grey/50 mt-0.5">Recommended resolution: 300×300 px (1:1 square)</p>
                       </div>
                     )}
                   </div>
-                  <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handleFileSelect} />
+                  <input ref={fileInputRef} type="file" accept="image/jpeg,image/jpg,image/png,image/webp" className="hidden" onChange={handleFileSelect} />
                 </div>
 
                 <div className="flex items-center gap-6 pt-1">

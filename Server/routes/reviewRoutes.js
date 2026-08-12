@@ -10,11 +10,12 @@ const {
   updateReviewStatusAdmin,
 } = require('../controllers/reviewController');
 const { verifyCustomer, verifyAdmin, optionalCustomer } = require('../middleware/auth');
+const { hasPermission } = require('../middleware/rbac');
 
 // Admin routes (must be before generic /:id routes)
-router.get('/admin/all', verifyAdmin, getAllReviewsAdmin);
-router.patch('/admin/:id/status', verifyAdmin, updateReviewStatusAdmin);
-router.delete('/admin/:id', verifyAdmin, deleteReview);
+router.get('/admin/all', verifyAdmin, hasPermission('view_reviews'), getAllReviewsAdmin);
+router.patch('/admin/:id/status', verifyAdmin, hasPermission('view_reviews'), updateReviewStatusAdmin);
+router.delete('/admin/:id', verifyAdmin, hasPermission('delete_review'), deleteReview);
 
 // Customer routes
 router.get('/product/:productId', optionalCustomer, getProductReviews);

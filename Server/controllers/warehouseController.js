@@ -96,6 +96,14 @@ const getOne = async (req, res) => {
 const create = async (req, res) => {
   const transaction = await Warehouse.sequelize.transaction();
   try {
+    if (req.body.contactPhone && req.body.contactPhone.trim()) {
+      const cleanPhone = req.body.contactPhone.trim().replace(/^\+/, '').replace(/[\s\-()]/g, '');
+      if (!/^\d{7,15}$/.test(cleanPhone)) {
+        await transaction.rollback();
+        return res.status(400).json({ success: false, message: 'Invalid contact phone number format. Phone number must contain 7 to 15 digits.' });
+      }
+    }
+
     const existingCount = await Warehouse.count({ transaction });
 
     // Mandatory single fulfillment hub check:
@@ -124,6 +132,14 @@ const create = async (req, res) => {
 const update = async (req, res) => {
   const transaction = await Warehouse.sequelize.transaction();
   try {
+    if (req.body.contactPhone && req.body.contactPhone.trim()) {
+      const cleanPhone = req.body.contactPhone.trim().replace(/^\+/, '').replace(/[\s\-()]/g, '');
+      if (!/^\d{7,15}$/.test(cleanPhone)) {
+        await transaction.rollback();
+        return res.status(400).json({ success: false, message: 'Invalid contact phone number format. Phone number must contain 7 to 15 digits.' });
+      }
+    }
+
     const warehouse = await Warehouse.findByPk(req.params.id, { transaction });
     if (!warehouse) {
       await transaction.rollback();

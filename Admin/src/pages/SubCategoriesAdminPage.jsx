@@ -118,7 +118,7 @@ const SubCategoriesAdminPage = () => {
 
   const handleSave = async (e) => {
     e.preventDefault();
-    if (!form.categoryId) { setUploadError('Please select a category'); return; }
+    if (!form.categoryId) { setUploadError('Please select a root category'); return; }
     setSaving(true);
     setUploadError(null);
 
@@ -129,20 +129,18 @@ const SubCategoriesAdminPage = () => {
       fd.append('isActive', String(form.isActive));
       fd.append('categoryId', form.categoryId);
 
-
-
       if (editing) {
         await api.put(`/subcategories/${editing.id}`, fd);
-        toast.success('Sub-category updated successfully.');
+        toast.success('Parent Category updated successfully.');
       } else {
         await api.post('/subcategories', fd);
-        toast.success('Sub-category created successfully.');
+        toast.success('Parent Category created successfully.');
       }
 
       setModalOpen(false);
       loadData();
     } catch (err) {
-      setUploadError(err.response?.data?.message || err.message || 'Failed to save sub-category');
+      setUploadError(err.response?.data?.message || err.message || 'Failed to save parent category');
     } finally {
       setSaving(false);
     }
@@ -151,10 +149,10 @@ const SubCategoriesAdminPage = () => {
   const executeDelete = async (id) => {
     try {
       const deleteRes = await api.delete(`/subcategories/${id}`);
-      toast.success(deleteRes.data.message || 'Sub-category deleted successfully.');
+      toast.success(deleteRes.data.message || 'Parent Category deleted successfully.');
       loadData();
     } catch (err) {
-      toast.error(err.response?.data?.message || err.message || 'Failed to delete sub-category');
+      toast.error(err.response?.data?.message || err.message || 'Failed to delete parent category');
     }
   };
 
@@ -163,7 +161,7 @@ const SubCategoriesAdminPage = () => {
       <div className="flex flex-col items-center text-center gap-2 p-1">
         <p className="text-sm font-semibold text-neutral-800">Confirm Deletion</p>
         <p className="text-xs text-neutral-600 max-w-xs">
-          Are you sure you want to permanently delete this sub-category? This will delete all sub-subcategories under it and cannot be undone.
+          Are you sure you want to permanently delete this parent category? This will delete all child categories under it and cannot be undone.
         </p>
         <div className="flex justify-center items-center gap-3 mt-2 w-full">
           <button
@@ -189,19 +187,19 @@ const SubCategoriesAdminPage = () => {
   };
 
   return (
-    <AdminLayout title="Sub-categories">
+    <AdminLayout title="Parent Categories">
       <div className="flex justify-between items-center mb-6">
-        <p className="text-sm text-brand-grey">{subCategories.length} sub-categories · drag rows to reorder</p>
+        <p className="text-sm text-brand-grey">{subCategories.length} parent categories · drag rows to reorder</p>
         {canAddSubCategory && (
           <button onClick={() => openModal()} className="btn-primary flex items-center gap-2" id="add-subcat-btn" disabled={parentCategories.length === 0}>
-            <Plus size={16} /> Add Sub-category
+            <Plus size={16} /> Add Parent Category
           </button>
         )}
       </div>
 
       {parentCategories.length === 0 && !loading && (
         <div className="mb-6 p-4 bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-lg">
-          Please add at least one Category before creating a sub-category.
+          Please add at least one Root Category before creating a parent category.
         </div>
       )}
 
@@ -209,7 +207,7 @@ const SubCategoriesAdminPage = () => {
         <PaginationTop
           search={search}
           onSearchChange={(s) => { setSearch(s); setPage(1); }}
-          searchPlaceholder="Search sub-categories..."
+          searchPlaceholder="Search parent categories..."
           currentPage={page}
           totalItems={total}
           limit={limit}
@@ -221,9 +219,9 @@ const SubCategoriesAdminPage = () => {
           </div>
         ) : subCategories.length === 0 ? (
           <div className="p-12 text-center">
-            <p className="font-playfair text-xl text-brand-grey">No sub-categories yet</p>
+            <p className="font-playfair text-xl text-brand-grey">No parent categories yet</p>
             {canAddSubCategory && (
-              <button onClick={() => openModal()} className="btn-primary mt-4" id="add-first-subcat" disabled={parentCategories.length === 0}>Add First Sub-category</button>
+              <button onClick={() => openModal()} className="btn-primary mt-4" id="add-first-subcat" disabled={parentCategories.length === 0}>Add First Parent Category</button>
             )}
           </div>
         ) : (
@@ -240,8 +238,8 @@ const SubCategoriesAdminPage = () => {
                     <th className="pl-3 pr-1 py-3 w-8"></th>
                     <th className="px-5 py-3 w-16">NO</th>
 
-                    <th className="px-5 py-3">Category Name</th>
-                    <th className="px-5 py-3">Sub-category Name</th>
+                    <th className="px-5 py-3">Root Category Name</th>
+                    <th className="px-5 py-3">Parent Category Name</th>
                     <th className="px-5 py-3 w-32">Status</th>
                     {canShowActions && <th className="px-5 py-3 w-28 text-right">Actions</th>}
                   </tr>
@@ -304,7 +302,7 @@ const SubCategoriesAdminPage = () => {
           <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={e => e.target === e.currentTarget && !saving && setModalOpen(false)}>
             <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.96 }} className="bg-white rounded-xl w-full max-w-md shadow-xl overflow-hidden">
               <div className="flex items-center justify-between px-6 py-4 border-b border-brand-light">
-                <h2 className="font-playfair text-lg font-semibold">{editing ? 'Edit Sub-category' : 'Add Sub-category'}</h2>
+                <h2 className="font-playfair text-lg font-semibold">{editing ? 'Edit Parent Category' : 'Add Parent Category'}</h2>
                 <button onClick={() => !saving && setModalOpen(false)} className="p-1.5 hover:text-brand-gold focus-visible:outline-brand-gold transition-colors"><X size={18} /></button>
               </div>
               <form onSubmit={handleSave} className="p-6 space-y-4">
@@ -314,9 +312,9 @@ const SubCategoriesAdminPage = () => {
 
                 {/* Parent Category Selector */}
                 <div>
-                  <label className="block text-xs font-medium text-brand-grey mb-1.5" htmlFor="sub-parent">Category *</label>
+                  <label className="block text-xs font-medium text-brand-grey mb-1.5" htmlFor="sub-parent">Root Category *</label>
                   <select id="sub-parent" value={form.categoryId} onChange={e => setForm(p => ({ ...p, categoryId: e.target.value }))} required className="w-full border border-brand-light px-3 py-2 text-sm focus:outline-none focus:border-brand-gold transition-colors bg-white">
-                    <option value="" disabled>Select category...</option>
+                    <option value="" disabled>Select root category...</option>
                     {parentCategories.map(p => (
                       <option key={p.id} value={p.id}>{p.name}</option>
                     ))}
@@ -324,7 +322,7 @@ const SubCategoriesAdminPage = () => {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-brand-grey mb-1.5" htmlFor="sub-name">Sub-category Name *</label>
+                  <label className="block text-xs font-medium text-brand-grey mb-1.5" htmlFor="sub-name">Parent Category Name *</label>
                   <input id="sub-name" type="text" value={form.name} onChange={handleNameChange} required className="w-full border border-brand-light px-3 py-2 text-sm focus:outline-none focus:border-brand-gold transition-colors" placeholder="e.g. Lehenga Sets" />
                 </div>
 

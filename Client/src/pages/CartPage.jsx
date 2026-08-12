@@ -24,8 +24,8 @@ const CartPage = () => {
 
   const fmt = (v) => formatPrice(v, currencyCode, currencyRate);
 
-  const isGiftServiceActive = giftService ? giftService.isActive !== false : true;
-  const giftWrapAmount = giftService ? Number(giftService.amount || 0) : 99;
+  const isGiftServiceActive = Boolean(giftService && giftService.isActive !== false);
+  const giftWrapAmount = giftService ? Number(giftService.amount || 0) : 0;
 
   useEffect(() => { 
     document.title = 'Your Cart — Billu Bazaar'; 

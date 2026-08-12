@@ -254,8 +254,7 @@ const create = async (req, res) => {
   try {
     const { data } = processProductData(req);
     if (!data.warehouseId) {
-      const primaryWh = await Warehouse.findOne({ where: { isFulfillment: true, isActive: true } });
-      if (primaryWh) data.warehouseId = primaryWh.id;
+      return res.status(400).json({ success: false, message: 'Warehouse Location is required' });
     }
     const product = await Product.create(data);
 
@@ -309,14 +308,22 @@ const create = async (req, res) => {
         for (let i = 0; i < parsedVariants.length; i++) {
           const v = parsedVariants[i];
 
-          const vGalleryFiles = req.files ? req.files.filter(f => f.fieldname === `variantGallery_${i}`) : [];
+          const vMainFile = req.files ? req.files.find(f => f.fieldname === `variantMain_${i}`) : null;
+          let vMainPath = null;
+          if (vMainFile) {
+            const normalizedPath = vMainFile.path.replace(/\\/g, '/');
+            const uploadsIndex = normalizedPath.indexOf('uploads');
+            vMainPath = '/' + normalizedPath.substring(uploadsIndex);
+          }
+
+          const vGalleryFiles = req.files ? req.files.filter(f => f.fieldname === `variantGallery_${i}` || f.fieldname === `variantFiles_${i}`) : [];
           const newGalleryPaths = vGalleryFiles.map(file => {
             const normalizedPath = file.path.replace(/\\/g, '/');
             const uploadsIndex = normalizedPath.indexOf('uploads');
             return '/' + normalizedPath.substring(uploadsIndex);
           });
 
-          const mainVarImg = v.image || newGalleryPaths[0] || product.defaultProductImage || product.images?.[0] || null;
+          const mainVarImg = vMainPath || v.image || newGalleryPaths[0] || product.defaultProductImage || product.images?.[0] || null;
 
           const variant = await ProductVariant.create({
             productId: product.id,
@@ -351,7 +358,9 @@ const create = async (req, res) => {
 
     res.status(201).json({ success: true, product: freshProduct });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error('[Create Product Error]:', err);
+    const detailMsg = err.errors && Array.isArray(err.errors) ? err.errors.map(e => e.message).join(', ') : err.message;
+    res.status(500).json({ success: false, message: detailMsg || err.message });
   }
 };
 
@@ -361,6 +370,9 @@ const update = async (req, res) => {
     if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
 
     const { data, existingImages, existingSpinImages } = processProductData(req);
+    if (data.warehouseId === null || data.warehouseId === undefined || data.warehouseId === '') {
+      return res.status(400).json({ success: false, message: 'Warehouse Location is required' });
+    }
 
     // Identify and delete removed files
     const oldImages = product.images || [];
@@ -394,6 +406,14 @@ const update = async (req, res) => {
         for (let i = 0; i < parsedVariants.length; i++) {
           const v = parsedVariants[i];
           
+          const vMainFile = req.files ? req.files.find(f => f.fieldname === `variantMain_${i}`) : null;
+          let vMainPath = null;
+          if (vMainFile) {
+            const normalizedPath = vMainFile.path.replace(/\\/g, '/');
+            const uploadsIndex = normalizedPath.indexOf('uploads');
+            vMainPath = '/' + normalizedPath.substring(uploadsIndex);
+          }
+
           // Process uploaded files for this variant
           const vGalleryFiles = req.files ? req.files.filter(f => f.fieldname === `variantGallery_${i}` || f.fieldname === `variantFiles_${i}`) : [];
           const newGalleryPaths = vGalleryFiles.map(file => {
@@ -405,7 +425,7 @@ const update = async (req, res) => {
           // Concat existing variant images and new uploads (max 5)
           const existingGallery = v.images ? (typeof v.images === 'string' ? JSON.parse(v.images) : v.images) : (v.existingImages || []);
           const vImages = [...existingGallery, ...newGalleryPaths].slice(0, 5);
-          const mainVarImg = v.image || vImages[0] || product.defaultProductImage || null;
+          const mainVarImg = vMainPath || v.image || vImages[0] || product.defaultProductImage || null;
 
           let existingVariant = null;
           if (v.id && oldVariantMap.has(parseInt(v.id, 10))) {
@@ -503,7 +523,9 @@ const update = async (req, res) => {
 
     res.json({ success: true, product: freshProduct });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error('[Update Product Error]:', err);
+    const detailMsg = err.errors && Array.isArray(err.errors) ? err.errors.map(e => e.message).join(', ') : err.message;
+    res.status(500).json({ success: false, message: detailMsg || err.message });
   }
 };
 

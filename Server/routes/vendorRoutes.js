@@ -2,11 +2,12 @@
 const router = require('express').Router();
 const { getAll, getOne, create, update, remove } = require('../controllers/vendorController');
 const { verifyAdmin } = require('../middleware/auth');
+const { hasPermission } = require('../middleware/rbac');
 
 router.get('/', getAll);
 router.get('/:id', getOne);
-router.post('/', verifyAdmin, create);
-router.put('/:id', verifyAdmin, update);
-router.delete('/:id', verifyAdmin, remove);
+router.post('/', verifyAdmin, hasPermission('add_vendor'), create);
+router.put('/:id', verifyAdmin, hasPermission('edit_vendor'), update);
+router.delete('/:id', verifyAdmin, hasPermission('delete_vendor'), remove);
 
 module.exports = router;

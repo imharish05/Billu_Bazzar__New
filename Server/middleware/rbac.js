@@ -89,6 +89,7 @@ const hasPermission = (permissionKey) => (req, res, next) => {
     view_reports: ['reports.read'],
     manage_roles: ['settings.update', 'settings.read'],
     manage_admin_users: ['settings.update', 'settings.read'],
+    view_admin_users: ['settings.update', 'settings.read'],
   };
 
   const aliases = keyMap[permissionKey] || [];

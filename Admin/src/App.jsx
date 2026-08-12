@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
-import { useDispatch } from 'react-redux';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { useDispatch, useSelector } from 'react-redux';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import ProductsAdminPage from './pages/ProductsAdminPage';
@@ -30,14 +30,33 @@ import ContactEnquiriesAdminPage from './pages/ContactEnquiriesAdminPage';
 import RolesPermissionsAdminPage from './pages/RolesPermissionsAdminPage';
 import AdminUsersAdminPage from './pages/AdminUsersAdminPage';
 import NotFoundAdminPage from './pages/NotFoundAdminPage';
+import AccessDeniedView from './components/AccessDeniedView';
+import AdminLayout from './components/AdminLayout';
+import { canAccessNav } from './utils/rbac';
 import api from './services/api';
 import { setAdminUser } from './redux/slices/authSlice';
 import { Toaster } from 'react-hot-toast';
 
-/* Protected route — redirect to /login if no admin token */
-const Protected = ({ children }) => {
+/* Protected route — redirect to /login if no admin token, or render AccessDeniedView if unauthorized */
+const Protected = ({ children, path }) => {
+  const location = useLocation();
   const token = localStorage.getItem('bb_admin_token');
-  return token ? children : <Navigate to="/login" replace />;
+  const { admin } = useSelector(s => s.auth);
+
+  if (!token) {
+    return <Navigate to="/login" replace />;
+  }
+
+  const currentPath = path || location.pathname;
+  if (admin && !canAccessNav(admin, currentPath)) {
+    return (
+      <AdminLayout title="Access Denied">
+        <AccessDeniedView path={currentPath} />
+      </AdminLayout>
+    );
+  }
+
+  return children;
 };
 
 const App = () => {

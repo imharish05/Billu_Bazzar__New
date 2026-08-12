@@ -15,6 +15,18 @@ const EMPTY_WAREHOUSE_FORM = {
   isFulfillment: false, isProcurement: false, isActive: true
 };
 
+const validatePhone = (phone) => {
+  if (!phone || !phone.trim()) return { isValid: true };
+  const clean = phone.trim().replace(/^\+/, '').replace(/[\s\-()]/g, '');
+  if (!/^\d+$/.test(clean)) {
+    return { isValid: false, message: 'Contact Phone must contain only digits, spaces, hyphens, and optional + prefix.' };
+  }
+  if (clean.length < 7 || clean.length > 15) {
+    return { isValid: false, message: 'Contact Phone must be between 7 and 15 digits.' };
+  }
+  return { isValid: true };
+};
+
 const WarehousesAdminPage = () => {
   const { admin } = useSelector((s) => s.auth);
   const canAddWarehouse = checkPermission(admin, 'add_warehouse');
@@ -140,6 +152,13 @@ const WarehousesAdminPage = () => {
   // Save warehouse (Create / Update)
   const handleSaveWarehouse = async (e) => {
     e.preventDefault();
+    if (warehouseForm.contactPhone) {
+      const phoneCheck = validatePhone(warehouseForm.contactPhone);
+      if (!phoneCheck.isValid) {
+        toast.error(phoneCheck.message);
+        return;
+      }
+    }
     try {
       const payload = {
         name: warehouseForm.name,
@@ -693,12 +712,15 @@ const WarehousesAdminPage = () => {
                   <div>
                     <label className="block text-[11px] uppercase tracking-wider font-semibold text-brand-grey mb-1">Contact Phone</label>
                     <input
-                      type="text"
+                      type="tel"
                       value={warehouseForm.contactPhone}
                       onChange={e => setWarehouseForm(f => ({ ...f, contactPhone: e.target.value }))}
                       className="w-full border border-brand-light px-3 py-2 text-xs focus:outline-none focus:border-brand-gold rounded-none"
                       placeholder="e.g. +91 9988776655"
                     />
+                    {warehouseForm.contactPhone && !validatePhone(warehouseForm.contactPhone).isValid && (
+                      <p className="text-[10px] text-red-500 mt-1">{validatePhone(warehouseForm.contactPhone).message}</p>
+                    )}
                   </div>
                 </div>
 

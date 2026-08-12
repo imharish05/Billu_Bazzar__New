@@ -545,12 +545,15 @@ const DeliveryZonesAdminPage = () => {
                         )}
                       </td>
                       <td className="p-4 text-center">
-                        <div className="flex justify-center">
+                        <div className="flex items-center justify-center gap-2">
                           <Switch
                             checked={zone.isActive}
                             disabled={!canEditDeliveryZone}
                             onChange={() => canEditDeliveryZone && handleToggleActive(zone)}
                           />
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${zone.isActive ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                            {zone.isActive ? 'Active' : 'Inactive'}
+                          </span>
                         </div>
                       </td>
                       {canShowActions && (

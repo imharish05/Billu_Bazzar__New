@@ -241,7 +241,7 @@ const OrderConfirmationPage = () => {
           <button onClick={() => printInvoice(order)} className="btn-outline flex items-center justify-center gap-2 flex-1 py-3.5" id="download-invoice">
             <Download size={16} /> Download Invoice
           </button>
-          <Link to="/account?tab=orders" className="btn-primary flex items-center justify-center gap-2 flex-1 py-3.5" id="view-orders">
+          <Link to="/account/orders" className="btn-primary flex items-center justify-center gap-2 flex-1 py-3.5" id="view-orders">
             View All Orders
           </Link>
         </div>

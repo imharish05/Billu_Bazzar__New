@@ -13,6 +13,7 @@ const {
   downloadSampleTemplate,
 } = require('../controllers/deliveryZoneController');
 const { verifyAdmin } = require('../middleware/auth');
+const { hasPermission } = require('../middleware/rbac');
 
 // Multer memory storage for Excel parsing
 const upload = multer({
@@ -25,12 +26,12 @@ router.get('/check/:pincode', checkPincodeDelivery);
 router.get('/check', checkPincodeDelivery);
 
 // Admin routes
-router.get('/', verifyAdmin, getDeliveryZones);
-router.get('/sample-template', verifyAdmin, downloadSampleTemplate);
-router.post('/', verifyAdmin, createDeliveryZone);
-router.put('/:id', verifyAdmin, updateDeliveryZone);
-router.delete('/bulk', verifyAdmin, bulkDeleteDeliveryZones);
-router.delete('/:id', verifyAdmin, deleteDeliveryZone);
-router.post('/bulk-upload', verifyAdmin, upload.single('file'), bulkUploadDeliveryZones);
+router.get('/', verifyAdmin, hasPermission('view_delivery_zones'), getDeliveryZones);
+router.get('/sample-template', verifyAdmin, hasPermission('view_delivery_zones'), downloadSampleTemplate);
+router.post('/', verifyAdmin, hasPermission('add_delivery_zone'), createDeliveryZone);
+router.put('/:id', verifyAdmin, hasPermission('edit_delivery_zone'), updateDeliveryZone);
+router.delete('/bulk', verifyAdmin, hasPermission('delete_delivery_zone'), bulkDeleteDeliveryZones);
+router.delete('/:id', verifyAdmin, hasPermission('delete_delivery_zone'), deleteDeliveryZone);
+router.post('/bulk-upload', verifyAdmin, hasPermission('add_delivery_zone'), upload.single('file'), bulkUploadDeliveryZones);
 
 module.exports = router;

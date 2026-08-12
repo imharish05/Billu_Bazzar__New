@@ -7,7 +7,7 @@ const { verifyAdmin } = require('../middleware/auth');
 const { hasPermission } = require('../middleware/rbac');
 
 // GET /api/admin-users - Fetch all admin/staff users with their associated Role
-router.get('/', verifyAdmin, hasPermission('manage_admin_users'), async (req, res) => {
+router.get('/', verifyAdmin, hasPermission('view_admin_users'), async (req, res) => {
   try {
     const users = await AdminUser.findAll({
       attributes: { exclude: ['password'] },

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { NavLink, Outlet, useSearchParams, useLocation } from 'react-router-dom';
+import { NavLink, Outlet, useSearchParams, useLocation, useNavigate } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import { User, Package, Heart, Star, Gift, Headphones, LogOut, Lock, Mail, Eye, EyeOff, Phone, ArrowLeft, CheckCircle, RefreshCw, MessageSquare } from 'lucide-react';
 import Footer from '../../components/Footer';
@@ -27,6 +27,7 @@ const VIEW_FORGOT_RESET  = 'forgot_reset';   // Step 3: set new password
 
 const AccountLayout = () => {
   const dispatch = useDispatch();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { pathname } = useLocation();
   const { isAuthenticated, customer, loading, error } = useSelector(s => s.auth);
@@ -70,17 +71,26 @@ const AccountLayout = () => {
   const [confirmPwError, setConfirmPwError] = useState('');
   const [resetLoading, setResetLoading]   = useState(false);
 
-  // Read URL query params for initial view (e.g. /account?view=forgot&email=user@domain.com or /account?view=register)
+  // Read URL query params for initial view & tab redirects (e.g. /account?tab=orders -> /account/orders)
   useEffect(() => {
     const viewParam = searchParams.get('view');
     const emailParam = searchParams.get('email');
+    const tabParam = searchParams.get('tab');
     if (viewParam === 'forgot' || viewParam === 'forgot_email') {
       setView(VIEW_FORGOT_EMAIL);
       if (emailParam) setForgotEmail(emailParam);
     } else if (viewParam === 'register') {
       setView(VIEW_REGISTER);
     }
-  }, [searchParams]);
+    if (tabParam) {
+      if (tabParam === 'orders') navigate('/account/orders', { replace: true });
+      else if (tabParam === 'wishlist') navigate('/account/wishlist', { replace: true });
+      else if (tabParam === 'reviews') navigate('/account/reviews', { replace: true });
+      else if (tabParam === 'loyalty') navigate('/account/loyalty', { replace: true });
+      else if (tabParam === 'personal-shopper' || tabParam === 'shopper') navigate('/account/personal-shopper', { replace: true });
+      else if (tabParam === 'support') navigate('/account/support', { replace: true });
+    }
+  }, [searchParams, navigate]);
 
   // Clear state when switching views
   useEffect(() => {

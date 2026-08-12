@@ -557,6 +557,11 @@ const ProductLivePreviewModal = ({ product, onClose }) => {
 };
 
 // ── Product Add / Edit Modal Component ──────────────────────────────────────
+const parseBool = (val, defaultVal = false) => {
+  if (val === undefined || val === null) return defaultVal;
+  return val === true || val === 1 || val === '1' || val === 'true';
+};
+
 const ProductModal = ({ product, onClose, onSave }) => {
   const [form, setForm] = useState(product ? {
     name: product.name || '',
@@ -573,13 +578,13 @@ const ProductModal = ({ product, onClose, onSave }) => {
     vendorId: product.vendorId || '',
     warehouseId: product.warehouseId || '',
     gstRate: product.gstRate || '0%',
-    isFeatured: Boolean(product.isFeatured),
-    isNewArrival: Boolean(product.isNewArrival),
-    isBestSeller: Boolean(product.isBestSeller),
-    hasAuthenticityBadge: Boolean(product.showAuthenticity),
-    isActive: product.isActive !== undefined ? Boolean(product.isActive) : true,
-    has360View: Boolean(product.has360View || (product.spin_images && product.spin_images.length > 0)),
-    hasVideo: Boolean(product.hasVideo || product.videoUrl),
+    isFeatured: parseBool(product.isFeatured),
+    isNewArrival: parseBool(product.isNewArrival),
+    isBestSeller: parseBool(product.isBestSeller),
+    hasAuthenticityBadge: parseBool(product.showAuthenticity !== undefined ? product.showAuthenticity : product.hasAuthenticityBadge),
+    isActive: parseBool(product.isActive, true),
+    has360View: parseBool(product.has360View || (product.spin_images && product.spin_images.length > 0)),
+    hasVideo: parseBool(product.hasVideo || product.videoUrl),
     videoUrl: product.videoUrl || '',
     defaultProductImage: product.defaultProductImage || product.images?.[0] || null,
   } : { ...EMPTY_FORM });
@@ -590,17 +595,41 @@ const ProductModal = ({ product, onClose, onSave }) => {
   const [vendors, setVendors] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
 
-  // Inline Custom Subcategory and SubSubcategory creation states
-  const [customSubCategoryName, setCustomSubCategoryName] = useState('');
-  const [isCustomSubCategory, setIsCustomSubCategory] = useState(false);
-  const [customSubSubCategoryName, setCustomSubSubCategoryName] = useState('');
-  const [isCustomSubSubCategory, setIsCustomSubSubCategory] = useState(false);
-
   // Live Storefront Preview state inside modal
   const [previewOpen, setPreviewOpen] = useState(false);
 
   // Dynamic Key-Value Option Rows with Color Support
   const [optionRows, setOptionRows] = useState(() => {
+    // 1. First preference: extract aggregated attributes from product.variants
+    if (product && Array.isArray(product.variants) && product.variants.length > 0) {
+      const varAttrMap = {};
+      product.variants.forEach(v => {
+        const vAttrs = typeof v.attributes === 'string' ? (JSON.parse(v.attributes) || {}) : (v.attributes || {});
+        Object.entries(vAttrs).forEach(([k, val]) => {
+          const keyStr = String(k || '').trim();
+          const valStr = String(val || '').trim();
+          if (keyStr && valStr) {
+            if (!varAttrMap[keyStr]) varAttrMap[keyStr] = new Set();
+            varAttrMap[keyStr].add(valStr);
+          }
+        });
+      });
+
+      const entries = Object.entries(varAttrMap);
+      if (entries.length > 0) {
+        return entries.map(([k, setVals], i) => {
+          const valStr = Array.from(setVals).join(', ');
+          return {
+            id: Date.now() + i,
+            optionName: k,
+            optionValue: valStr,
+            colorHex: k.toLowerCase() === 'color' && valStr.startsWith('#') ? valStr : '#8B0000',
+          };
+        });
+      }
+    }
+
+    // 2. Second preference: fallback to product.attributes
     if (product && product.attributes && Object.keys(product.attributes).length > 0) {
       const attrs = typeof product.attributes === 'string' ? JSON.parse(product.attributes) : product.attributes;
       if (Array.isArray(attrs)) {
@@ -633,19 +662,27 @@ const ProductModal = ({ product, onClose, onSave }) => {
   // Product Variants Matrix State
   const [productVariants, setProductVariants] = useState(() => {
     if (product && Array.isArray(product.variants) && product.variants.length > 0) {
-      return product.variants.map((v, idx) => ({
-        id: v.id || Date.now() + idx,
-        sku: v.sku || '',
-        price: v.price !== undefined ? String(v.price) : '',
-        mrp: v.mrp !== undefined ? String(v.mrp) : '',
-        stock: v.stock !== undefined ? String(v.stock) : '0',
-        lowStockThreshold: v.lowStockThreshold !== undefined ? String(v.lowStockThreshold) : '10',
-        gstRate: v.gstRate || product?.gstRate || '0%',
-        attributes: v.attributes || {},
-        existingImages: Array.isArray(v.images) ? v.images : (v.image ? [v.image] : []),
-        warehouseId: v.warehouseId || '',
-        newFiles: [],
-      }));
+      return product.variants.map((v, idx) => {
+        const rawImgs = typeof v.images === 'string' ? (JSON.parse(v.images) || []) : (Array.isArray(v.images) ? v.images : []);
+        const gallery = rawImgs.length > 0 ? rawImgs : (v.image ? [v.image] : []);
+        const rawAttrs = typeof v.attributes === 'string' ? (JSON.parse(v.attributes) || {}) : (v.attributes || {});
+        const mainImg = v.image || (gallery.length > 0 ? gallery[0] : null);
+
+        return {
+          id: v.id || Date.now() + idx,
+          sku: v.sku || '',
+          price: v.price !== undefined ? String(v.price) : '',
+          mrp: v.mrp !== undefined ? String(v.mrp) : '',
+          stock: v.stock !== undefined ? String(v.stock) : '0',
+          lowStockThreshold: v.lowStockThreshold !== undefined ? String(v.lowStockThreshold) : '10',
+          gstRate: v.gstRate || product?.gstRate || '0%',
+          attributes: rawAttrs,
+          existingImages: gallery,
+          mainImagePreview: mainImg,
+          warehouseId: v.warehouseId || '',
+          newFiles: [],
+        };
+      });
     }
     return [];
   });
@@ -688,12 +725,18 @@ const ProductModal = ({ product, onClose, onSave }) => {
     setProductVariants(prev => {
       const existingMap = new Map();
       prev.forEach(v => {
-        const key = Object.entries(v.attributes || {}).sort().map(([k, val]) => `${k}:${val}`).join('|');
+        const key = Object.entries(v.attributes || {})
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([k, val]) => `${k.trim().toLowerCase()}:${String(val).trim().toLowerCase()}`)
+          .join('|');
         existingMap.set(key, v);
       });
 
       return combinations.map((combo, idx) => {
-        const key = Object.entries(combo).sort().map(([k, val]) => `${k}:${val}`).join('|');
+        const key = Object.entries(combo)
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([k, val]) => `${k.trim().toLowerCase()}:${String(val).trim().toLowerCase()}`)
+          .join('|');
         const existing = existingMap.get(key);
 
         if (existing) {
@@ -1121,6 +1164,10 @@ const ProductModal = ({ product, onClose, onSave }) => {
       toast.error('Category is required');
       return;
     }
+    if (!form.warehouseId) {
+      toast.error('Warehouse Location is required');
+      return;
+    }
 
     const validOptions = optionRows.filter(r => {
       const name = String(r.optionName || '');
@@ -1147,41 +1194,8 @@ const ProductModal = ({ product, onClose, onSave }) => {
       return;
     }
 
-    // Auto-create Subcategory if typed in custom input
-    let finalSubCategoryId = form.subCategoryId;
-    if ((isCustomSubCategory || filteredSubCategories.length === 0) && customSubCategoryName.trim()) {
-      try {
-        const subRes = await api.post('/subcategories', {
-          name: customSubCategoryName.trim(),
-          categoryId: parseInt(form.categoryId, 10),
-          isActive: true
-        });
-        if (subRes.data.success && subRes.data.subCategory) {
-          finalSubCategoryId = subRes.data.subCategory.id;
-          setSubCategories(prev => [...prev, subRes.data.subCategory]);
-        }
-      } catch (err) {
-        console.error('Error creating custom subcategory:', err);
-      }
-    }
-
-    // Auto-create Sub-subcategory if typed in custom input
-    let finalSubSubCategoryId = form.subSubCategoryId;
-    if ((isCustomSubSubCategory || filteredSubSubCategories.length === 0) && customSubSubCategoryName.trim() && finalSubCategoryId) {
-      try {
-        const subSubRes = await api.post('/subsubcategories', {
-          name: customSubSubCategoryName.trim(),
-          subCategoryId: parseInt(finalSubCategoryId, 10),
-          isActive: true
-        });
-        if (subSubRes.data.success && subSubRes.data.subSubCategory) {
-          finalSubSubCategoryId = subSubRes.data.subSubCategory.id;
-          setSubSubCategories(prev => [...prev, subSubRes.data.subSubCategory]);
-        }
-      } catch (err) {
-        console.error('Error creating custom sub-subcategory:', err);
-      }
-    }
+    const finalSubCategoryId = form.subCategoryId;
+    const finalSubSubCategoryId = form.subSubCategoryId;
 
     const generatedSlug = form.name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 
@@ -1221,20 +1235,28 @@ const ProductModal = ({ product, onClose, onSave }) => {
     }
 
     if (productVariants.length > 0) {
-      fd.append('variants', JSON.stringify(productVariants.map(v => ({
-        id: typeof v.id === 'number' && v.id < 1000000000000 ? v.id : null,
-        sku: v.sku,
-        price: v.price,
-        mrp: v.mrp,
-        stock: v.stock,
-        lowStockThreshold: v.lowStockThreshold || '10',
-        gstRate: v.gstRate || form.gstRate || '0%',
-        attributes: v.attributes,
-        existingImages: v.existingImages || [],
-        warehouseId: v.warehouseId || form.warehouseId || null,
-      }))));
+      fd.append('variants', JSON.stringify(productVariants.map(v => {
+        const rawId = Number(v.id);
+        const isValidDbId = Boolean(v.id && !isNaN(rawId) && rawId > 0 && rawId < 1000000000000);
+        return {
+          id: isValidDbId ? rawId : null,
+          sku: v.sku,
+          price: v.price,
+          mrp: v.mrp,
+          stock: v.stock,
+          lowStockThreshold: v.lowStockThreshold || '10',
+          gstRate: v.gstRate || form.gstRate || '0%',
+          attributes: v.attributes,
+          image: (v.mainImagePreview && typeof v.mainImagePreview === 'string' && !v.mainImagePreview.startsWith('blob:')) ? v.mainImagePreview : (v.existingImages?.[0] || null),
+          existingImages: v.existingImages || [],
+          warehouseId: v.warehouseId || form.warehouseId || null,
+        };
+      })));
 
       productVariants.forEach((v, vIdx) => {
+        if (v.mainImageFile) {
+          fd.append(`variantMain_${vIdx}`, v.mainImageFile);
+        }
         if (Array.isArray(v.newFiles)) {
           v.newFiles.forEach(file => {
             fd.append(`variantFiles_${vIdx}`, file);
@@ -1363,7 +1385,7 @@ const ProductModal = ({ product, onClose, onSave }) => {
 
               {/* Warehouse */}
               <div>
-                <label className="block text-xs font-semibold text-neutral-700 mb-1">Warehouse Location</label>
+                <label className="block text-xs font-semibold text-neutral-700 mb-1">Warehouse Location *</label>
                 <select
                   value={form.warehouseId}
                   onChange={e => {
@@ -1371,6 +1393,7 @@ const ProductModal = ({ product, onClose, onSave }) => {
                     setForm(p => ({ ...p, warehouseId: val }));
                     setProductVariants(prev => prev.map(v => ({ ...v, warehouseId: val })));
                   }}
+                  required
                   className="w-full border border-brand-light bg-white px-3 py-2 text-sm focus:outline-none focus:border-brand-gold rounded-sm"
                 >
                   <option value="">Select Warehouse</option>
@@ -1398,95 +1421,43 @@ const ProductModal = ({ product, onClose, onSave }) => {
 
               {/* Parent Category */}
               <div>
-                <div className="flex justify-between items-center mb-1">
-                  <label className="block text-xs font-semibold text-neutral-700">
-                    Parent Category {filteredSubCategories.length > 0 ? '*' : '(Custom)'}
-                  </label>
-                  {form.categoryId && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsCustomSubCategory(prev => !prev);
-                        if (!isCustomSubCategory) setForm(p => ({ ...p, subCategoryId: '', subSubCategoryId: '' }));
-                      }}
-                      className="text-[10px] font-bold text-brand-gold hover:underline flex items-center gap-1"
-                    >
-                      {isCustomSubCategory || filteredSubCategories.length === 0 ? (filteredSubCategories.length > 0 ? 'Select Existing' : 'Custom Mode') : '+ Add New'}
-                    </button>
-                  )}
-                </div>
-
-                {isCustomSubCategory || (form.categoryId && filteredSubCategories.length === 0) ? (
-                  <input
-                    type="text"
-                    value={customSubCategoryName}
-                    onChange={e => setCustomSubCategoryName(e.target.value)}
-                    disabled={!form.categoryId}
-                    placeholder={!form.categoryId ? '— Select Root Category First —' : 'Type new parent category name...'}
-                    className="w-full border border-amber-400 px-3 py-2 text-sm focus:outline-none focus:border-brand-gold rounded-sm bg-amber-50/60 font-semibold text-amber-950 placeholder:text-amber-800/50"
-                  />
-                ) : (
-                  <select
-                    value={form.subCategoryId}
-                    onChange={e => handleSubCategoryChange(e.target.value)}
-                    required={filteredSubCategories.length > 0}
-                    disabled={!form.categoryId}
-                    className="w-full border border-brand-light bg-white px-3 py-2 text-sm focus:outline-none focus:border-brand-gold rounded-sm disabled:bg-neutral-100 disabled:text-neutral-400 font-medium text-neutral-800"
-                  >
-                    <option value="">
-                      {!form.categoryId ? '— Select Root Category First —' : 'Select Parent Category'}
-                    </option>
-                    {filteredSubCategories.map(s => (
-                      <option key={s.id} value={s.id}>{s.name}</option>
-                    ))}
-                  </select>
-                )}
+                <label className="block text-xs font-semibold text-neutral-700 mb-1">
+                  Parent Category {filteredSubCategories.length > 0 ? '*' : ''}
+                </label>
+                <select
+                  value={form.subCategoryId}
+                  onChange={e => handleSubCategoryChange(e.target.value)}
+                  required={filteredSubCategories.length > 0}
+                  disabled={!form.categoryId}
+                  className="w-full border border-brand-light bg-white px-3 py-2 text-sm focus:outline-none focus:border-brand-gold rounded-sm disabled:bg-neutral-100 disabled:text-neutral-400 font-medium text-neutral-800"
+                >
+                  <option value="">
+                    {!form.categoryId ? '— Select Root Category First —' : 'Select Parent Category'}
+                  </option>
+                  {filteredSubCategories.map(s => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
               </div>
 
               {/* Child Category */}
               <div>
-                <div className="flex justify-between items-center mb-1">
-                  <label className="block text-xs font-semibold text-neutral-700">
-                    Child Category (Optional)
-                  </label>
-                  {(form.subCategoryId || customSubCategoryName.trim()) && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsCustomSubSubCategory(prev => !prev);
-                        if (!isCustomSubSubCategory) setForm(p => ({ ...p, subSubCategoryId: '' }));
-                      }}
-                      className="text-[10px] font-bold text-brand-gold hover:underline flex items-center gap-1"
-                    >
-                      {isCustomSubSubCategory || filteredSubSubCategories.length === 0 ? (filteredSubSubCategories.length > 0 ? 'Select Existing' : 'Custom Mode') : '+ Add New'}
-                    </button>
-                  )}
-                </div>
-
-                {isCustomSubSubCategory || ((form.subCategoryId || customSubCategoryName.trim()) && filteredSubSubCategories.length === 0) ? (
-                  <input
-                    type="text"
-                    value={customSubSubCategoryName}
-                    onChange={e => setCustomSubSubCategoryName(e.target.value)}
-                    disabled={!form.subCategoryId && !customSubCategoryName.trim()}
-                    placeholder={(!form.subCategoryId && !customSubCategoryName.trim()) ? '— Select Parent Category First —' : 'Type new child category name...'}
-                    className="w-full border border-amber-400 px-3 py-2 text-sm focus:outline-none focus:border-brand-gold rounded-sm bg-amber-50/60 font-semibold text-amber-950 placeholder:text-amber-800/50"
-                  />
-                ) : (
-                  <select
-                    value={form.subSubCategoryId}
-                    onChange={e => set('subSubCategoryId', e.target.value)}
-                    disabled={!form.subCategoryId}
-                    className="w-full border border-brand-light bg-white px-3 py-2 text-sm focus:outline-none focus:border-brand-gold rounded-sm disabled:bg-neutral-100 disabled:text-neutral-400 font-medium text-neutral-800"
-                  >
-                    <option value="">
-                      {!form.subCategoryId ? '— Select Parent Category First —' : 'Select Child Category'}
-                    </option>
-                    {filteredSubSubCategories.map(ss => (
-                      <option key={ss.id} value={ss.id}>{ss.name}</option>
-                    ))}
-                  </select>
-                )}
+                <label className="block text-xs font-semibold text-neutral-700 mb-1">
+                  Child Category (Optional)
+                </label>
+                <select
+                  value={form.subSubCategoryId}
+                  onChange={e => set('subSubCategoryId', e.target.value)}
+                  disabled={!form.subCategoryId}
+                  className="w-full border border-brand-light bg-white px-3 py-2 text-sm focus:outline-none focus:border-brand-gold rounded-sm disabled:bg-neutral-100 disabled:text-neutral-400 font-medium text-neutral-800"
+                >
+                  <option value="">
+                    {!form.subCategoryId ? '— Select Parent Category First —' : 'Select Child Category'}
+                  </option>
+                  {filteredSubSubCategories.map(ss => (
+                    <option key={ss.id} value={ss.id}>{ss.name}</option>
+                  ))}
+                </select>
               </div>
             </div>
           </div>
@@ -2090,27 +2061,27 @@ const ProductModal = ({ product, onClose, onSave }) => {
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
               <label className="flex items-center justify-between bg-white p-3 border border-brand-light rounded-sm cursor-pointer">
                 <span className="text-xs font-semibold text-neutral-700">Featured</span>
-                <Switch checked={form.isFeatured} onChange={checked => set('isFeatured', checked)} />
+                <Switch checked={form.isFeatured} onChange={val => set('isFeatured', typeof val === 'boolean' ? val : Boolean(val?.target?.checked))} />
               </label>
 
               <label className="flex items-center justify-between bg-white p-3 border border-brand-light rounded-sm cursor-pointer">
                 <span className="text-xs font-semibold text-neutral-700">New Arrival</span>
-                <Switch checked={form.isNewArrival} onChange={checked => set('isNewArrival', checked)} />
+                <Switch checked={form.isNewArrival} onChange={val => set('isNewArrival', typeof val === 'boolean' ? val : Boolean(val?.target?.checked))} />
               </label>
 
               <label className="flex items-center justify-between bg-white p-3 border border-brand-light rounded-sm cursor-pointer">
                 <span className="text-xs font-semibold text-neutral-700">Best Seller</span>
-                <Switch checked={form.isBestSeller} onChange={checked => set('isBestSeller', checked)} />
+                <Switch checked={form.isBestSeller} onChange={val => set('isBestSeller', typeof val === 'boolean' ? val : Boolean(val?.target?.checked))} />
               </label>
 
               <label className="flex items-center justify-between bg-white p-3 border border-brand-light rounded-sm cursor-pointer">
                 <span className="text-xs font-semibold text-neutral-700">Authenticity Badge</span>
-                <Switch checked={form.hasAuthenticityBadge} onChange={checked => set('hasAuthenticityBadge', checked)} />
+                <Switch checked={form.hasAuthenticityBadge} onChange={val => set('hasAuthenticityBadge', typeof val === 'boolean' ? val : Boolean(val?.target?.checked))} />
               </label>
 
               <label className="flex items-center justify-between bg-white p-3 border border-brand-light rounded-sm cursor-pointer">
                 <span className="text-xs font-semibold text-neutral-700">Active (Visible)</span>
-                <Switch checked={form.isActive} onChange={checked => set('isActive', checked)} />
+                <Switch checked={form.isActive} onChange={val => set('isActive', typeof val === 'boolean' ? val : Boolean(val?.target?.checked))} />
               </label>
             </div>
           </div>

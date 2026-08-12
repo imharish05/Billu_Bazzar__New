@@ -5,119 +5,79 @@ import {
   Plus, Search, Edit3, Trash2, Save, RefreshCw
 } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
+import AccessDeniedView from '../components/AccessDeniedView';
 import api from '../services/api';
 import toast from 'react-hot-toast';
 import { checkPermission } from '../utils/rbac';
 
 // 9 Comprehensive Permission Section Cards for the Grid
+// 8 Simplified Permission Section Cards for System-Wide Access Control
 const PERMISSION_GROUPS = [
-  {
-    id: 'products_catalog',
-    title: 'Products & Catalog',
-    items: [
-      { key: 'view_products', label: 'View Products' },
-      { key: 'add_product', label: 'Add Product' },
-      { key: 'edit_product', label: 'Edit Product' },
-      { key: 'delete_product', label: 'Delete Product' },
-      { key: 'view_variants', label: 'View Variants' },
-      { key: 'add_variant', label: 'Add Variant' },
-      { key: 'edit_variant', label: 'Edit Variant' },
-      { key: 'delete_variant', label: 'Delete Variant' },
-      { key: 'view_reviews', label: 'View Product Reviews' },
-      { key: 'delete_review', label: 'Delete Product Review' },
-    ]
-  },
   {
     id: 'categories_hierarchy',
     title: 'Categories & Structure',
     items: [
-      { key: 'view_categories', label: 'View Root Categories' },
-      { key: 'add_category', label: 'Add Root Category' },
-      { key: 'edit_category', label: 'Edit Root Category' },
-      { key: 'delete_category', label: 'Delete Root Category' },
-      { key: 'view_sub_categories', label: 'View Parent Categories' },
-      { key: 'add_sub_category', label: 'Add Parent Category' },
-      { key: 'edit_sub_category', label: 'Edit Parent Category' },
-      { key: 'view_sub_sub_categories', label: 'View Child Categories' },
-      { key: 'add_sub_sub_category', label: 'Add Child Category' },
-      { key: 'edit_sub_sub_category', label: 'Edit Child Category' },
-      { key: 'delete_sub_sub_category', label: 'Delete Child Category' },
+      { key: 'view_categories', label: 'View Categories (Root, Parent & Child)' },
+      { key: 'add_category', label: 'Add & Edit Categories' },
+      { key: 'delete_category', label: 'Delete Categories' },
+    ]
+  },
+  {
+    id: 'products_catalog',
+    title: 'Products & Catalog',
+    items: [
+      { key: 'view_products', label: 'View Products & Variants' },
+      { key: 'add_product', label: 'Add & Edit Products & Variants' },
+      { key: 'delete_product', label: 'Delete Products & Variants' },
     ]
   },
   {
     id: 'orders_carts',
     title: 'Orders & Carts',
     items: [
-      { key: 'view_orders', label: 'View Orders' },
-      { key: 'update_orders', label: 'Update Order Status' },
-      { key: 'cancel_orders', label: 'Cancel Orders' },
-      { key: 'view_abandoned_carts', label: 'View Abandoned Carts' },
-      { key: 'delete_abandoned_cart', label: 'Delete Abandoned Cart' },
+      { key: 'view_orders', label: 'View Orders & Abandoned Carts' },
+      { key: 'update_orders', label: 'Update Orders & Process Status' },
+      { key: 'cancel_orders', label: 'Cancel Orders & Clear Carts' },
     ]
   },
   {
     id: 'marketing_promotions',
     title: 'Marketing & Promotions',
     items: [
-      { key: 'view_coupons', label: 'View Coupons' },
-      { key: 'add_coupon', label: 'Add Coupon' },
-      { key: 'edit_coupon', label: 'Edit Coupon' },
-      { key: 'delete_coupon', label: 'Delete Coupon' },
-      { key: 'view_banners', label: 'View Banners' },
-      { key: 'add_banner', label: 'Add Banner' },
-      { key: 'view_slider_messages', label: 'View Slider Messages' },
-      { key: 'add_slider_message', label: 'Add Slider Message' },
-      { key: 'view_gift_services', label: 'View Gift Services' },
-      { key: 'manage_affiliates', label: 'Manage Affiliates' },
-      { key: 'manage_loyalty', label: 'Manage Loyalty Program' },
+      { key: 'view_marketing', label: 'View Marketing & Promotions' },
+      { key: 'manage_marketing', label: 'Manage Coupons, Banners & Loyalty' },
     ]
   },
   {
     id: 'operations_logistics',
-    title: 'Operations & Warehouses',
+    title: 'Operations & Logistics',
     items: [
-      { key: 'view_vendors', label: 'View Vendors' },
-      { key: 'add_vendor', label: 'Add Vendor' },
-      { key: 'edit_vendor', label: 'Edit Vendor' },
-      { key: 'view_warehouses', label: 'View Warehouses' },
-      { key: 'add_warehouse', label: 'Add Warehouse' },
-      { key: 'edit_warehouse', label: 'Edit Warehouse' },
-      { key: 'view_delivery_zones', label: 'View Delivery Zones' },
-      { key: 'add_delivery_zone', label: 'Add Delivery Zone' },
-      { key: 'view_stock_alerts', label: 'View Restock Alerts' },
+      { key: 'view_operations', label: 'View Vendors, Warehouses & Delivery' },
+      { key: 'manage_operations', label: 'Manage Operations & Stock Alerts' },
     ]
   },
   {
     id: 'customers_enquiries',
     title: 'Customers & Support',
     items: [
-      { key: 'view_customers', label: 'View Customers' },
-      { key: 'edit_customer', label: 'Edit Customer' },
-      { key: 'delete_customer', label: 'Delete Customer' },
-      { key: 'view_contact_enquiries', label: 'View Contact Enquiries' },
-      { key: 'delete_contact_enquiry', label: 'Delete Contact Enquiry' },
+      { key: 'view_customers', label: 'View Customers & Enquiries' },
+      { key: 'manage_customers', label: 'Manage Customer Accounts & Support' },
     ]
   },
   {
     id: 'finance_reports',
     title: 'Finance & Analytics',
     items: [
-      { key: 'view_payments', label: 'View Payment Transactions' },
-      { key: 'refund_payment', label: 'Issue Payment Refund' },
-      { key: 'view_reports', label: 'View Sales & Revenue Reports' },
-      { key: 'export_reports', label: 'Export Analytics Data' },
+      { key: 'view_finance', label: 'View Payments & Sales Reports' },
+      { key: 'manage_finance', label: 'Manage Refunds & Export Data' },
     ]
   },
   {
     id: 'settings_access',
     title: 'System & Access Settings',
     items: [
-      { key: 'view_site_settings', label: 'View Site Settings' },
-      { key: 'edit_site_settings', label: 'Edit Site Settings' },
-      { key: 'view_system_settings', label: 'View System Thresholds' },
-      { key: 'edit_system_settings', label: 'Edit Inventory & OTP Limits' },
-      { key: 'manage_roles', label: 'Manage Roles & Permissions' },
-      { key: 'manage_admin_users', label: 'Manage Admin User Accounts' },
+      { key: 'view_settings', label: 'View Settings & Admin Accounts' },
+      { key: 'manage_settings', label: 'Manage System Settings & Roles' },
     ]
   }
 ];
@@ -150,8 +110,8 @@ const RolesPermissionsAdminPage = () => {
   const fetchRoles = async () => {
     setLoading(true);
     try {
-      const res = await api.get('/roles').catch(() => null);
-      if (res?.data?.success && Array.isArray(res.data.roles) && res.data.roles.length > 0) {
+      const res = await api.get('/roles');
+      if (res?.data?.success && Array.isArray(res.data.roles)) {
         const fetchedRoles = res.data.roles.map(r => {
           let parsedPerms = r.permissions;
           if (typeof parsedPerms === 'string') {
@@ -167,13 +127,11 @@ const RolesPermissionsAdminPage = () => {
         });
         setRoles(fetchedRoles);
       } else {
-        setRoles([
-          { id: 1, name: 'Super Admin', isSystem: true, permissions: { all: true } },
-          { id: 2, name: 'Admin', isSystem: true, permissions: {} }
-        ]);
+        setRoles([]);
       }
     } catch (err) {
       console.warn('Failed to fetch roles:', err);
+      setRoles([]);
     } finally {
       setLoading(false);
     }
@@ -333,6 +291,14 @@ const RolesPermissionsAdminPage = () => {
 
   const { admin: loggedAdmin } = useSelector(s => s.auth);
   const canManageRoles = checkPermission(loggedAdmin, 'manage_roles');
+
+  if (loggedAdmin && !canManageRoles) {
+    return (
+      <AdminLayout title="Access Denied">
+        <AccessDeniedView path="/roles" />
+      </AdminLayout>
+    );
+  }
 
   return (
     <AdminLayout title="Roles & Permissions">

@@ -126,6 +126,12 @@ const create = async (req, res) => {
   try {
     const data = { ...req.body };
     if (req.file) {
+      if (req.file.size > 5 * 1024 * 1024) {
+        const normalizedPath = req.file.path.replace(/\\/g, '/');
+        const uploadsIndex = normalizedPath.indexOf('uploads');
+        deleteLocalFile('/' + normalizedPath.substring(uploadsIndex));
+        return res.status(400).json({ success: false, message: 'Category image file size exceeds 5MB limit. Please upload an image under 5MB.' });
+      }
       const normalizedPath = req.file.path.replace(/\\/g, '/');
       const uploadsIndex = normalizedPath.indexOf('uploads');
       data.image = '/' + normalizedPath.substring(uploadsIndex);
@@ -156,6 +162,12 @@ const update = async (req, res) => {
       data.parentId = null;
     }
     if (req.file) {
+      if (req.file.size > 5 * 1024 * 1024) {
+        const normalizedPath = req.file.path.replace(/\\/g, '/');
+        const uploadsIndex = normalizedPath.indexOf('uploads');
+        deleteLocalFile('/' + normalizedPath.substring(uploadsIndex));
+        return res.status(400).json({ success: false, message: 'Category image file size exceeds 5MB limit. Please upload an image under 5MB.' });
+      }
       deleteLocalFile(category.image);
       const normalizedPath = req.file.path.replace(/\\/g, '/');
       const uploadsIndex = normalizedPath.indexOf('uploads');

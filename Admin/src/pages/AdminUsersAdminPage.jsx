@@ -5,6 +5,7 @@ import {
   Users, Plus, Search, Edit3, Trash2, X, RefreshCw, CheckCircle2, XCircle, ShieldCheck, Eye, EyeOff, Copy, Check
 } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
+import AccessDeniedView from '../components/AccessDeniedView';
 import api from '../services/api';
 import toast from 'react-hot-toast';
 import { checkPermission } from '../utils/rbac';
@@ -54,27 +55,26 @@ const AdminUsersAdminPage = () => {
       const [usersRes, rolesRes] = await Promise.all([
         api.get('/admin-users').catch((err) => {
           console.error('Error fetching admin users:', err);
-          return null;
+          return err?.response || null;
         }),
         api.get('/roles').catch((err) => {
           console.error('Error fetching roles:', err);
-          return null;
+          return err?.response || null;
         })
       ]);
 
-      if (usersRes?.data?.success && Array.isArray(usersRes.data.users)) {
-        setUsers(usersRes.data.users);
-      } else if (Array.isArray(usersRes?.data?.users)) {
-        setUsers(usersRes.data.users);
+      if (usersRes?.data) {
+        const rawUsers = usersRes.data.users || usersRes.data.data || usersRes.data.adminUsers || (Array.isArray(usersRes.data) ? usersRes.data : []);
+        setUsers(Array.isArray(rawUsers) ? rawUsers : []);
       }
 
-      if (rolesRes?.data?.success && Array.isArray(rolesRes.data.roles)) {
-        setRoles(rolesRes.data.roles);
-      } else if (Array.isArray(rolesRes?.data?.roles)) {
-        setRoles(rolesRes.data.roles);
+      if (rolesRes?.data) {
+        const rawRoles = rolesRes.data.roles || rolesRes.data.data || (Array.isArray(rolesRes.data) ? rolesRes.data : []);
+        setRoles(Array.isArray(rawRoles) ? rawRoles : []);
       }
     } catch (err) {
       console.warn('Failed to load admin users or roles:', err);
+      toast.error('Failed to load admin users');
     } finally {
       setLoading(false);
     }
@@ -82,10 +82,13 @@ const AdminUsersAdminPage = () => {
 
   const filteredUsers = useMemo(() => {
     return users.filter(u => {
+      const userName = u.name || '';
+      const userEmail = u.email || '';
       const matchesSearch = !search.trim() || 
-        u.name.toLowerCase().includes(search.toLowerCase()) || 
-        u.email.toLowerCase().includes(search.toLowerCase());
-      const matchesRole = roleFilter === 'ALL' || String(u.roleId) === String(roleFilter);
+        userName.toLowerCase().includes(search.toLowerCase()) || 
+        userEmail.toLowerCase().includes(search.toLowerCase());
+      const userRoleId = u.roleId ?? u.role?.id;
+      const matchesRole = roleFilter === 'ALL' || String(userRoleId) === String(roleFilter);
       return matchesSearch && matchesRole;
     });
   }, [users, search, roleFilter]);
@@ -206,7 +209,16 @@ const AdminUsersAdminPage = () => {
   };
 
   const { admin: loggedAdmin } = useSelector(s => s.auth);
+  const canViewAdminUsers = checkPermission(loggedAdmin, 'view_admin_users');
   const canManageAdminUsers = checkPermission(loggedAdmin, 'manage_admin_users');
+
+  if (loggedAdmin && !canViewAdminUsers) {
+    return (
+      <AdminLayout title="Access Denied">
+        <AccessDeniedView path="/admin-users" />
+      </AdminLayout>
+    );
+  }
 
   return (
     <AdminLayout title="Admin Users">
