@@ -176,6 +176,7 @@ const NAV_SECTIONS = [
     items: [
       { to: '/customers', label: 'Customers', icon: Users },
       { to: '/contact-enquiries', label: 'Contact Enquiries', icon: Mail },
+      { to: '/personal-shopper', label: 'Personal Shopper', icon: Gift },
     ],
   },
   {
@@ -284,7 +285,7 @@ const AdminLayout = ({ children, title = '' }) => {
 
           newOrders.forEach(o => {
             playNewOrderChime();
-            toast.success(`🛒 New Order #${o.orderNumber || o.id} Received! (${o.customer?.name || o.shippingAddress?.fullName || 'Customer'} - ${o.currency || 'INR'} ${o.totalAmount})`, {
+            toast.success(`New Order #${o.orderNumber || o.id} Received! (${o.customer?.name || o.shippingAddress?.fullName || 'Customer'} - ${o.currency || 'INR'} ${o.totalAmount})`, {
               duration: 8000,
             });
 
@@ -293,7 +294,7 @@ const AdminLayout = ({ children, title = '' }) => {
                 id: `order-${o.id}`,
                 type: 'order',
                 orderId: o.id,
-                text: `🛒 New Order #${o.orderNumber || o.id} (${o.customer?.name || o.shippingAddress?.fullName || 'Customer'})`,
+                text: `New Order #${o.orderNumber || o.id} (${o.customer?.name || o.shippingAddress?.fullName || 'Customer'})`,
                 time: `${o.currency || 'INR'} ${o.totalAmount} · ${new Date(o.createdAt).toLocaleDateString()} ${new Date(o.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
                 read: false,
               };

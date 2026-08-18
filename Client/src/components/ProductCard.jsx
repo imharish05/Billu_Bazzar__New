@@ -8,6 +8,7 @@ import { addLocal, openCart } from '../redux/slices/cartSlice';
 import { toggleItem } from '../redux/slices/wishlistSlice';
 import { formatPrice } from '../utils/currency';
 import { getPlaceholderSvg } from '../utils/placeholder';
+import { getImageUrl } from '../utils/imageUrl';
 import { toast } from 'react-hot-toast';
 
 /** Map common color names → CSS color values for swatch display */
@@ -50,16 +51,20 @@ const ProductCard = ({ product, index = 0 }) => {
   const inCart = product ? cartItems.some(item => Number(item.productId || item.id) === Number(product.id)) : false;
   const { code: currencyCode, rate: currencyRate } = useSelector(s => s.currency);
   const [imgLoaded, setImgLoaded] = useState(false);
+  const [activeVariantId, setActiveVariantId] = useState(null);
+  const [hoverImage, setHoverImage] = useState(null);
 
   const resolveDefaultVariant = (prod) => {
     if (prod.variants && prod.variants.length > 0) {
-      const v = prod.variants[0];
+      // Find variant matching activeVariantId if set, otherwise first variant
+      const v = (activeVariantId && prod.variants.find(varItem => varItem.id === activeVariantId)) || prod.variants[0];
       const attrs = typeof v.attributes === 'string' ? JSON.parse(v.attributes || '{}') : (v.attributes || {});
       return {
         variantId: v.id,
         price: v.price !== null && v.price !== undefined ? parseFloat(v.price) : parseFloat(prod.price),
         mrp: v.mrp !== null && v.mrp !== undefined ? parseFloat(v.mrp) : (prod.comparePrice ? parseFloat(prod.comparePrice) : null),
         image: v.image || prod.defaultProductImage || prod.images?.[0] || '',
+        stock: v.stock !== undefined ? parseInt(v.stock, 10) : (prod.stock || 0),
         attributes: attrs
       };
     }
@@ -85,11 +90,13 @@ const ProductCard = ({ product, index = 0 }) => {
       price: parseFloat(prod.price),
       mrp: prod.comparePrice ? parseFloat(prod.comparePrice) : null,
       image: prod.defaultProductImage || prod.images?.[0] || '',
+      stock: parseInt(prod.stock, 10) || 0,
       attributes: defaultAttrs
     };
   };
 
   const resolvedDefault = resolveDefaultVariant(product);
+  const currentCardImage = hoverImage || resolvedDefault.image || product.defaultProductImage || product.images?.[0] || '';
 
   const isWishlisted = wishlist.some(item => {
     const sameProd = Number(item.productId || item.id) === Number(product.id);
@@ -188,7 +195,7 @@ const ProductCard = ({ product, index = 0 }) => {
         {/* Skeleton while image loads */}
         {!imgLoaded && <div className="skeleton absolute inset-0" aria-hidden="true" />}
         <img
-          src={resolvedDefault.image || product.defaultProductImage || product.images?.[0] || getPlaceholderSvg(product.name)}
+          src={getImageUrl(currentCardImage) || getPlaceholderSvg(product.name)}
           alt={product.name}
           className={`w-full h-full object-cover transition-transform duration-500 group-hover:scale-105 ${imgLoaded ? 'opacity-100' : 'opacity-0'}`}
           loading="lazy"
@@ -284,7 +291,7 @@ const ProductCard = ({ product, index = 0 }) => {
           );
         })()}
 
-        {/* Color swatches — collect unique colors from all variants */}
+        {/* Color swatches — interactive variant selector */}
         {(() => {
           const variants = product.variants || [];
           const colorKey = variants.length > 0
@@ -296,7 +303,6 @@ const ProductCard = ({ product, index = 0 }) => {
             : null;
 
           if (!colorKey) {
-            // No variant colors — try product-level attributes
             const prodAttrs = typeof product.attributes === 'string'
               ? JSON.parse(product.attributes || '{}')
               : (product.attributes || {});
@@ -305,7 +311,7 @@ const ProductCard = ({ product, index = 0 }) => {
             const colorList = Array.isArray(prodAttrs[colorAttrKey])
               ? prodAttrs[colorAttrKey]
               : [prodAttrs[colorAttrKey]];
-            const SHOW = 3;
+            const SHOW = 4;
             const visible = colorList.slice(0, SHOW);
             const extra = colorList.length - SHOW;
             return (
@@ -325,30 +331,51 @@ const ProductCard = ({ product, index = 0 }) => {
             );
           }
 
-          // Collect unique color values from variants
-          const colorValues = [];
+          // Collect unique colors & associated variant info
+          const colorVariants = [];
           const seen = new Set();
           variants.forEach(v => {
             const attrs = typeof v.attributes === 'string' ? JSON.parse(v.attributes || '{}') : (v.attributes || {});
             const c = attrs[colorKey];
-            if (c && !seen.has(c)) { seen.add(c); colorValues.push(c); }
+            if (c && !seen.has(c)) {
+              seen.add(c);
+              colorVariants.push({ color: c, variant: v });
+            }
           });
-          if (colorValues.length === 0) return null;
+          if (colorVariants.length === 0) return null;
 
-          const SHOW = 3;
-          const visible = colorValues.slice(0, SHOW);
-          const extra = colorValues.length - SHOW;
+          const SHOW = 4;
+          const visible = colorVariants.slice(0, SHOW);
+          const extra = colorVariants.length - SHOW;
 
           return (
             <div className="flex items-center gap-1.5 mb-1.5">
-              {visible.map((c, i) => (
-                <span
-                  key={i}
-                  title={c}
-                  className="w-4 h-4 rounded-full border border-neutral-300 shadow-sm flex-shrink-0"
-                  style={{ background: resolveColor(c) }}
-                />
-              ))}
+              {visible.map(({ color: c, variant: v }, i) => {
+                const isSelected = resolvedDefault.variantId === v.id;
+                return (
+                  <button
+                    key={i}
+                    type="button"
+                    title={`${colorKey}: ${c}`}
+                    onMouseEnter={() => {
+                      if (v.image) setHoverImage(v.image);
+                    }}
+                    onMouseLeave={() => setHoverImage(null)}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setActiveVariantId(v.id);
+                      if (v.image) setHoverImage(v.image);
+                    }}
+                    className={`w-4 h-4 rounded-full border transition-all flex-shrink-0 cursor-pointer ${
+                      isSelected
+                        ? 'ring-2 ring-brand-gold ring-offset-1 scale-110 border-brand-gold'
+                        : 'border-neutral-300 hover:scale-110 hover:border-brand-gold'
+                    }`}
+                    style={{ background: resolveColor(c) }}
+                  />
+                );
+              })}
               {extra > 0 && (
                 <span className="text-[10px] text-brand-grey font-medium">+{extra} more</span>
               )}

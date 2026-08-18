@@ -32,6 +32,24 @@ const deleteLocalFile = (imagePath) => {
   }
 };
 
+const { toAbsoluteUrl } = require('../utils/imageUrl');
+
+const formatCategoryNode = (cat, req) => {
+  if (!cat) return cat;
+  const json = typeof cat.toJSON === 'function' ? cat.toJSON() : { ...cat };
+  if (json.image) json.image = toAbsoluteUrl(json.image, req);
+  if (Array.isArray(json.subcategories)) {
+    json.subcategories = json.subcategories.map(sc => formatCategoryNode(sc, req));
+  }
+  if (Array.isArray(json.subsubcategories)) {
+    json.subsubcategories = json.subsubcategories.map(ssc => formatCategoryNode(ssc, req));
+  }
+  if (Array.isArray(json.children)) {
+    json.children = json.children.map(ch => formatCategoryNode(ch, req));
+  }
+  return json;
+};
+
 const getTree = async (req, res) => {
   try {
     const { all } = req.query;
@@ -64,7 +82,7 @@ const getTree = async (req, res) => {
     });
 
     const tree = categories.map(c => {
-      const cJson = c.toJSON();
+      const cJson = formatCategoryNode(c, req);
       return {
         ...cJson,
         children: (cJson.subcategories || []).map(sub => ({
@@ -281,5 +299,157 @@ const reorder = async (req, res) => {
   }
 };
 
-module.exports = { getTree, getAll, create, update, remove, reorder };
+const seed = async (req, res) => {
+  try {
+    const slugify = (text, prefix = '') => {
+      let str = (prefix ? `${prefix}-` : '') + text;
+      return str
+        .toLowerCase()
+        .trim()
+        .replace(/[^\w\s-]/g, '')
+        .replace(/[\s_-]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+    };
+
+    const getSmallPlaceholderImage = (title) => {
+      const encodedTitle = encodeURIComponent(title);
+      return `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="300" height="200" viewBox="0 0 300 200"><rect width="100%" height="100%" fill="%23f4f4f5"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="14" font-weight="600" fill="%23a1a1aa">${encodedTitle}</text></svg>`;
+    };
+
+    const data = [
+      {
+        root: "Electronics & Gadgets",
+        parents: [
+          { name: "Audio", children: ["Headphones", "Earbuds", "Bluetooth Speakers", "Soundbars"] },
+          { name: "Computers & Laptops", children: ["Laptops", "Desktops", "Monitors", "Components (RAM, SSDs)"] },
+          { name: "Smartphones & Tablets", children: ["Phones", "Tablets", "Cases", "Chargers", "Power Banks"] },
+          { name: "Smart Home & IoT", children: ["Smart Speakers", "Security Cameras", "Smart Lighting"] },
+          { name: "Wearable Tech", children: ["Smartwatches", "Fitness Trackers"] }
+        ]
+      },
+      {
+        root: "Apparel & Fashion",
+        parents: [
+          { name: "Men's Clothing", children: ["Shirts", "T-Shirts", "Pants", "Jackets", "Activewear"] },
+          { name: "Women's Clothing", children: ["Dresses", "Tops", "Skirts", "Jeans", "Outerwear", "Activewear"] },
+          { name: "Kids & Baby", children: ["Infant Rompers", "Toddler Clothes", "School Uniforms"] },
+          { name: "Footwear", children: ["Sneakers", "Boots", "Sandals", "Formal Shoes"] },
+          { name: "Accessories", children: ["Bags & Backpacks", "Wallets", "Belts", "Sunglasses", "Jewelry", "Watches"] }
+        ]
+      },
+      {
+        root: "Home & Living",
+        parents: [
+          { name: "Furniture", children: ["Living Room (Sofas, Tables)", "Bedroom (Beds, Wardrobes)", "Office Chairs"] },
+          { name: "Kitchen & Dining", children: ["Cookware", "Dinnerware", "Small Appliances (Blenders, Coffee Makers)"] },
+          { name: "Bedding & Bath", children: ["Sheets", "Pillows", "Towels", "Shower Curtains"] },
+          { name: "Home Decor", children: ["Rugs", "Lighting", "Wall Art", "Candles", "Vases"] },
+          { name: "Garden & Outdoor", children: ["Patio Furniture", "Grills", "Gardening Tools", "Outdoor Lighting"] }
+        ]
+      },
+      {
+        root: "Beauty & Personal Care",
+        parents: [
+          { name: "Skincare", children: ["Cleansers", "Moisturizers", "Serums", "Sunscreen"] },
+          { name: "Makeup", children: ["Face", "Eyes", "Lips", "Brushes & Tools"] },
+          { name: "Haircare", children: ["Shampoo", "Conditioner", "Styling Products", "Hair Dryers"] },
+          { name: "Fragrances", children: ["Perfumes", "Colognes", "Body Sprays"] },
+          { name: "Personal Care", children: ["Oral Care", "Deodorants", "Shaving & Grooming"] }
+        ]
+      },
+      {
+        root: "Sports & Outdoors",
+        parents: [
+          { name: "Fitness & Exercise", children: ["Dumbbells", "Yoga Mats", "Resistance Bands", "Treadmills"] },
+          { name: "Camping & Hiking", children: ["Tents", "Sleeping Bags", "Backpacks", "Navigation"] },
+          { name: "Cycling", children: ["Bicycles", "Helmets", "Bike Accessories"] },
+          { name: "Water Sports", children: ["Kayaks", "Swim Gear", "Paddleboards"] }
+        ]
+      },
+      {
+        root: "Toys, Hobbies & Media",
+        parents: [
+          { name: "Toys & Games", children: ["Board Games", "Puzzles", "Action Figures", "Dolls", "Building Blocks"] },
+          { name: "Video Games", children: ["Consoles", "Controller Accessories", "Game Discs/Codes"] },
+          { name: "Books", children: ["Fiction", "Non-Fiction", "Children's Books", "E-books"] }
+        ]
+      }
+    ];
+
+    let rootCount = 0;
+    let parentCount = 0;
+    let childCount = 0;
+
+    for (let rIdx = 0; rIdx < data.length; rIdx++) {
+      const item = data[rIdx];
+      const rootSlug = slugify(item.root);
+
+      let [rootCat] = await Category.findOrCreate({
+        where: { slug: rootSlug },
+        defaults: {
+          name: item.root,
+          slug: rootSlug,
+          description: `Curated collection of ${item.root}`,
+          image: getSmallPlaceholderImage(item.root),
+          sortOrder: rIdx + 1,
+          isActive: true,
+          showHeader: true
+        }
+      });
+      rootCount++;
+
+      for (let pIdx = 0; pIdx < item.parents.length; pIdx++) {
+        const parent = item.parents[pIdx];
+        const parentSlug = slugify(parent.name, rootSlug);
+
+        let [parentCat] = await SubCategory.findOrCreate({
+          where: { slug: parentSlug },
+          defaults: {
+            categoryId: rootCat.id,
+            name: parent.name,
+            slug: parentSlug,
+            description: `${parent.name} under ${item.root}`,
+            image: getSmallPlaceholderImage(parent.name),
+            sortOrder: pIdx + 1,
+            isActive: true
+          }
+        });
+        parentCount++;
+
+        for (let cIdx = 0; cIdx < parent.children.length; cIdx++) {
+          const childName = parent.children[cIdx];
+          const childSlug = slugify(childName, parentSlug);
+
+          await SubSubCategory.findOrCreate({
+            where: { slug: childSlug },
+            defaults: {
+              subCategoryId: parentCat.id,
+              name: childName,
+              slug: childSlug,
+              description: `${childName} under ${parent.name}`,
+              image: getSmallPlaceholderImage(childName),
+              sortOrder: cIdx + 1,
+              isActive: true
+            }
+          });
+          childCount++;
+        }
+      }
+    }
+
+    return res.json({
+      success: true,
+      message: 'Categories auto-seeded successfully!',
+      summary: {
+        rootCategories: rootCount,
+        subCategories: parentCount,
+        subSubCategories: childCount
+      }
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+module.exports = { getTree, getAll, create, update, remove, reorder, seed };
 

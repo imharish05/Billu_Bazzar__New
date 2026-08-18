@@ -5,6 +5,8 @@ import { Package, ChevronRight, RefreshCw, CreditCard } from 'lucide-react';
 import { useSelector, useDispatch } from 'react-redux';
 import { fetchMyOrders } from '../../redux/slices/ordersSlice';
 import { formatPrice } from '../../utils/currency';
+import { getImageUrl } from '../../utils/imageUrl';
+import { getPlaceholderSvg } from '../../utils/placeholder';
 
 const STATUS_COLORS = {
   PENDING_PAYMENT: 'bg-yellow-50 text-yellow-700 border border-yellow-200',
@@ -106,26 +108,43 @@ const OrdersPage = () => {
                 </div>
 
                 {/* Optional Product Thumbnail Preview */}
-                {firstItem && (
-                  <div className="flex items-center gap-3 py-3 my-2 border-y border-neutral-100">
-                    <img
-                      src={firstItem.productImage || firstItem.image || '/placeholder.jpg'}
-                      alt={firstItem.productName || firstItem.name || 'Product'}
-                      className="w-12 h-12 object-cover rounded border border-neutral-100 flex-shrink-0"
-                      onError={(e) => { e.target.onerror = null; e.target.src = '/placeholder.jpg'; }}
-                    />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs font-medium text-neutral-800 truncate">
-                        {firstItem.productName || firstItem.name}
-                      </p>
-                      {order.items.length > 1 && (
-                        <p className="text-[11px] text-brand-grey mt-0.5">
-                          + {order.items.length - 1} more item{order.items.length - 1 > 1 ? 's' : ''}
+                {firstItem && (() => {
+                  let vObj = firstItem.selectedVariant;
+                  for (let i = 0; i < 5; i++) {
+                    if (typeof vObj === 'string') {
+                      try { const next = JSON.parse(vObj); if (next === vObj) break; vObj = next; } catch { break; }
+                    } else break;
+                  }
+                  const EXCLUDE = new Set(['id', 'sku', 'variantId', 'productId', 'stock', 'price', 'mrp']);
+                  const vEntries = (vObj && typeof vObj === 'object')
+                    ? Object.entries(vObj).filter(([k, v]) => !EXCLUDE.has(k) && v != null && v !== '')
+                    : [];
+                  const vText = vEntries.length > 0 ? vEntries.map(([k, v]) => `${k}: ${v}`).join(' · ') : null;
+
+                  return (
+                    <div className="flex items-center gap-3 py-3 my-2 border-y border-neutral-100">
+                      <img
+                        src={getImageUrl(firstItem.productImage || firstItem.image) || getPlaceholderSvg(firstItem.productName || firstItem.name || 'Product')}
+                        alt={firstItem.productName || firstItem.name || 'Product'}
+                        className="w-12 h-12 object-cover rounded border border-neutral-100 flex-shrink-0"
+                        onError={(e) => { e.target.onerror = null; e.target.src = getPlaceholderSvg(firstItem.productName || firstItem.name || 'Product'); }}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-medium text-neutral-800 truncate">
+                          {firstItem.productName || firstItem.name}
                         </p>
-                      )}
+                        {vText && (
+                          <p className="text-[11px] text-brand-gold font-medium mt-0.5">{vText}</p>
+                        )}
+                        {order.items.length > 1 && (
+                          <p className="text-[11px] text-brand-grey mt-0.5">
+                            + {order.items.length - 1} more item{order.items.length - 1 > 1 ? 's' : ''}
+                          </p>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
 
                 <div className="flex justify-between items-center text-xs sm:text-sm pt-1">
                   <div className="flex items-center gap-1.5 text-neutral-500">

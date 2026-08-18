@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useSelector } from 'react-redux';
 import { useSearchParams } from 'react-router-dom';
-import { Plus, Search, Edit2, ShieldAlert, CheckCircle2, ChevronRight, X, Trash2, ArrowRightLeft } from 'lucide-react';
+import { Plus, Search, Edit2, ShieldAlert, CheckCircle2, ChevronRight, X, Trash2, ArrowRightLeft, Building, MapPin, Phone, Package } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
 import Switch from '../components/Switch';
 import api from '../services/api';
@@ -379,17 +379,11 @@ const WarehousesAdminPage = () => {
     }
   };
 
-  const [hideZeroStock, setHideZeroStock] = useState(true);
-
   // Filtered Stock list
   const filteredStock = warehouseStock.filter(item => {
     const productName = item.product?.name || '';
     const variantSku = item.variant?.sku || item.product?.sku || '';
     const matchSearch = productName.toLowerCase().includes(stockSearch.toLowerCase()) || variantSku.toLowerCase().includes(stockSearch.toLowerCase());
-    
-    if (hideZeroStock && item.quantity <= 0) {
-      return false;
-    }
 
     if (onlyLowStock) {
       return matchSearch && item.quantity <= item.reorderLevel;
@@ -454,11 +448,11 @@ const WarehousesAdminPage = () => {
                         </span>
                         {w.isFulfillment ? (
                           <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 bg-amber-50 text-amber-800 border border-amber-300 flex items-center gap-1">
-                            🇮🇳 Primary Fulfillment Hub
+                            Primary Fulfillment Hub
                           </span>
                         ) : isProcurementWh ? (
                           <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 bg-blue-50 text-blue-800 border border-blue-200 flex items-center gap-1">
-                            🇦🇪 Procurement Source
+                            Procurement Source
                           </span>
                         ) : (
                           <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 bg-neutral-100 text-neutral-600 border border-neutral-200">
@@ -469,9 +463,9 @@ const WarehousesAdminPage = () => {
                     </div>
 
                     <div className="space-y-1 text-xs text-brand-grey mb-4">
-                      {w.address?.streetAddress && <p>🏠 {w.address.streetAddress}</p>}
-                      <p>📍 {w.city}, {w.state} {w.pincode} {w.address?.country ? `(${w.address.country})` : ''}</p>
-                      <p>📞 {w.contactName || 'N/A'} ({w.contactPhone || 'N/A'})</p>
+                      {w.address?.streetAddress && <p className="flex items-center gap-1.5"><Building size={12} className="shrink-0" /> {w.address.streetAddress}</p>}
+                      <p className="flex items-center gap-1.5"><MapPin size={12} className="shrink-0" /> {w.city}, {w.state} {w.pincode} {w.address?.country ? `(${w.address.country})` : ''}</p>
+                      <p className="flex items-center gap-1.5"><Phone size={12} className="shrink-0" /> {w.contactName || 'N/A'} ({w.contactPhone || 'N/A'})</p>
                     </div>
 
                     <div className="pt-4 border-t border-brand-light flex items-center justify-between">
@@ -521,7 +515,7 @@ const WarehousesAdminPage = () => {
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 pb-4 border-b border-brand-light">
             <div>
               <h3 className="text-base font-semibold text-neutral-950 flex items-center gap-2">
-                📦 Stock Inventory: <span className="text-brand-gold">{selectedWarehouse.name}</span>
+                <Package size={18} className="text-brand-gold shrink-0" /> Stock Inventory: <span className="text-brand-gold">{selectedWarehouse.name}</span>
               </h3>
               <p className="text-xs text-brand-grey mt-0.5">Manage stock quantities and perform bulk stock transfers across warehouses</p>
             </div>
@@ -538,17 +532,6 @@ const WarehousesAdminPage = () => {
                   className="pl-8 pr-3 py-1.5 border border-brand-light text-xs focus:outline-none focus:border-brand-gold max-w-[200px]"
                 />
               </div>
-
-              {/* Hide 0-Stock Toggle */}
-              <label className="flex items-center gap-2 text-xs font-semibold text-neutral-800 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={hideZeroStock}
-                  onChange={e => setHideZeroStock(e.target.checked)}
-                  className="rounded border-neutral-300 text-brand-gold focus:ring-brand-gold accent-brand-gold"
-                />
-                Hide 0-Stock Products
-              </label>
 
               {/* Low Stock Toggle */}
               <label className="flex items-center gap-2 text-xs font-semibold text-neutral-800 cursor-pointer select-none">
@@ -895,7 +878,7 @@ const WarehousesAdminPage = () => {
                                 : 'border-neutral-200 text-brand-grey hover:bg-neutral-50'
                             }`}
                           >
-                            {mode === 'add' ? '＋ Receive / Add' : mode === 'reduce' ? '－ Deduct' : '⚙️ Reorder level'}
+                            {mode === 'add' ? '+ Receive / Add' : mode === 'reduce' ? '- Deduct' : 'Reorder Level'}
                           </button>
                         ))}
                       </div>

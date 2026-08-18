@@ -70,23 +70,27 @@ const OrderConfirmationPage = () => {
   const targetId = orderIdFromUrl || order?.id || order?.orderNumber;
 
   useEffect(() => {
-    if (targetId) {
-      dispatch(fetchOrderById(targetId)).then(async (action) => {
-        const fetchedOrder = action.payload?.order || action.payload;
-        if (fetchedOrder && (fetchedOrder.paymentStatus === 'UNPAID' || fetchedOrder.status === 'PENDING_PAYMENT')) {
-          const isSuccess = searchParams.get('status') === 'success' || Boolean(searchParams.get('gateway'));
-          if (isSuccess) {
-            try {
-              await api.post('/payments/verify', { orderId: fetchedOrder.id });
-              dispatch(fetchOrderById(targetId));
-            } catch (err) {
-              console.warn('[OrderConfirmation] Auto-verify payment failed:', err.message);
-            }
+    if (!targetId) return;
+    let isMounted = true;
+
+    dispatch(fetchOrderById(targetId)).then(async (action) => {
+      if (!isMounted) return;
+      const fetchedOrder = action.payload?.order || action.payload;
+      if (fetchedOrder && (fetchedOrder.paymentStatus === 'UNPAID' || fetchedOrder.status === 'PENDING_PAYMENT')) {
+        const isSuccess = searchParams.get('status') === 'success' || Boolean(searchParams.get('gateway'));
+        if (isSuccess) {
+          try {
+            await api.post('/payments/verify', { orderId: fetchedOrder.id });
+            if (isMounted) dispatch(fetchOrderById(targetId));
+          } catch (err) {
+            console.warn('[OrderConfirmation] Auto-verify payment failed:', err.message);
           }
         }
-      });
-    }
-  }, [targetId, searchParams, dispatch]);
+      }
+    });
+
+    return () => { isMounted = false; };
+  }, [targetId, dispatch]);
 
   const handleManualRefresh = async () => {
     if (!targetId || refreshing) return;
@@ -119,21 +123,21 @@ const OrderConfirmationPage = () => {
 
   return (
     <main id="main-content">
-      <div className="max-w-3xl mx-auto px-6 md:px-8 py-12">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 md:px-8 py-8 sm:py-12">
         {/* Success header */}
         <motion.div
           initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
           transition={{ type: 'spring', stiffness: 200, damping: 20 }}
-          className="text-center mb-12"
+          className="text-center mb-8 sm:mb-12"
         >
-          <div className="w-24 h-24 rounded-full bg-green-50 flex items-center justify-center mx-auto mb-6 shadow-sm border border-green-100">
-            <CheckCircle size={52} className="text-green-500 animate-pulse" strokeWidth={1.5} />
+          <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-green-50 flex items-center justify-center mx-auto mb-4 sm:mb-6 shadow-sm border border-green-100">
+            <CheckCircle size={48} className="text-green-500 animate-pulse sm:w-[52px] sm:h-[52px]" strokeWidth={1.5} />
           </div>
-          <h1 className="font-playfair text-4xl font-bold text-brand-text mb-2">Order Confirmed!</h1>
-          <p className="text-brand-grey">Thank you for shopping at Billu Bazaar.</p>
+          <h1 className="font-playfair text-3xl sm:text-4xl font-bold text-brand-text mb-2">Order Confirmed!</h1>
+          <p className="text-brand-grey text-sm sm:text-base">Thank you for shopping at Billu Bazaar.</p>
           {order && (
-            <div className="flex items-center justify-center gap-3 mt-3">
-              <span className="text-brand-gold font-bold text-lg">Order #{order.orderNumber}</span>
+            <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 mt-3">
+              <span className="text-brand-gold font-bold text-base sm:text-lg">Order #{order.orderNumber}</span>
               <span className={`text-xs font-semibold px-3 py-1 rounded-full uppercase tracking-wider ${
                 displayStatus === 'DELIVERED' || displayStatus === 'PAID' || displayStatus === 'CONFIRMED'
                   ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
@@ -149,21 +153,35 @@ const OrderConfirmationPage = () => {
 
         {/* Order details grid */}
         {order && (
-          <div className="grid md:grid-cols-2 gap-6 mb-8">
-            <div className="bg-white shadow-sm p-6 border border-brand-light rounded-xl">
-              <h3 className="font-playfair text-lg font-bold text-brand-text mb-4 flex items-center gap-2.5">
-                <Package size={22} className="text-brand-gold" /> Order Details
-              </h3>
-              <div className="space-y-2.5 text-sm">
-                <div className="flex justify-between"><span className="text-brand-grey">Order Total</span><span className="font-bold text-brand-gold">{fmt(order.totalAmount)}</span></div>
-                <div className="flex justify-between"><span className="text-brand-grey">Payment Method</span><span className="font-medium">{order.paymentMethod || 'Credit / Debit Card'}</span></div>
-                <div className="flex justify-between"><span className="text-brand-grey">Payment Status</span><span className="font-semibold text-emerald-600">{displayPaymentStatus}</span></div>
-                <div className="flex justify-between"><span className="text-brand-grey">Items Count</span><span>{order.items?.length || 0} item(s)</span></div>
+          <div className="grid md:grid-cols-2 gap-4 sm:gap-6 mb-6 sm:mb-8">
+            <div className="bg-white shadow-sm p-5 sm:p-6 border border-brand-light rounded-xl flex flex-col justify-between">
+              <div>
+                <h3 className="font-playfair text-lg font-bold text-brand-text mb-4 flex items-center gap-2.5">
+                  <Package size={22} className="text-brand-gold shrink-0" /> Order Details
+                </h3>
+                <div className="space-y-3 text-sm">
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-brand-grey shrink-0 whitespace-nowrap">Order Total</span>
+                    <span className="font-bold text-brand-gold text-base text-right">{fmt(order.totalAmount)}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-brand-grey shrink-0 whitespace-nowrap">Payment Method</span>
+                    <span className="font-medium text-brand-text text-right">{order.paymentMethod || 'Credit / Debit Card'}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-brand-grey shrink-0 whitespace-nowrap">Payment Status</span>
+                    <span className="font-semibold text-emerald-600 text-right">{displayPaymentStatus}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-brand-grey shrink-0 whitespace-nowrap">Items Count</span>
+                    <span className="text-brand-text text-right">{order.items?.length || 0} item(s)</span>
+                  </div>
+                </div>
               </div>
             </div>
-            <div className="bg-white shadow-sm p-6 border border-brand-light rounded-xl">
+            <div className="bg-white shadow-sm p-5 sm:p-6 border border-brand-light rounded-xl">
               <h3 className="font-playfair text-lg font-bold text-brand-text mb-4 flex items-center gap-2.5">
-                <MapPin size={22} className="text-brand-gold" /> Shipping Address
+                <MapPin size={22} className="text-brand-gold shrink-0" /> Shipping Address
               </h3>
               <p className="text-sm font-semibold text-brand-text">{addrName}</p>
               {addrLine1 && <p className="text-sm text-brand-grey mt-1">{addrLine1}</p>}
@@ -171,25 +189,26 @@ const OrderConfirmationPage = () => {
               {addr.landmark && <p className="text-xs text-brand-grey text-neutral-500">Near {addr.landmark}</p>}
               {addrCityStateZip && <p className="text-sm text-brand-grey mt-1">{addrCityStateZip}</p>}
               {addr.country && <p className="text-xs font-medium text-brand-text mt-0.5">{addr.country}</p>}
-              {addrPhone && <p className="text-xs text-brand-grey mt-2 font-mono">📱 {addrPhone}</p>}
+              {addrPhone && <p className="text-xs text-brand-grey mt-2 font-mono">{addrPhone}</p>}
             </div>
           </div>
         )}
 
         {/* Order Tracking */}
-        <div className="bg-white shadow-sm p-6 mb-6 border border-brand-light rounded-xl">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="font-playfair text-lg font-bold text-brand-text flex items-center gap-2">
-              <Clock size={20} className="text-brand-gold" /> Live Order Tracking
+        <div className="bg-white shadow-sm p-5 sm:p-6 mb-6 border border-brand-light rounded-xl">
+          <div className="flex items-center justify-between gap-3 mb-6">
+            <h3 className="font-playfair text-base sm:text-lg font-bold text-brand-text flex items-center gap-2 min-w-0">
+              <Clock size={20} className="text-brand-gold shrink-0" />
+              <span className="truncate">Live Order Tracking</span>
             </h3>
             <button
               type="button"
               onClick={handleManualRefresh}
-              className="text-[11px] text-neutral-600 flex items-center gap-1.5 bg-neutral-100 hover:bg-neutral-200/80 px-3 py-1 rounded-full border border-neutral-200/80 transition-colors font-medium cursor-pointer"
+              className="text-xs text-neutral-700 hover:text-brand-text flex items-center gap-1.5 bg-neutral-100 hover:bg-neutral-200 px-3.5 py-1.5 rounded-full border border-neutral-200/80 transition-all font-medium cursor-pointer shrink-0 active:scale-95"
               title="Click to refresh order status"
             >
-              <RefreshCw size={12} className={`text-brand-gold ${refreshing ? 'animate-spin' : ''}`} />
-              {refreshing ? 'Syncing...' : 'Refresh Status'}
+              <RefreshCw size={13} className={`text-brand-gold ${refreshing ? 'animate-spin' : ''}`} />
+              <span>{refreshing ? 'Syncing...' : 'Refresh Status'}</span>
             </button>
           </div>
 

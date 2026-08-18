@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useSelector } from 'react-redux';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Edit2, Trash2, X, Store, Star, Mail, Phone, MapPin, UserCheck, FileText, Globe } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, Store, Star, Mail, Phone, MapPin, UserCheck, FileText, Globe, AlertTriangle } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
 import Switch from '../components/Switch';
 import { PaginationTop, PaginationBottom } from '../components/Pagination';
@@ -444,8 +444,11 @@ const VendorsAdminPage = () => {
                     Are you sure you want to delete vendor <strong className="text-neutral-900">{deleteTarget.name}</strong>?
                   </p>
                   {deleteTarget.products && deleteTarget.products.length > 0 ? (
-                    <div className="text-red-700 bg-red-50 border border-red-200 p-3 rounded-lg mt-2 text-[11px] font-medium leading-normal">
-                      ⚠️ <strong>Warning:</strong> Deleting this vendor will also permanently delete <strong>{deleteTarget.products.length} associated product{deleteTarget.products.length === 1 ? '' : 's'}</strong> assigned to them.
+                    <div className="text-red-700 bg-red-50 border border-red-200 p-3 rounded-lg mt-2 text-[11px] font-medium leading-normal flex items-start gap-1.5">
+                      <AlertTriangle size={14} className="text-red-600 shrink-0 mt-0.5" />
+                      <div>
+                        <strong>Warning:</strong> Deleting this vendor will also permanently delete <strong>{deleteTarget.products.length} associated product{deleteTarget.products.length === 1 ? '' : 's'}</strong> assigned to them.
+                      </div>
                     </div>
                   ) : (
                     <p className="text-neutral-500 italic pt-1.5 border-t border-neutral-200/60">

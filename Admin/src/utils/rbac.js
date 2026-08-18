@@ -118,6 +118,8 @@ export const checkPermission = (admin, permKey) => {
     delete_customer: ['manage_customers', 'customers.delete'],
     view_contact_enquiries: ['view_customers', 'enquiries.read'],
     delete_contact_enquiry: ['manage_customers', 'enquiries.delete'],
+    view_personal_shopper: ['view_customers', 'personal_shopper.read'],
+    delete_personal_shopper: ['manage_customers', 'personal_shopper.delete'],
 
     // Finance & Analytics
     view_finance: ['view_payments', 'view_reports'],
@@ -185,6 +187,7 @@ export const canAccessNav = (adminObj, path) => {
     case '/loyalty': return checkPermission(adminObj, 'manage_loyalty');
     case '/customers': return checkPermission(adminObj, 'view_customers');
     case '/contact-enquiries': return checkPermission(adminObj, 'view_contact_enquiries');
+    case '/personal-shopper': return checkPermission(adminObj, 'view_personal_shopper');
     case '/payments': return checkPermission(adminObj, 'view_payments');
     case '/reports': return checkPermission(adminObj, 'view_reports');
     case '/roles': return checkPermission(adminObj, 'manage_roles');

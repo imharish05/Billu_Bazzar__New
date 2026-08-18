@@ -4,6 +4,7 @@ import { useSelector } from 'react-redux';
 import { motion } from 'framer-motion';
 import { ChevronLeft, ChevronRight, ArrowRight } from 'lucide-react';
 import { formatPrice } from '../utils/currency';
+import { getImageUrl } from '../utils/imageUrl';
 
 const SCROLL_AMOUNT = 320;
 
@@ -110,7 +111,7 @@ const ExclusiveCollection = () => {
                 <div className="relative aspect-[3/4] overflow-hidden bg-brand-light mb-3">
                   {(product.defaultProductImage || product.images?.[0]) ? (
                     <img
-                      src={product.defaultProductImage || product.images[0]}
+                      src={getImageUrl(product.defaultProductImage || product.images[0])}
                       alt={product.name}
                       className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                       loading="lazy"

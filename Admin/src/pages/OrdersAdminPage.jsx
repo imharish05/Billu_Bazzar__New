@@ -10,6 +10,8 @@ import currencyJs from 'currency.js';
 import { toast } from 'react-hot-toast';
 import { checkPermission } from '../utils/rbac';
 
+import api from '../services/api';
+
 const fmt = (v) => currencyJs(v, { symbol: '₹', precision: 0 }).format();
 
 const STATUS_TABS = ['All', 'PENDING', 'CONFIRMED', 'PROCESSING', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED', 'RETURNED'];
@@ -51,9 +53,21 @@ const OrdersAdminPage = () => {
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
   const [selectedOrderModal, setSelectedOrderModal] = useState(null);
+  const [orderCounts, setOrderCounts] = useState({});
 
   const statusFromUrl = searchParams.get('status');
   const activeStatus = statusFromUrl || 'All';
+
+  const loadCounts = async () => {
+    try {
+      const res = await api.get('/orders/status-counts');
+      if (res.data.success) {
+        setOrderCounts(res.data.counts || {});
+      }
+    } catch (err) {
+      console.error('Failed to load status counts:', err);
+    }
+  };
 
   useEffect(() => {
     dispatch(fetchAdminOrders({
@@ -62,6 +76,23 @@ const OrdersAdminPage = () => {
       page,
       limit
     }));
+    loadCounts();
+  }, [activeStatus, search, page, limit, dispatch]);
+
+  useEffect(() => {
+    const handleStatusChanged = () => {
+      loadCounts();
+      dispatch(fetchAdminOrders({
+        status: activeStatus === 'All' ? undefined : activeStatus,
+        search: search || undefined,
+        page,
+        limit
+      }));
+    };
+    window.addEventListener('adminOrderStatusChanged', handleStatusChanged);
+    return () => {
+      window.removeEventListener('adminOrderStatusChanged', handleStatusChanged);
+    };
   }, [activeStatus, search, page, limit, dispatch]);
 
   const handleTabClick = (s) => {
@@ -85,7 +116,7 @@ const OrdersAdminPage = () => {
   const filtered = activeStatus === 'All' 
     ? orders 
     : (activeStatus === 'PENDING' 
-        ? orders.filter(o => o.status === 'PENDING' || o.status === 'PAID' || o.status === 'CONFIRMED' || o.status === 'PROCESSING') 
+        ? orders.filter(o => o.status === 'PENDING' || o.status === 'PENDING_PAYMENT' || o.status === 'PAID' || o.status === 'PAYMENT_RECEIVED_STOCK_FAILED') 
         : orders.filter(o => o.status === activeStatus));
 
   const orderHeaders = ['Order #', 'Customer', 'Items', 'Amount', 'Payment'];
@@ -96,19 +127,32 @@ const OrdersAdminPage = () => {
     <AdminLayout title="Orders">
       {/* Status tabs */}
       <div className="flex gap-2 mb-6 overflow-x-auto pb-1 scrollbar-hide" role="tablist">
-        {STATUS_TABS.map(s => (
-          <button
-            key={s}
-            onClick={() => handleTabClick(s)}
-            role="tab" aria-selected={activeStatus === s}
-            id={`orders-tab-${s}`}
-            className={`flex-shrink-0 px-4 py-2 text-xs font-medium rounded-lg transition-all ${
-              activeStatus === s ? 'bg-brand-gold text-white shadow-xs font-semibold' : 'bg-white text-brand-grey hover:bg-brand-light'
-            }`}
-          >
-            {STATUS_LABELS[s] || s}
-          </button>
-        ))}
+        {STATUS_TABS.map(s => {
+          const countKey = s === 'All' ? 'ALL' : s;
+          const count = orderCounts[countKey];
+          return (
+            <button
+              key={s}
+              onClick={() => handleTabClick(s)}
+              role="tab" aria-selected={activeStatus === s}
+              id={`orders-tab-${s}`}
+              className={`flex-shrink-0 px-3.5 py-2 text-xs font-medium rounded-lg transition-all flex items-center gap-2 ${
+                activeStatus === s ? 'bg-brand-gold text-white shadow-xs font-semibold' : 'bg-white text-brand-grey hover:bg-brand-light'
+              }`}
+            >
+              <span>{STATUS_LABELS[s] || s}</span>
+              {count !== undefined && (
+                <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${
+                  activeStatus === s 
+                    ? 'bg-white/20 text-white' 
+                    : (count > 0 ? 'bg-amber-100 text-amber-900' : 'bg-neutral-100 text-neutral-500')
+                }`}>
+                  {count}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">

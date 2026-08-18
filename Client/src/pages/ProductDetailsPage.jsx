@@ -422,12 +422,12 @@ const ProductDetailsPage = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isImageModalOpen, allLightboxImages.length]);
 
-  // When selectedVariant changes, automatically select the first image
+  // When selectedVariant changes, automatically select the variant's first image (index 0)
   useEffect(() => {
-    if (selectedVariant && selectedVariant.image) {
+    if (selectedVariant) {
       setSelectedImage(0);
     }
-  }, [selectedVariant]);
+  }, [selectedVariant?.id]);
 
   useEffect(() => {
     if (slug) dispatch(fetchProduct(slug));

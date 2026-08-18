@@ -12,6 +12,7 @@ import ProductCard from '../components/ProductCard';
 import HeroBanner from '../components/HeroBanner';
 import Footer from '../components/Footer';
 import CircularGallery from '../components/CircularGallery';
+import { getImageUrl } from '../utils/imageUrl';
 
 /* ── Countdown Timer hook ─────────────────────────────────────────────────── */
 const useCountdown = (targetDate) => {
@@ -438,7 +439,7 @@ const HomePage = () => {
                       id={`cat-nav-${cat.id}`}
                     >
                       <div className="relative w-full aspect-square rounded-full overflow-hidden border-2 border-transparent group-hover:border-brand-gold transition-colors duration-300 shadow-sm">
-                        <img src={cat.image} alt={cat.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500 transform-gpu" loading="lazy" decoding="async" />
+                        <img src={getImageUrl(cat.image)} alt={cat.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500 transform-gpu" loading="lazy" decoding="async" />
                       </div>
                       <span className="font-inter text-xs font-medium text-brand-text text-center group-hover:text-brand-gold transition-colors">
                         {cat.name}
@@ -487,7 +488,7 @@ const HomePage = () => {
             {/* Product Preview (Visible on all devices including iPad Air/Mini & Mobile) */}
             <div className="relative w-44 h-44 sm:w-56 sm:h-56 lg:w-64 lg:h-64 flex-shrink-0 rounded-2xl overflow-hidden shadow-2xl border border-white/20 bg-neutral-900 group">
               <img
-                src={countdownBanner.image}
+                src={getImageUrl(countdownBanner.image)}
                 alt={countdownBanner.title || 'Deal of the week'}
                 className="w-full h-full object-cover rounded-2xl group-hover:scale-105 transition-transform duration-500"
               />
@@ -622,7 +623,7 @@ const HomePage = () => {
               <div className="grid md:grid-cols-2 gap-0 shadow-xl rounded-2xl overflow-hidden md:h-[340px] bg-brand-text">
                 <div className="relative h-64 md:h-full bg-neutral-950 overflow-hidden">
                   <img
-                    src={promoBanners[0].image}
+                    src={getImageUrl(promoBanners[0].image)}
                     alt={promoBanners[0].title || "Promo Banner"}
                     className="w-full h-full object-cover object-center"
                     loading="lazy"
@@ -665,7 +666,7 @@ const HomePage = () => {
                       <div key={promo.id || idx} className="w-full flex-shrink-0 grid md:grid-cols-2 gap-0 h-full">
                         <div className="relative h-64 md:h-full bg-neutral-950 overflow-hidden">
                           <img
-                            src={promo.image}
+                            src={getImageUrl(promo.image)}
                             alt={promo.title || "Promo Banner"}
                             className="w-full h-full object-cover object-center"
                             loading="lazy"
@@ -768,7 +769,7 @@ const HomePage = () => {
           <div className="max-w-site mx-auto px-6 md:px-8 flex justify-center">
             <ScrollReveal className="relative overflow-hidden w-full max-w-5xl aspect-[16/9] sm:aspect-[2.5/1] md:aspect-[3/1] shadow-lg group">
               <img
-                src={exclusiveBanners[0].image}
+                src={getImageUrl(exclusiveBanners[0].image)}
                 alt={exclusiveBanners[0].title || 'Exclusive Collection'}
                 className="w-full h-full object-cover object-center transform-gpu"
                 loading="lazy"
@@ -856,7 +857,7 @@ const HomePage = () => {
                       className="w-full md:w-[calc(50%-12px)] flex-shrink-0 relative overflow-hidden aspect-[16/9] group"
                     >
                       <img
-                        src={banner.image}
+                        src={getImageUrl(banner.image)}
                         alt={banner.title || 'Exclusive Collection'}
                         className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105 transform-gpu"
                         loading="lazy"

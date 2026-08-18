@@ -9,6 +9,7 @@ import Switch from '../components/Switch';
 import api from '../services/api';
 import toast from 'react-hot-toast';
 import { checkPermission } from '../utils/rbac';
+import { validateDocumentFile } from '../utils/fileValidation';
 
 const generateUniqueCode = () => {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // avoid ambiguous characters
@@ -169,6 +170,13 @@ const AffiliatesAdminPage = () => {
 
   // Document proof file handling
   const processDocFile = (file) => {
+    if (!file) return;
+    const val = validateDocumentFile(file, { maxSizeMB: 10 });
+    if (!val.isValid) {
+      toast.error(val.error);
+      if (docInputRef.current) docInputRef.current.value = '';
+      return;
+    }
     setDocFile(file);
     setDocPreviewName(file.name);
     const objectUrl = URL.createObjectURL(file);

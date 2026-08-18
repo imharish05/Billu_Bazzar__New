@@ -23,22 +23,34 @@ const pushToShiprocket = async (orderId) => {
 // Helper to check and alert administrators of low stock events
 const checkAndNotifyLowStock = async (items) => {
   try {
+    const variantIds = [...new Set(items.map(i => i.variantId).filter(Boolean))];
+    const productIds = [...new Set(items.map(i => i.productId).filter(Boolean))];
+
+    const [variants, products] = await Promise.all([
+      variantIds.length > 0 ? ProductVariant.findAll({ where: { id: variantIds }, attributes: ['id', 'stock', 'sku'] }) : [],
+      productIds.length > 0 ? Product.findAll({ where: { id: productIds }, attributes: ['id', 'stock', 'sku', 'name'] }) : []
+    ]);
+
+    const variantMap = new Map(variants.map(v => [v.id, v]));
+    const productMap = new Map(products.map(p => [p.id, p]));
+
     for (const item of items) {
       let currentStock = 0;
       let name = item.productName || '';
       let sku = '';
 
       if (item.variantId) {
-        const variant = await ProductVariant.findByPk(item.variantId);
+        const variant = variantMap.get(item.variantId);
         if (variant) {
           currentStock = variant.stock;
           sku = variant.sku;
         }
       } else {
-        const product = await Product.findByPk(item.productId);
+        const product = productMap.get(item.productId);
         if (product) {
           currentStock = product.stock;
           sku = product.sku;
+          if (!name) name = product.name;
         }
       }
 
@@ -78,6 +90,12 @@ const initiateIdempotentRefund = async (orderId, paymentId, amount) => {
     if (!refundResult.success) {
       throw new Error(`Refund failed on gateway: ${refundResult.status}`);
     }
+
+    // Update order status and payment status to REFUNDED
+    await order.update({
+      status: 'REFUNDED',
+      paymentStatus: 'REFUNDED'
+    });
 
     // 2. Log refund to audit trail
     await InventoryMovementLog.create({
@@ -204,28 +222,30 @@ const processConfirmedPayment = async ({ orderQuery, gatewayPaymentId, signature
     const lockedStock = {};
     let isInventoryValid = true;
 
-    // 5. Lock and evaluate stock inside the transaction
-    for (const item of sortedItems) {
-      if (item.variantId) {
-        const variant = await ProductVariant.findOne({
-          where: { id: item.variantId },
-          lock: transaction.LOCK.UPDATE,
-          transaction
-        });
-        if (!variant || variant.stock < item.quantity) {
-          isInventoryValid = false;
+    // 5. Lock and evaluate stock inside transaction (skip check if inventory was already deducted during order placement)
+    if (!order.inventoryProcessed) {
+      for (const item of sortedItems) {
+        if (item.variantId) {
+          const variant = await ProductVariant.findOne({
+            where: { id: item.variantId },
+            lock: transaction.LOCK.UPDATE,
+            transaction
+          });
+          if (!variant || variant.stock < item.quantity) {
+            isInventoryValid = false;
+          }
+          lockedStock[`v_${item.variantId}`] = variant;
+        } else {
+          const product = await Product.findOne({
+            where: { id: item.productId },
+            lock: transaction.LOCK.UPDATE,
+            transaction
+          });
+          if (!product || product.stock < item.quantity) {
+            isInventoryValid = false;
+          }
+          lockedStock[`p_${item.productId}`] = product;
         }
-        lockedStock[`v_${item.variantId}`] = variant;
-      } else {
-        const product = await Product.findOne({
-          where: { id: item.productId },
-          lock: transaction.LOCK.UPDATE,
-          transaction
-        });
-        if (!product || product.stock < item.quantity) {
-          isInventoryValid = false;
-        }
-        lockedStock[`p_${item.productId}`] = product;
       }
     }
 

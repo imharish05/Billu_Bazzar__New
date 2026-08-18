@@ -45,6 +45,15 @@ const prepareBannerData = (rawData) => {
   return data;
 };
 
+const { toAbsoluteUrl } = require('../utils/imageUrl');
+
+const formatBanner = (banner, req) => {
+  if (!banner) return banner;
+  const json = typeof banner.toJSON === 'function' ? banner.toJSON() : { ...banner };
+  json.image = toAbsoluteUrl(json.image, req);
+  return json;
+};
+
 const getAll = async (req, res) => {
   try {
     const { type, all } = req.query;
@@ -79,7 +88,8 @@ const getAll = async (req, res) => {
     if (!showAll) where.isActive = true;
     if (type) where.type = type;
     const banners = await Banner.findAll({ where, order: [['position', 'ASC']] });
-    res.json({ success: true, banners });
+    const formattedBanners = banners.map(b => formatBanner(b, req));
+    res.json({ success: true, banners: formattedBanners });
   } catch (err) {
     return handleDBError(err, res, 'banner');
   }
@@ -113,7 +123,7 @@ const create = async (req, res) => {
       data.image = '/' + normalizedPath.substring(uploadsIndex);
     }
     const banner = await Banner.create(data);
-    res.status(201).json({ success: true, banner });
+    res.status(201).json({ success: true, banner: formatBanner(banner, req) });
   } catch (err) {
     return handleDBError(err, res, 'banner');
   }
@@ -158,7 +168,7 @@ const update = async (req, res) => {
       data.image = '/' + normalizedPath.substring(uploadsIndex);
     }
     await banner.update(data);
-    res.json({ success: true, banner });
+    res.json({ success: true, banner: formatBanner(banner, req) });
   } catch (err) {
     return handleDBError(err, res, 'banner');
   }

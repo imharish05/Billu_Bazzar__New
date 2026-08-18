@@ -1,6 +1,8 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import api from '../../services/api';
 
+import { getAccessToken } from '../../utils/tokenStorage';
+
 export const fetchMyOrders = createAsyncThunk('orders/myOrders', async (_, { rejectWithValue }) => {
   try {
     const res = await api.get('/orders/my');
@@ -13,14 +15,21 @@ export const fetchMyOrders = createAsyncThunk('orders/myOrders', async (_, { rej
 export const fetchOrderById = createAsyncThunk('orders/fetchById', async (id, { rejectWithValue }) => {
   try {
     const res = await api.get(`/orders/track/${id}`);
-    return res.data.order;
-  } catch (err) {
-    try {
-      const res = await api.get(`/orders/my/${id}`);
+    if (res.data?.order) {
       return res.data.order;
-    } catch (err2) {
-      return rejectWithValue(err2.response?.data?.message || err.response?.data?.message || 'Failed to fetch order details');
     }
+    return rejectWithValue('Order not found');
+  } catch (err) {
+    // Only attempt protected endpoint if customer is logged in with an access token
+    if (getAccessToken()) {
+      try {
+        const res = await api.get(`/orders/my/${id}`);
+        return res.data?.order;
+      } catch (err2) {
+        return rejectWithValue(err2.response?.data?.message || err.response?.data?.message || 'Failed to fetch order details');
+      }
+    }
+    return rejectWithValue(err.response?.data?.message || 'Failed to fetch order details');
   }
 });
 

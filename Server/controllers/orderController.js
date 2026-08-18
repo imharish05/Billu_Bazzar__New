@@ -4,6 +4,20 @@ const { Op } = require('sequelize');
 const { v4: uuidv4 } = require('uuid');
 const { sendOrderStatusNotification } = require('../services/emailService');
 const currencyRateService = require('../services/currencyRateService');
+const { toAbsoluteUrl } = require('../utils/imageUrl');
+
+const formatOrder = (order, req) => {
+  if (!order) return order;
+  const json = typeof order.toJSON === 'function' ? order.toJSON() : { ...order };
+  if (Array.isArray(json.items)) {
+    json.items = json.items.map(item => {
+      if (item.productImage) item.productImage = toAbsoluteUrl(item.productImage, req);
+      if (item.image) item.image = toAbsoluteUrl(item.image, req);
+      return item;
+    });
+  }
+  return json;
+};
 
 // Helper to push order details to Shiprocket shipping API
 const pushToShiprocket = async (orderId) => {
@@ -27,23 +41,23 @@ const getAll = async (req, res) => {
 
     const where = {};
 
+    const validOrderList = [
+      { paymentStatus: 'PAID' },
+      { paymentMethod: 'COD' },
+      { status: { [Op.in]: ['PAID', 'CONFIRMED', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'OUT_FOR_DELIVERY', 'CANCELLED', 'RETURNED'] } }
+    ];
+
     if (status) {
       if (status === 'PENDING' || status === 'New Orders') {
-        where[Op.or] = [
-          { status: 'PENDING' },
-          { status: 'PAID' },
-          { status: 'CONFIRMED' },
-          { status: 'PROCESSING' }
+        where[Op.and] = [
+          { [Op.or]: validOrderList },
+          { status: { [Op.in]: ['PENDING', 'PENDING_PAYMENT', 'PAID', 'PAYMENT_RECEIVED_STOCK_FAILED'] } }
         ];
       } else {
         where.status = status;
       }
     } else {
-      where[Op.or] = [
-        { paymentStatus: 'PAID' },
-        { paymentMethod: 'COD' },
-        { status: { [Op.in]: ['PAID', 'CONFIRMED', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'OUT_FOR_DELIVERY'] } }
-      ];
+      where[Op.or] = validOrderList;
     }
 
     if (customerId) where.customerId = customerId;
@@ -77,7 +91,8 @@ const getAll = async (req, res) => {
     });
     const p = Math.max(1, parseInt(page, 10));
     const l = Math.max(1, parseInt(limit, 10));
-    res.json({ success: true, orders: rows, total: count, page: p, limit: l, totalPages: Math.ceil(count / l) });
+    const formattedOrders = rows.map(o => formatOrder(o, req));
+    res.json({ success: true, orders: formattedOrders, total: count, page: p, limit: l, totalPages: Math.ceil(count / l) });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -96,7 +111,8 @@ const getMyOrders = async (req, res) => {
       order: [['createdAt', 'DESC']],
       include: [{ model: OrderItem, as: 'items' }],
     });
-    res.json({ success: true, orders });
+    const formattedOrders = orders.map(o => formatOrder(o, req));
+    res.json({ success: true, orders: formattedOrders });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -112,30 +128,85 @@ const getMyOrderById = async (req, res) => {
       ],
     });
     if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
-    res.json({ success: true, order });
+    res.json({ success: true, order: formatOrder(order, req) });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 };
 
 const cancelMyOrder = async (req, res) => {
+  const transaction = await sequelize.transaction();
   try {
     const order = await Order.findOne({
       where: { id: req.params.id, customerId: req.customer.id },
+      include: [{ model: OrderItem, as: 'items' }],
+      lock: transaction.LOCK.UPDATE,
+      transaction
     });
-    if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
+    if (!order) {
+      await transaction.rollback();
+      return res.status(404).json({ success: false, message: 'Order not found' });
+    }
 
     const cancellableStatuses = ['PENDING', 'PENDING_PAYMENT', 'CONFIRMED'];
     if (!cancellableStatuses.includes(order.status)) {
+      await transaction.rollback();
       return res.status(400).json({
         success: false,
         message: `Order cannot be cancelled because its status is '${order.status}'. Please contact support.`,
       });
     }
 
-    await order.update({ status: 'CANCELLED' });
+    if (order.inventoryProcessed) {
+      const { resolveWarehouseIdForItem, syncStorefrontStock } = require('./warehouseController');
+      for (const item of order.items || []) {
+        const whId = await resolveWarehouseIdForItem(item.productId, item.variantId, transaction);
+        let currentStock = 0;
+        if (item.variantId) {
+          const variant = await ProductVariant.findOne({ where: { id: item.variantId }, lock: transaction.LOCK.UPDATE, transaction });
+          if (variant) {
+            currentStock = parseInt(variant.stock, 10) || 0;
+            await variant.increment('stock', { by: item.quantity, transaction });
+          }
+        }
+        const product = await Product.findOne({ where: { id: item.productId }, lock: transaction.LOCK.UPDATE, transaction });
+        if (product) {
+          if (!item.variantId) currentStock = parseInt(product.stock, 10) || 0;
+          await product.increment('stock', { by: item.quantity, transaction });
+        }
+        if (whId) {
+          const [whStock] = await WarehouseStock.findOrCreate({
+            where: { warehouseId: whId, productId: item.productId, variantId: item.variantId || null },
+            defaults: { warehouseId: whId, productId: item.productId, variantId: item.variantId || null, quantity: currentStock, reservedQty: 0 },
+            transaction
+          });
+          await whStock.increment('quantity', { by: item.quantity, transaction });
+        }
+        await InventoryMovementLog.create({
+          productId: item.productId,
+          variantId: item.variantId || null,
+          warehouseId: whId,
+          orderId: order.id,
+          quantity: item.quantity,
+          type: 'ORDER_CANCEL_RESTOCK',
+          reason: `Customer cancelled order ${order.orderNumber}`
+        }, { transaction });
+      }
+    }
+
+    await order.update({ status: 'CANCELLED', inventoryProcessed: false }, { transaction });
+    await transaction.commit();
+
+    if (order.items) {
+      const { syncStorefrontStock } = require('./warehouseController');
+      for (const item of order.items) {
+        syncStorefrontStock(item.productId, item.variantId || null).catch(console.error);
+      }
+    }
+
     res.json({ success: true, message: 'Order cancelled successfully', order });
   } catch (err) {
+    await transaction.rollback();
     res.status(500).json({ success: false, message: err.message });
   }
 };
@@ -151,7 +222,7 @@ const getOne = async (req, res) => {
       ],
     });
     if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
-    res.json({ success: true, order });
+    res.json({ success: true, order: formatOrder(order, req) });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -176,7 +247,7 @@ const trackOrder = async (req, res) => {
     });
 
     if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
-    res.json({ success: true, order });
+    res.json({ success: true, order: formatOrder(order, req) });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -540,13 +611,13 @@ const placeOrder = async (req, res) => {
       quantity: item.quantity,
       unitPrice: item.price,
       totalPrice: item.price * item.quantity,
-      // Store clean variant attributes snapshot without double JSON stringification
+      // Store clean variant attributes snapshot — DataTypes.JSON column, pass plain object directly
       selectedVariant: (() => {
         let sv = item.selectedVariant;
         if (typeof sv === 'string') {
-          try { sv = JSON.parse(sv); } catch (e) {}
+          try { sv = JSON.parse(sv); } catch (e) { sv = null; }
         }
-        return (sv && typeof sv === 'object' && Object.keys(sv).length > 0) ? JSON.stringify(sv) : null;
+        return (sv && typeof sv === 'object' && Object.keys(sv).length > 0) ? sv : null;
       })()
     }));
 
@@ -607,7 +678,7 @@ const { syncStorefrontStock, resolveWarehouseIdForItem } = require('./warehouseC
       }, { transaction });
     }
 
-    await order.update({ inventoryProcessed: isCod }, { transaction });
+    await order.update({ inventoryProcessed: true }, { transaction });
 
     // 10. Process Loyalty Ledger and Points Balance
     if (req.customer && req.customer.id) {
@@ -858,13 +929,23 @@ const getDashboardStats = async (req, res) => {
 
 const getStatusCounts = async (req, res) => {
   try {
+    const validOrderCondition = {
+      [Op.or]: [
+        { paymentStatus: 'PAID' },
+        { paymentMethod: 'COD' },
+        { status: { [Op.in]: ['PAID', 'CONFIRMED', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'OUT_FOR_DELIVERY', 'CANCELLED', 'RETURNED'] } }
+      ]
+    };
+
     const orderCounts = await Order.findAll({
+      where: validOrderCondition,
       attributes: ['status', [sequelize.fn('COUNT', sequelize.col('id')), 'count']],
       group: ['status'],
       raw: true
     });
 
     const counts = {
+      ALL: 0,
       ABANDONED: 0,
       PENDING: 0,
       CONFIRMED: 0,
@@ -876,11 +957,20 @@ const getStatusCounts = async (req, res) => {
       RETURNED: 0
     };
 
+    let totalValidOrders = 0;
+
     orderCounts.forEach(row => {
-      if (Object.prototype.hasOwnProperty.call(counts, row.status)) {
-        counts[row.status] = parseInt(row.count, 10);
+      const c = parseInt(row.count, 10) || 0;
+      totalValidOrders += c;
+      const st = row.status;
+      if (st === 'PENDING' || st === 'PENDING_PAYMENT' || st === 'PAID' || st === 'PAYMENT_RECEIVED_STOCK_FAILED') {
+        counts.PENDING += c;
+      } else if (Object.prototype.hasOwnProperty.call(counts, st)) {
+        counts[st] += c;
       }
     });
+
+    counts.ALL = totalValidOrders;
 
     try {
       const abandonedCount = await Cart.count({

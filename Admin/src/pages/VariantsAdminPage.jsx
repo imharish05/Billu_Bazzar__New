@@ -1,12 +1,14 @@
 import { useEffect, useState, useRef, useMemo } from 'react';
 import { useSelector } from 'react-redux';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Search, Edit2, Trash2, X, Upload, ChevronLeft, ChevronRight, Camera, Copy } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, X, Upload, ChevronLeft, ChevronRight, Camera, Copy, Palette, Ruler, AlertTriangle } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
 import currencyJs from 'currency.js';
 import toast from 'react-hot-toast';
 import api from '../services/api';
 import { checkPermission } from '../utils/rbac';
+import { getImageUrl } from '../utils/imageUrl';
+import { validateImageFile } from '../utils/fileValidation';
 
 const fmt = (v) => currencyJs(v, { symbol: '₹', precision: 0 }).format();
 
@@ -128,8 +130,8 @@ const VariantAttributeChips = ({ label, value, onChange, suggestions = [] }) => 
       {/* Header row */}
       <div className="flex items-center gap-2 border-b border-neutral-100 pb-2.5">
         {isColor
-          ? <span className="text-amber-600 font-bold text-sm">🎨</span>
-          : <span className="text-neutral-500 font-bold text-sm">📐</span>}
+          ? <Palette size={16} className="text-amber-600 shrink-0" />
+          : <Ruler size={16} className="text-neutral-500 shrink-0" />}
         <span className="text-xs font-bold text-neutral-800 capitalize">{label}</span>
         <span className="text-red-500 font-bold text-xs">*</span>
       </div>
@@ -254,15 +256,15 @@ const VariantModal = ({ variant, onClose, onSave, products, warehouses }) => {
   const [attributes, setAttributes] = useState(variant?.attributes || {});
   
   const [lowStockThreshold, setLowStockThreshold] = useState(variant?.lowStockThreshold !== undefined ? String(variant.lowStockThreshold) : '10');
-  const [gstRate, setGstRate] = useState(variant?.gstRate || '0%');
+
   const [mainImageFile, setMainImageFile] = useState(null);
   const [mainImagePreview, setMainImagePreview] = useState(variant?.image || '');
 
   // Multi-Image Upload States (Up to 5 Images per Variant)
   const [existingImages, setExistingImages] = useState(() => {
-    if (Array.isArray(variant?.images) && variant.images.length > 0) return variant.images.slice(0, 5);
-    if (variant?.image) return [variant.image];
-    return [];
+    const mainImg = variant?.image || null;
+    const rawImgs = Array.isArray(variant?.images) ? variant.images : (variant?.image ? [variant.image] : []);
+    return rawImgs.filter(img => img && img !== mainImg).slice(0, 5);
   });
   const [newImageFiles, setNewImageFiles] = useState([]);
 
@@ -350,19 +352,37 @@ const VariantModal = ({ variant, onClose, onSave, products, warehouses }) => {
   const handleMainImageChange = (e) => {
     const file = e.target.files?.[0];
     if (file) {
+      const val = validateImageFile(file, { maxSizeMB: 5 });
+      if (!val.isValid) {
+        toast.error(val.error);
+        e.target.value = '';
+        return;
+      }
       setMainImageFile(file);
       setMainImagePreview(URL.createObjectURL(file));
     }
   };
 
   const handleMultipleFilesSelect = (e) => {
-    const files = Array.from(e.target.files || []);
-    const remainingSlots = 5 - (existingImages.length + newImageFiles.length);
+    const rawFiles = Array.from(e.target.files || []);
+    const validFiles = [];
+    for (const file of rawFiles) {
+      const val = validateImageFile(file, { maxSizeMB: 5 });
+      if (!val.isValid) {
+        toast.error(val.error);
+      } else {
+        validFiles.push(file);
+      }
+    }
+    if (validFiles.length === 0) return;
+
+    const galleryCount = existingImages.length + newImageFiles.length;
+    const remainingSlots = 5 - galleryCount;
     if (remainingSlots <= 0) {
       toast.error('Maximum 5 variant gallery images allowed');
       return;
     }
-    const selected = files.slice(0, remainingSlots).map(file => {
+    const selected = validFiles.slice(0, remainingSlots).map(file => {
       file.preview = URL.createObjectURL(file);
       return file;
     });
@@ -409,13 +429,12 @@ const VariantModal = ({ variant, onClose, onSave, products, warehouses }) => {
 
     let finalSku = sku ? sku.trim() : '';
     if (!finalSku && selectedProduct) {
-      const attrValues = Object.values(attributes).filter(Boolean).join('-').toUpperCase().replace(/\s+/g, '');
+      const attrValues = Object.values(attributes).filter(Boolean).join('-').toUpperCase().replace(/[^A-Z0-9-]/g, '');
       const baseSku = selectedProduct.sku || `PROD-${selectedProductId}`;
-      finalSku = attrValues ? `${baseSku}-${attrValues}` : `${baseSku}-VAR-${Date.now().toString().slice(-4)}`;
+      finalSku = attrValues ? `SKU-${baseSku}-${attrValues}` : `SKU-${baseSku}-VAR-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
     }
     if (!finalSku) {
-      toast.error('SKU Code is required');
-      return;
+      finalSku = `SKU-PV-${Date.now().toString().slice(-6)}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
     }
 
     const fd = new FormData();
@@ -425,7 +444,6 @@ const VariantModal = ({ variant, onClose, onSave, products, warehouses }) => {
     fd.append('mrp', mrp);
     fd.append('stock', stock);
     fd.append('lowStockThreshold', lowStockThreshold);
-    fd.append('gstRate', gstRate);
     fd.append('warehouseId', warehouseId || '');
     fd.append('attributes', JSON.stringify(attributes));
     fd.append('existingImages', JSON.stringify(existingImages));
@@ -614,20 +632,7 @@ const VariantModal = ({ variant, onClose, onSave, products, warehouses }) => {
                 />
               </div>
 
-              <div className="col-span-2">
-                <label className="block text-xs font-semibold text-brand-grey mb-1.5" htmlFor="var-gst">GST Percentage</label>
-                <select
-                  id="var-gst"
-                  value={gstRate}
-                  onChange={e => setGstRate(e.target.value)}
-                  className="w-full border border-brand-light bg-white px-3 py-2 text-sm focus:outline-none focus:border-brand-gold transition-colors rounded-md font-medium"
-                >
-                  <option value="0%">0% (Exempt / 0%)</option>
-                  <option value="5%">5% (SGST 2.5% + CGST 2.5%)</option>
-                  <option value="18%">18% (SGST 9% + CGST 9%)</option>
-                  <option value="40%">40% (SGST 20% + CGST 20%)</option>
-                </select>
-              </div>
+
             </div>
 
             {/* Main Variant Image Input (Dashed Dropzone & Rounded Preview Card) */}
@@ -638,7 +643,7 @@ const VariantModal = ({ variant, onClose, onSave, products, warehouses }) => {
 
               {mainImagePreview ? (
                 <div className="relative w-28 h-28 border border-neutral-300 rounded-2xl overflow-hidden shadow-md group bg-neutral-900">
-                  <img src={mainImagePreview} alt="Main Variant" className="w-full h-full object-cover" />
+                  <img src={getImageUrl(mainImagePreview)} alt="Main Variant" className="w-full h-full object-cover" />
                   <button
                     type="button"
                     onClick={() => {
@@ -674,7 +679,7 @@ const VariantModal = ({ variant, onClose, onSave, products, warehouses }) => {
               <div className="grid grid-cols-5 gap-3">
                 {existingImages.map((imgUrl, idx) => (
                   <div key={`existing-${idx}`} className="relative aspect-square border border-neutral-300 rounded-md overflow-hidden bg-neutral-100 shadow-sm">
-                    <img src={imgUrl} alt={`Variant ${idx + 1}`} className="w-full h-full object-cover" />
+                    <img src={getImageUrl(imgUrl)} alt={`Variant ${idx + 1}`} className="w-full h-full object-cover" />
                     <span className="absolute top-1 left-1 bg-black/70 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">
                       #{idx + 1}
                     </span>
@@ -786,25 +791,74 @@ const VariantsAdminPage = () => {
 
   const executeDelete = async (id) => {
     try {
-      await api.delete(`/variants/${id}`);
-      toast.success('Variant deleted successfully');
+      const res = await api.delete(`/variants/${id}`);
+      const data = res.data;
+
+      if (data.cascadeDeletedProduct) {
+        toast.success(`Last variant deleted — product has been removed from the catalog.`);
+      } else {
+        toast.success('Variant deleted. Product default updated to next available variant.');
+      }
+
       fetchInitialData();
     } catch (err) {
-      toast.error('Failed to delete variant');
+      toast.error(err.response?.data?.message || 'Failed to delete variant');
     }
   };
 
   const handleDelete = (id) => {
+    const targetVar = variants.find(v => Number(v.id) === Number(id));
+
+    // Count how many variants this product has (using local state for UI context)
+    const prodVariants = targetVar
+      ? variants.filter(v => Number(v.productId) === Number(targetVar.productId))
+      : [];
+
+    const isLastVariant = prodVariants.length <= 1;
+    const productName = targetVar?.product?.name || 'this product';
+    const variantSku = targetVar?.sku || 'this variant';
+
+    // ── CASE: Last remaining variant → cascade warning ───────────────────────
+    if (isLastVariant) {
+      toast((t) => (
+        <div className="flex flex-col items-start gap-2.5 p-1 max-w-xs">
+          <div className="flex items-center gap-2">
+            <AlertTriangle size={16} className="text-red-600 shrink-0" />
+            <p className="text-sm font-bold text-neutral-900">Delete Last Variant?</p>
+          </div>
+          <div className="bg-red-50 border border-red-200 rounded-lg p-2.5 text-xs text-red-800 leading-relaxed">
+            <strong>{variantSku}</strong> is the last variant of <strong>{productName}</strong>.
+            <br />Deleting it will <strong>permanently remove the entire product</strong> from the catalog.
+          </div>
+          <div className="flex items-center gap-2.5 w-full mt-1">
+            <button
+              onClick={() => { toast.dismiss(t.id); executeDelete(id); }}
+              className="flex-1 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold uppercase tracking-wider transition-colors rounded shadow-sm"
+            >
+              Yes, Delete Both
+            </button>
+            <button
+              onClick={() => toast.dismiss(t.id)}
+              className="flex-1 py-1.5 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 text-xs font-semibold uppercase tracking-wider transition-colors rounded border border-neutral-200"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ), { duration: 8000, position: 'top-center' });
+      return;
+    }
+
+    // ── CASE: Multiple variants exist → standard confirmation ─────────────────
     toast((t) => (
       <div className="flex flex-col items-center text-center gap-2 p-1">
         <p className="text-sm font-semibold text-neutral-800">Confirm Deletion</p>
-        <p className="text-xs text-neutral-600 max-w-xs">Are you sure you want to delete this variant? This will remove its stock records.</p>
+        <p className="text-xs text-neutral-600 max-w-xs">
+          Delete variant <strong>{variantSku}</strong>? The product's default variant will automatically update to the next available option.
+        </p>
         <div className="flex justify-center items-center gap-3 mt-2 w-full">
           <button
-            onClick={() => {
-              toast.dismiss(t.id);
-              executeDelete(id);
-            }}
+            onClick={() => { toast.dismiss(t.id); executeDelete(id); }}
             className="px-3.5 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold uppercase tracking-wider transition-colors rounded shadow-sm"
           >
             Yes, Delete
@@ -817,10 +871,7 @@ const VariantsAdminPage = () => {
           </button>
         </div>
       </div>
-    ), {
-      duration: 6000,
-      position: 'top-center'
-    });
+    ), { duration: 6000, position: 'top-center' });
   };
 
   // Filter variants based on search (product name or SKU) and product selection
@@ -914,11 +965,14 @@ const VariantsAdminPage = () => {
                         .join(' · ')
                     : (typeof rawAttrs === 'string' && rawAttrs !== '{}' ? rawAttrs : '');
 
+                  const prodVariants = variants.filter(v => Number(v.productId) === Number(variant.productId));
+                  const isLastVariant = prodVariants.length <= 1;
+
                 return (
                   <tr key={variant.id} className="border-b border-brand-light hover:bg-brand-light/20 transition-colors">
                     <td className="px-4 py-3">
                       <img 
-                        src={variant.image || variant.product?.images?.[0] || 'https://images.unsplash.com/photo-1469334031218-e382a71b716b?w=80'} 
+                        src={getImageUrl(variant.image || variant.product?.images?.[0]) || 'https://images.unsplash.com/photo-1469334031218-e382a71b716b?w=80'} 
                         alt="Variant" 
                         className="w-10 h-12 object-cover rounded" 
                       />
@@ -944,7 +998,20 @@ const VariantsAdminPage = () => {
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
                           {canEditVariant && <button onClick={() => { setEditing(variant); setModalOpen(true); }} className="p-1.5 text-brand-grey hover:text-brand-gold transition-colors focus-visible:outline-brand-gold" aria-label="Edit"><Edit2 size={14} /></button>}
-                          {canDeleteVariant && <button onClick={() => handleDelete(variant.id)} className="p-1.5 text-brand-grey hover:text-red-400 transition-colors focus-visible:outline-brand-gold" aria-label="Delete"><Trash2 size={14} /></button>}
+                          {canDeleteVariant && (
+                            <button
+                              onClick={() => handleDelete(variant.id)}
+                              title={isLastVariant ? 'Delete Variant (will also delete product)' : 'Delete Variant'}
+                              className={`p-1.5 transition-colors focus-visible:outline-brand-gold ${
+                                isLastVariant
+                                  ? 'text-red-400 hover:text-red-600 cursor-pointer'
+                                  : 'text-brand-grey hover:text-red-400 cursor-pointer'
+                              }`}
+                              aria-label="Delete"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
                         </div>
                       </td>
                     )}

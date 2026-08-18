@@ -189,6 +189,25 @@ const QuickViewModal = () => {
       );
     });
   }, [product, parsedVariants, selectedAttributes, variantAttributeKeys]);
+  const baseImages = (product?.images && product.images.length > 0)
+    ? product.images
+    : (product?.defaultProductImage ? [product.defaultProductImage] : []);
+
+  const rawGallery = baseImages.length > 0
+    ? baseImages
+    : ['https://images.unsplash.com/photo-1469334031218-e382a71b716b?w=600'];
+
+  const galleryImages = useMemo(() => {
+    if (selectedVariant && selectedVariant.image) {
+      if (!rawGallery.includes(selectedVariant.image)) {
+        return [selectedVariant.image, ...rawGallery];
+      } else {
+        const filtered = rawGallery.filter(img => img !== selectedVariant.image);
+        return [selectedVariant.image, ...filtered];
+      }
+    }
+    return rawGallery;
+  }, [selectedVariant, rawGallery]);
 
   if (!product) return null;
 
@@ -208,14 +227,6 @@ const QuickViewModal = () => {
     : product.inStock !== false;
 
   const stockLimit = selectedVariant?.stock !== undefined ? parseInt(selectedVariant.stock, 10) : (product.stock || 10);
-
-  const baseImages = (product.images && product.images.length > 0)
-    ? product.images
-    : (product.defaultProductImage ? [product.defaultProductImage] : []);
-
-  const galleryImages = baseImages.length > 0
-    ? baseImages
-    : ['https://images.unsplash.com/photo-1469334031218-e382a71b716b?w=600'];
 
   const currentSelectedAttrs = selectedVariant?.attributes || selectedAttributes;
 
@@ -282,12 +293,9 @@ const QuickViewModal = () => {
 
     setSelectedAttributes(nextAttrs);
 
-    // If selected variant has a specific image, switch gallery active index to match
+    // If selected variant has a specific image, switch gallery active index to 0 (where variant image is placed)
     if (targetVariant && targetVariant.image) {
-      const imgIdx = galleryImages.findIndex(img => img === targetVariant.image);
-      if (imgIdx > -1) {
-        setActiveImgIndex(imgIdx);
-      }
+      setActiveImgIndex(0);
     }
   };
 
@@ -557,20 +565,20 @@ const QuickViewModal = () => {
                       {Object.entries(variantAttributeValues).map(([groupKey, values]) => {
                         if (!values || values.length === 0) return null;
                         const isColor = groupKey.toLowerCase().includes('color') || groupKey.toLowerCase().includes('colour');
-                        const selectedVal = selectedAttributes[groupKey] || values[0];
+                        const selectedVal = selectedAttributes[groupKey];
 
                         return (
                           <div key={groupKey} className="space-y-1.5">
                             <div className="flex items-center justify-between text-xs">
                               <span className="font-bold text-neutral-800 uppercase text-[11px] tracking-wider">
-                                {groupKey}: <span className="font-extrabold text-amber-900 capitalize">{selectedVal}</span>
+                                {groupKey}:{selectedVal && <span className="font-extrabold text-amber-900 capitalize ml-1">{selectedVal}</span>}
                               </span>
                             </div>
 
                             <div className="flex flex-wrap items-center gap-2">
                               {isColor ? (
                                 values.map((val, i) => {
-                                  const isSelected = String(selectedVal).toLowerCase() === String(val).toLowerCase();
+                                  const isSelected = selectedVal != null && String(selectedVal).toLowerCase() === String(val).toLowerCase();
                                   const directVariantMatch = parsedVariants.length > 0 ? parsedVariants.find(v =>
                                     variantAttributeKeys.every(k =>
                                       v.attributes && String(v.attributes[k]).toLowerCase() === String(k === groupKey ? val : (selectedAttributes[k] || '')).toLowerCase()
@@ -620,7 +628,7 @@ const QuickViewModal = () => {
                                 })
                               ) : (
                                 values.map((val, i) => {
-                                  const isSelected = String(selectedVal).toLowerCase() === String(val).toLowerCase();
+                                  const isSelected = selectedVal != null && String(selectedVal).toLowerCase() === String(val).toLowerCase();
                                   const directVariantMatch = parsedVariants.length > 0 ? parsedVariants.find(v =>
                                     variantAttributeKeys.every(k =>
                                       v.attributes && String(v.attributes[k]).toLowerCase() === String(k === groupKey ? val : (selectedAttributes[k] || '')).toLowerCase()

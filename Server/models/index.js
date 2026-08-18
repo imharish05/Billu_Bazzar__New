@@ -155,6 +155,11 @@ Customer.hasMany(SupportTicket,    { foreignKey: 'customerId', as: 'tickets' });
 SupportTicket.belongsTo(Customer,  { foreignKey: 'customerId', as: 'customer' });
 SupportTicket.belongsTo(Order,     { foreignKey: 'orderId', as: 'order' });
 
+// PersonalShopperRequest ↔ Customer
+const PersonalShopperRequest = require('./PersonalShopperRequest');
+Customer.hasMany(PersonalShopperRequest, { foreignKey: 'customerId', as: 'personalShopperRequests' });
+PersonalShopperRequest.belongsTo(Customer, { foreignKey: 'customerId', as: 'customer' });
+
 // ── Exports ───────────────────────────────────────────────────────────────────
 const DeliveryZone     = require('./DeliveryZone');
 const ContactEnquiry   = require('./ContactEnquiry');
@@ -172,4 +177,6 @@ module.exports = {
   Review, StockAlert, MarketingMessage, SearchKeyword, TrendingCache, SiteSetting, InventoryMovementLog,
   DeliveryZone,
   ContactEnquiry,
+  PersonalShopperRequest,
 };
+

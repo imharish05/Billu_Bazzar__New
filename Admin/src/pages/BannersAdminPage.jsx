@@ -7,6 +7,7 @@ import Switch from '../components/Switch';
 import api from '../services/api';
 import toast from 'react-hot-toast';
 import { checkPermission } from '../utils/rbac';
+import { getImageUrl } from '../utils/imageUrl';
 
 const formatDatetimeLocal = (dateStr) => {
   if (!dateStr) return '';
@@ -501,7 +502,7 @@ const BannersAdminPage = () => {
                 <div className="relative h-44 bg-brand-light/50">
                   {banner.image ? (
                     <img
-                      src={banner.image}
+                      src={getImageUrl(banner.image)}
                       alt={banner.title || 'Banner'}
                       className="w-full h-full object-cover"
                       onError={(e) => {

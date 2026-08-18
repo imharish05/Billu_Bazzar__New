@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Save, ShieldCheck, RefreshCw } from 'lucide-react';
+import { Save, ShieldCheck, RefreshCw, Check } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
 import api from '../services/api';
 import toast from 'react-hot-toast';
@@ -150,7 +150,7 @@ const SettingsAdminPage = () => {
                       {saving ? <RefreshCw size={15} className="animate-spin" /> : <Save size={15} />}
                       {saving ? 'Saving...' : 'Save Inventory Threshold'}
                     </button>
-                    {saved && <span className="text-green-600 text-sm font-semibold">✓ Threshold updated!</span>}
+                    {saved && <span className="text-green-600 text-sm font-semibold flex items-center gap-1"><Check size={14} /> Threshold updated!</span>}
                   </div>
                 </>
               )}
@@ -210,7 +210,7 @@ const SettingsAdminPage = () => {
                       {saving ? <RefreshCw size={15} className="animate-spin" /> : <Save size={15} />}
                       {saving ? 'Saving...' : 'Save OTP Thresholds'}
                     </button>
-                    {saved && <span className="text-green-600 text-sm font-semibold">✓ Settings saved & updated live!</span>}
+                    {saved && <span className="text-green-600 text-sm font-semibold flex items-center gap-1"><Check size={14} /> Settings saved & updated live!</span>}
                   </div>
                 </>
               )}

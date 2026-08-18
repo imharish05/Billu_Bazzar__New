@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Check, MapPin, CreditCard, Package, ChevronRight, Eye, EyeOff, Tag, Sparkles } from 'lucide-react';
+import { Check, MapPin, CreditCard, Package, ChevronRight, Eye, EyeOff, Tag, Sparkles, ShieldAlert, AlertTriangle, Lightbulb, Truck, Award, Lock } from 'lucide-react';
 import { placeOrder } from '../redux/slices/ordersSlice';
 import { clearLocal, syncCart, clearBuyNowItem, fetchCart } from '../redux/slices/cartSlice';
 import { loginCustomer, registerCustomer, fetchProfile } from '../redux/slices/authSlice';
@@ -13,6 +13,7 @@ import { formatPrice } from '../utils/currency';
 import toast from 'react-hot-toast';
 import { formatVariantName } from '../utils/variantFormatter';
 import { validatePhoneNumber } from '../utils/validation';
+import { getImageUrl } from '../utils/imageUrl';
 
 const STEPS = [
   { id: 1, label: 'Delivery', icon: MapPin },
@@ -143,8 +144,8 @@ const CheckoutPage = () => {
     let rawImg = item.image || item.productImage || item.product?.image || (item.product?.images && item.product.images[0]);
     if (!rawImg || rawImg === 'undefined') {
       rawImg = 'https://images.unsplash.com/photo-1469334031218-e382a71b716b?w=160';
-    } else if (typeof rawImg === 'string' && rawImg.startsWith('/') && !rawImg.startsWith('//')) {
-      rawImg = `http://localhost:5000${rawImg}`;
+    } else {
+      rawImg = getImageUrl(rawImg);
     }
 
     // Variant details
@@ -382,39 +383,73 @@ const CheckoutPage = () => {
   };
 
   // ── AUTO-APPLY BEST DISCOUNT ENGINE ──
-  // Calculate potential savings for both discount options
+  // 1. Calculate potential savings for loyalty points
   const potentialLoyaltyDisc = (customer && customer.loyaltyPoints > 0 && !userDisabledLoyalty)
     ? Math.min(customer.loyaltyPoints * loyaltySettings.redeemRate, loyaltySettings.maxRedeemAmount, subtotal)
     : 0;
 
-  const rawCouponDisc = appliedCoupon ? getCouponDiscount(appliedCoupon, subtotal) : 0;
+  // 2. Scan ALL available coupons to find the single best coupon for current subtotal
+  let bestCoupon = null;
+  let bestCouponDisc = 0;
+  if (availableCoupons && availableCoupons.length > 0) {
+    availableCoupons.forEach(coupon => {
+      const d = getCouponDiscount(coupon, subtotal);
+      if (d > bestCouponDisc) {
+        bestCouponDisc = d;
+        bestCoupon = coupon;
+      }
+    });
+  }
 
-  // Resolve active discount type based on best discount algorithm or user choice
+  // 3. Resolve auto-select winner (Coupon vs Loyalty Points)
+  // If coupon discount >= loyalty discount and > 0, pick coupon (saves user loyalty points for future).
+  let autoSelectedType = null; // 'COUPON' | 'LOYALTY' | null
+  let autoSelectedCoupon = null;
+  let autoSelectedDiscountVal = 0;
+
+  if (bestCouponDisc >= potentialLoyaltyDisc && bestCouponDisc > 0) {
+    autoSelectedType = 'COUPON';
+    autoSelectedCoupon = bestCoupon;
+    autoSelectedDiscountVal = bestCouponDisc;
+  } else if (potentialLoyaltyDisc > 0) {
+    autoSelectedType = 'LOYALTY';
+    autoSelectedDiscountVal = potentialLoyaltyDisc;
+  }
+
+  // 4. Resolve active discount type based on user override or auto-selection
   let activeDiscountType = null; // 'COUPON' | 'LOYALTY' | null
   let couponDiscount = 0;
   let loyaltyDiscountVal = 0;
 
-  if (userDiscountChoice === 'COUPON' && appliedCoupon && rawCouponDisc > 0) {
-    activeDiscountType = 'COUPON';
-    couponDiscount = rawCouponDisc;
-  } else if (userDiscountChoice === 'LOYALTY' && potentialLoyaltyDisc > 0 && !userDisabledLoyalty) {
-    activeDiscountType = 'LOYALTY';
-    loyaltyDiscountVal = potentialLoyaltyDisc;
-  } else if (userDiscountChoice === 'NONE' || userDisabledLoyalty) {
-    if (appliedCoupon && rawCouponDisc > 0) {
+  if (userDiscountChoice === 'COUPON') {
+    const activeCpn = appliedCoupon || autoSelectedCoupon;
+    const disc = activeCpn ? getCouponDiscount(activeCpn, subtotal) : 0;
+    if (disc > 0) {
       activeDiscountType = 'COUPON';
-      couponDiscount = rawCouponDisc;
+      couponDiscount = disc;
     }
-  } else {
-    // Auto-select whichever yields HIGHER savings
-    if (rawCouponDisc > potentialLoyaltyDisc && rawCouponDisc > 0) {
-      activeDiscountType = 'COUPON';
-      couponDiscount = rawCouponDisc;
-    } else if (potentialLoyaltyDisc > 0) {
+  } else if (userDiscountChoice === 'LOYALTY') {
+    if (potentialLoyaltyDisc > 0) {
       activeDiscountType = 'LOYALTY';
       loyaltyDiscountVal = potentialLoyaltyDisc;
     }
+  } else if (userDiscountChoice === 'NONE') {
+    activeDiscountType = null;
+  } else {
+    // Default (userDiscountChoice === null): Auto-select winner!
+    if (autoSelectedType === 'COUPON') {
+      activeDiscountType = 'COUPON';
+      couponDiscount = autoSelectedDiscountVal;
+    } else if (autoSelectedType === 'LOYALTY') {
+      activeDiscountType = 'LOYALTY';
+      loyaltyDiscountVal = autoSelectedDiscountVal;
+    }
   }
+
+  // Active coupon object used for display and payload
+  const activeCouponObj = activeDiscountType === 'COUPON'
+    ? (userDiscountChoice === 'COUPON' ? (appliedCoupon || autoSelectedCoupon) : autoSelectedCoupon)
+    : null;
 
   // Synchronize redeemPoints boolean for placeOrder payload
   const effectiveRedeemPoints = activeDiscountType === 'LOYALTY';
@@ -429,6 +464,7 @@ const CheckoutPage = () => {
         setAppliedCoupon(res.data.coupon);
         localStorage.setItem('bb_applied_coupon', JSON.stringify(res.data.coupon));
         setUserDiscountChoice('COUPON');
+        setUserDisabledLoyalty(true);
         setRedeemPoints(false);
         toast.success(`Coupon ${res.data.coupon.code} applied! (Loyalty points unapplied as only 1 discount is allowed)`);
         setCouponCodeInput('');
@@ -445,7 +481,7 @@ const CheckoutPage = () => {
   const handleRemoveCheckoutCoupon = () => {
     setAppliedCoupon(null);
     localStorage.removeItem('bb_applied_coupon');
-    setUserDiscountChoice(null);
+    setUserDiscountChoice('NONE');
     toast.success('Coupon removed.');
   };
 
@@ -463,6 +499,14 @@ const CheckoutPage = () => {
       setUserDiscountChoice('NONE');
       toast.success('Loyalty points unapplied. Points saved for your next order!');
     }
+  };
+
+  const handleResetToAutoSelect = () => {
+    setUserDiscountChoice(null);
+    setUserDisabledLoyalty(false);
+    setAppliedCoupon(null);
+    localStorage.removeItem('bb_applied_coupon');
+    toast.success('Auto-selected best discount for your order!');
   };
 
   const isGiftWrap = Boolean(location.state?.giftWrap);
@@ -623,8 +667,8 @@ const CheckoutPage = () => {
         shippingAddress: deliverySameAsBilling ? billingAddress : address,
         billingAddress: billingAddress,
         paymentMethod, referralCode,
-        couponCode: effectiveRedeemPoints ? undefined : (appliedCoupon ? appliedCoupon.code : undefined),
-        redeemPoints: effectiveRedeemPoints,
+        couponCode: activeDiscountType === 'COUPON' && activeCouponObj ? activeCouponObj.code : undefined,
+        redeemPoints: activeDiscountType === 'LOYALTY',
         isGiftWrap: isWrap,
         giftWrapPrice: wrapPrice,
         giftMessage: location.state?.giftMessage || undefined,
@@ -841,7 +885,7 @@ const CheckoutPage = () => {
         {/* Restricted Location Banner */}
         {geoBlocked && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3 text-red-800">
-            <span className="text-2xl">🛑</span>
+            <ShieldAlert size={28} className="text-red-600 shrink-0" />
             <div>
               <p className="font-bold text-sm">Service Region Restriction</p>
               <p className="text-xs text-red-700 mt-0.5">{geoMessage || 'Payments and order placement are accepted strictly from UAE and India only.'}</p>
@@ -1080,7 +1124,7 @@ const CheckoutPage = () => {
                         {pincodeZoneData && deliverySameAsBilling && billingAddress.pincode.trim().length >= 3 && (
                           pincodeZoneData.deliverable ? (
                             <p className="text-[12px] text-emerald-600 mt-1 font-semibold flex items-center gap-1">
-                              📍 Delivery Available ({pincodeZoneData.zoneName}) — {
+                              <MapPin size={13} className="shrink-0" /> Delivery Available ({pincodeZoneData.zoneName}) — {
                                 shipping === 0 ? (
                                   pincodeZoneData.minOrderAmountForFreeDelivery !== null
                                     ? `FREE Delivery (Order above ₹${pincodeZoneData.minOrderAmountForFreeDelivery})!`
@@ -1091,8 +1135,8 @@ const CheckoutPage = () => {
                               }
                             </p>
                           ) : (
-                            <p className="text-[12px] text-red-500 mt-1 font-semibold">
-                              ⚠️ {pincodeZoneData.message || 'Delivery not available for this pincode'}
+                            <p className="text-[12px] text-red-500 mt-1 font-semibold flex items-center gap-1">
+                              <AlertTriangle size={13} className="shrink-0" /> {pincodeZoneData.message || 'Delivery not available for this pincode'}
                             </p>
                           )
                         )}
@@ -1176,7 +1220,7 @@ const CheckoutPage = () => {
                               {pincodeZoneData && !deliverySameAsBilling && address.pincode.trim().length === 6 && (
                                 pincodeZoneData.deliverable ? (
                                   <p className="text-[12px] text-emerald-600 mt-1 font-semibold flex items-center gap-1">
-                                    📍 Delivery Available ({pincodeZoneData.zoneName}) — {
+                                    <MapPin size={13} className="shrink-0" /> Delivery Available ({pincodeZoneData.zoneName}) — {
                                       shipping === 0 ? (
                                         pincodeZoneData.minOrderAmountForFreeDelivery !== null
                                           ? `FREE Delivery (Order above ₹${pincodeZoneData.minOrderAmountForFreeDelivery})!`
@@ -1187,8 +1231,8 @@ const CheckoutPage = () => {
                                     }
                                   </p>
                                 ) : (
-                                  <p className="text-[12px] text-red-500 mt-1 font-semibold">
-                                    ⚠️ {pincodeZoneData.message || 'Delivery not available for this pincode'}
+                                  <p className="text-[12px] text-red-500 mt-1 font-semibold flex items-center gap-1">
+                                    <AlertTriangle size={13} className="shrink-0" /> {pincodeZoneData.message || 'Delivery not available for this pincode'}
                                   </p>
                                 )
                               )}
@@ -1196,11 +1240,11 @@ const CheckoutPage = () => {
                             <div>
                               <label className={labelCls} htmlFor="d-country">Delivery Country *</label>
                               <div className="relative">
-                                <input id="d-country" type="text" value="India 🇮🇳" readOnly
+                                <input id="d-country" type="text" value="India" readOnly
                                   className={`${inputCls} bg-neutral-100 font-semibold cursor-not-allowed text-neutral-700`} />
-                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded">
+                                {/* <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded">
                                   Delivery Only in India
-                                </span>
+                                </span> */}
                               </div>
                             </div>
                           </div>
@@ -1264,7 +1308,7 @@ const CheckoutPage = () => {
 
                       {!createAccount && (
                         <div className="mt-4 bg-yellow-50 border border-yellow-200/70 rounded-md p-3 flex items-start gap-2">
-                          <span className="text-base mt-0.5">💡</span>
+                          <Lightbulb size={18} className="text-amber-500 shrink-0 mt-0.5" />
                           <p className="text-xs text-neutral-600 leading-relaxed">
                             <strong>Note:</strong> Log in or check <strong className="text-brand-gold">"Create an account?"</strong> above to track your order history and receive delivery updates!
                           </p>
@@ -1368,13 +1412,13 @@ const CheckoutPage = () => {
                   </div>
 
                   {/* Delivery estimate banner */}
-                  <div className="flex items-center gap-3 p-4 bg-brand-light/30 border border-brand-gold/20 rounded-md">
-                    <span className="text-xl">🚚</span>
+                  {/* <div className="flex items-center gap-3 p-4 bg-brand-light/30 border border-brand-gold/20 rounded-md">
+                    <Truck size={22} className="text-brand-gold shrink-0" />
                     <div>
                       <p className="text-xs font-semibold text-brand-text">Estimated Delivery Window</p>
                       <p className="text-xs text-brand-grey mt-0.5">{getEstimatedDeliveryRange(billingAddress.pincode)}</p>
                     </div>
-                  </div>
+                  </div> */}
 
                   <div className="flex flex-col-reverse sm:flex-row gap-3">
                     <button onClick={() => setStep(1)} className="btn-outline flex-1 py-3 text-sm font-semibold" id="step2-back">Back to Delivery</button>
@@ -1435,15 +1479,15 @@ const CheckoutPage = () => {
             </div>
             <div className="space-y-2.5 text-sm">
               <div className="flex justify-between"><span className="text-brand-grey">Subtotal ({items.length} items)</span><span>{fmt(subtotal)}</span></div>
-              {appliedCoupon && couponDiscount > 0 && (
+              {activeDiscountType === 'COUPON' && couponDiscount > 0 && (
                 <div className="flex justify-between text-green-600 font-medium">
-                  <span className="flex items-center gap-1"><Tag size={12} /> Coupon ({appliedCoupon.code})</span>
+                  <span className="flex items-center gap-1"><Tag size={12} /> Coupon ({activeCouponObj?.code})</span>
                   <span>-{fmt(couponDiscount)}</span>
                 </div>
               )}
-              {loyaltyDiscountVal > 0 && (
+              {activeDiscountType === 'LOYALTY' && loyaltyDiscountVal > 0 && (
                 <div className="flex justify-between text-green-600 font-medium">
-                  <span className="flex items-center gap-1">Loyalty Discount</span>
+                  <span className="flex items-center gap-1"><Award size={13} className="text-brand-gold" /> Loyalty Discount</span>
                   <span>-{fmt(loyaltyDiscountVal)}</span>
                 </div>
               )}
@@ -1480,18 +1524,62 @@ const CheckoutPage = () => {
               </div>
             </div>
 
-
+            {/* ── Auto-Select Best Savings Banner ── */}
+            {userDiscountChoice === null && activeDiscountType ? (
+              <div className="mt-4 pt-4 border-t border-neutral-100">
+                <div className="bg-gradient-to-r from-amber-500/10 via-yellow-500/10 to-amber-500/5 border border-amber-300/80 rounded-lg p-3.5 shadow-xs flex items-start gap-2.5">
+                  {/* <Sparkles className="text-amber-600 mt-0.5 shrink-0 animate-pulse" size={18} /> */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="text-xs font-bold text-amber-900 tracking-wide">
+                         Best Savings Auto-Applied!
+                      </span>
+                      <span className="text-[10px] font-extrabold bg-amber-600 text-white px-2 py-0.5 rounded-full uppercase">
+                        Auto-Selected
+                      </span>
+                    </div>
+                    <p className="text-xs text-amber-950 mt-1 leading-snug">
+                      {activeDiscountType === 'COUPON' ? (
+                        <>
+                          Coupon <strong>{activeCouponObj?.code}</strong> auto-selected as it saves you maximum money (<strong>-{fmt(couponDiscount)}</strong>)!
+                        </>
+                      ) : (
+                        <>
+                          <strong>Loyalty Points</strong> auto-selected as it gives you the best discount (<strong>-{fmt(loyaltyDiscountVal)}</strong>)!
+                        </>
+                      )}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : userDiscountChoice !== null ? (
+              <div className="mt-4 pt-4 border-t border-neutral-100">
+                <div className="flex items-center justify-between bg-neutral-50 border border-neutral-200 rounded-md p-2.5">
+                  <span className="text-xs text-neutral-600 font-medium">Custom discount selected</span>
+                  <button
+                    type="button"
+                    onClick={handleResetToAutoSelect}
+                    className="text-xs font-bold text-amber-700 hover:text-amber-800 flex items-center gap-1 hover:underline cursor-pointer"
+                  >
+                    <Sparkles size={12} /> Auto-Select Best
+                  </button>
+                </div>
+              </div>
+            ) : null}
 
             {/* Loyalty Points Section */}
             {isAuthenticated && customer && customer.loyaltyPoints > 0 && (
               <div className="mt-4 pt-4 border-t border-neutral-100">
-                <div className={`border rounded-md p-3 transition-all ${activeDiscountType === 'LOYALTY' ? 'bg-amber-50/80 border-amber-300' : 'bg-neutral-50/50 border-neutral-200 opacity-75'}`}>
+                <div className={`border rounded-md p-3 transition-all ${activeDiscountType === 'LOYALTY' ? 'bg-amber-50/80 border-amber-300 ring-1 ring-amber-300/50' : 'bg-neutral-50/50 border-neutral-200 opacity-80'}`}>
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="text-amber-700 font-semibold text-xs flex items-center gap-1">👑 Loyalty Points</span>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-amber-700 font-semibold text-xs flex items-center gap-1"> Loyalty Points</span>
                       <span className="text-[11px] bg-amber-200/60 text-amber-900 px-1.5 py-0.5 rounded font-semibold">{customer.loyaltyPoints} pts</span>
+                      {autoSelectedType === 'LOYALTY' && userDiscountChoice === null && (
+                        <span className="text-[9px] bg-amber-600 text-white font-extrabold px-1.5 py-0.5 rounded uppercase">BEST VALUE</span>
+                      )}
                     </div>
-                    <label className="flex items-center gap-1.5 cursor-pointer">
+                    <label className="flex items-center gap-1.5 cursor-pointer select-none">
                       <input
                         type="checkbox"
                         checked={activeDiscountType === 'LOYALTY'}
@@ -1504,9 +1592,9 @@ const CheckoutPage = () => {
                   </div>
                   <p className="text-[11px] text-neutral-600 mt-1.5">
                     {activeDiscountType === 'LOYALTY' ? (
-                      <span className="text-green-700 font-medium">✓ Auto-applied discount: -{fmt(loyaltyDiscountVal)}</span>
+                      <span className="text-green-700 font-medium flex items-center gap-1"><Check size={12} /> Discount applied: -{fmt(loyaltyDiscountVal)}</span>
                     ) : (
-                      <span className="text-neutral-500">Check to apply loyalty points (will un-apply coupon)</span>
+                      <span className="text-neutral-500">Check to apply loyalty points (saves {fmt(potentialLoyaltyDisc)})</span>
                     )}
                   </p>
                 </div>
@@ -1515,46 +1603,74 @@ const CheckoutPage = () => {
 
             {/* Coupon Section */}
             <div className="mt-4 pt-4 border-t border-neutral-100">
-              <h3 className="font-playfair text-base font-semibold flex items-center gap-2 mb-3">
-                <Tag size={16} className="text-brand-gold" /> Apply Coupon
-              </h3>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-playfair text-base font-semibold flex items-center gap-2">
+                  <Tag size={16} className="text-brand-gold" /> Apply Coupon
+                </h3>
+                {userDiscountChoice !== null && (
+                  <button
+                    type="button"
+                    onClick={handleResetToAutoSelect}
+                    className="text-[11px] text-amber-700 font-semibold hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    <Sparkles size={11} /> Reset Auto-Select
+                  </button>
+                )}
+              </div>
 
-              {!appliedCoupon && availableCoupons.length > 0 && (
-                <div className="space-y-3 max-h-[160px] overflow-y-auto pr-1 mb-4">
+              {availableCoupons.length > 0 && (
+                <div className="space-y-3 max-h-[190px] overflow-y-auto pr-1 mb-4">
                   {availableCoupons.map(coupon => {
                     const discountAmt = getCouponDiscount(coupon, subtotal);
                     const isApplicable = discountAmt > 0;
+                    const isBestCoupon = bestCoupon && bestCoupon.id === coupon.id && bestCouponDisc > 0;
+                    const isCurrentlyApplied = activeDiscountType === 'COUPON' && activeCouponObj?.code === coupon.code;
                     
                     return (
                       <div 
                         key={coupon.id} 
                         onClick={() => isApplicable && handleApplyCheckoutCoupon(coupon.code)}
                         className={`p-3 border rounded-sm transition-all flex flex-col justify-between relative overflow-hidden ${
-                          isApplicable 
-                            ? 'border-brand-light hover:border-brand-gold/50 cursor-pointer bg-white' 
-                            : 'border-neutral-100 bg-neutral-50/50 opacity-60 cursor-not-allowed'
+                          isCurrentlyApplied
+                            ? 'border-green-500 bg-green-50/40 shadow-xs ring-1 ring-green-500/50'
+                            : isApplicable 
+                              ? 'border-brand-light hover:border-brand-gold/50 cursor-pointer bg-white' 
+                              : 'border-neutral-100 bg-neutral-50/50 opacity-60 cursor-not-allowed'
                         }`}
                       >
                         <div className="flex justify-between items-start">
-                          <span className="font-mono text-xs font-bold text-[#0F2942] bg-brand-light px-2.5 py-0.5 rounded-sm">
-                            {coupon.code}
-                          </span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono text-xs font-bold text-[#0F2942] bg-brand-light px-2.5 py-0.5 rounded-sm">
+                              {coupon.code}
+                            </span>
+                            {isBestCoupon && (
+                              <span className="text-[9px] bg-amber-600 text-white font-extrabold px-1.5 py-0.5 rounded flex items-center gap-0.5 uppercase">
+                                <Sparkles size={9} /> Max Savings
+                              </span>
+                            )}
+                          </div>
                           <span className="text-[10px] text-brand-gold font-semibold uppercase">
                             {coupon.type === 'PERCENT' ? `${coupon.value}% OFF` : `₹${coupon.value} OFF`}
                           </span>
                         </div>
-                        <p className="text-[10px] text-brand-grey mt-1.5 leading-relaxed">
-                          Min Order: ₹{coupon.minOrderValue || 0}
-                          {coupon.maxDiscount ? ` · Max Disc: ₹${coupon.maxDiscount}` : ''}
-                          {` · ${coupon.usageLimit ? `Limit: ${coupon.usageLimit}/person` : 'Unlimited'}`}
-                        </p>
+                        <div className="flex justify-between items-center mt-2">
+                          <p className="text-[10px] text-brand-grey leading-relaxed">
+                            Min Order: ₹{coupon.minOrderValue || 0}
+                            {coupon.maxDiscount ? ` · Max Disc: ₹${coupon.maxDiscount}` : ''}
+                          </p>
+                          {isApplicable && (
+                            <span className="text-[11px] font-bold text-green-700">
+                              Saves {fmt(discountAmt)}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     );
                   })}
                 </div>
               )}
 
-              {!appliedCoupon && (
+              {activeDiscountType !== 'COUPON' && (
                 <div className="flex gap-2">
                   <input
                     type="text"
@@ -1570,11 +1686,11 @@ const CheckoutPage = () => {
                 </div>
               )}
               
-              {appliedCoupon && (
+              {activeDiscountType === 'COUPON' && activeCouponObj && (
                 <div className="flex items-center justify-between bg-green-50 border border-green-200 p-2.5 rounded text-xs mt-2">
                   <div className="flex items-center gap-1.5 font-medium text-green-700">
                     <Tag size={14} />
-                    <span>Coupon <strong>{appliedCoupon.code}</strong> Applied!</span>
+                    <span>Coupon <strong>{activeCouponObj.code}</strong> Applied!</span>
                   </div>
                   <button onClick={handleRemoveCheckoutCoupon} className="text-red-500 hover:underline font-semibold text-[11px]">Remove</button>
                 </div>
@@ -1595,7 +1711,7 @@ const CheckoutPage = () => {
             >
               <div className="flex items-center gap-2 mb-1">
                 <span className="w-2 h-5 bg-brand-gold rounded-full"></span>
-                <h3 className="font-playfair text-lg font-bold text-brand-text">🔒 Security Verification</h3>
+                <h3 className="font-playfair text-lg font-bold text-brand-text flex items-center gap-1.5"><Lock size={18} className="text-brand-gold" /> Security Verification</h3>
               </div>
               <p className="text-xs text-brand-grey leading-relaxed">
                 For security reasons, high-value orders (exceeding {currencyCode === 'AED' ? `AED ${otpSettings.aedThreshold}` : `₹${otpSettings.inrThreshold.toLocaleString('en-IN')}`}) and Cash on Delivery (COD) orders require email verification. We've sent a 6-digit code to <strong className="text-brand-text font-semibold">{billingAddress.email || customer?.email}</strong>.

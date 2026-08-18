@@ -228,7 +228,7 @@ export const generateInvoiceHTML = (order) => {
 <body>
   <div class="no-print" style="max-width: 800px; margin: 0 auto 15px auto; text-align: right;">
     <button onclick="window.print()" style="background: #c5a059; color: #fff; border: none; padding: 10px 20px; font-weight: 600; border-radius: 5px; cursor: pointer; font-size: 13px;">
-      🖨️ Print / Save as PDF
+      Print / Save as PDF
     </button>
   </div>
 
@@ -263,7 +263,7 @@ export const generateInvoiceHTML = (order) => {
         <p>${billing.city || ''}${billing.state ? `, ${billing.state}` : ''} ${billing.pincode || ''}</p>
         <p><strong>${billing.country || 'India'}</strong></p>
         <p style="margin-top: 4px; font-size: 11px; color: #4b5563;">
-          📞 ${billing.phone || order.customer?.phone || 'N/A'} | ✉️ ${billing.email || order.customer?.email || 'N/A'}
+          Phone: ${billing.phone || order.customer?.phone || 'N/A'} | Email: ${billing.email || order.customer?.email || 'N/A'}
         </p>
       </div>
       <div class="section-box">

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Star, Edit3, Trash2, Eye, Package, MessageSquare, CheckCircle, AlertCircle, X, Loader2, ExternalLink } from 'lucide-react';
+import { Star, Edit3, Trash2, Eye, Package, MessageSquare, CheckCircle, AlertCircle, X, Loader2, ExternalLink, Check } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { fetchMyDeliveredItems, createReview, updateReview, deleteReview } from '../../redux/slices/reviewsSlice';
 import toast from 'react-hot-toast';
@@ -283,7 +283,7 @@ const MyReviewsPage = () => {
                       <div className="mt-0.5 sm:mt-0">
                         {item.existingReview ? (
                           <span className="inline-flex items-center gap-1 text-[10px] sm:text-xs font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200/80">
-                            ✓ Reviewed
+                            <Check size={12} /> Reviewed
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 text-[10px] sm:text-xs font-bold px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200/80">

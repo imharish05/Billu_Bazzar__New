@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { getImageUrl } from '../utils/imageUrl';
 
 const AUTOPLAY_INTERVAL = 6500;
 
@@ -143,7 +144,7 @@ const HeroBanner = () => {
             {hasTextContent ? (
               <>
                 <img
-                  src={banner.image}
+                  src={getImageUrl(banner.image)}
                   alt={banner.title || "Hero banner"}
                   className="w-full h-full object-cover"
                   fetchpriority={current === 0 ? 'high' : 'auto'}
@@ -155,7 +156,7 @@ const HeroBanner = () => {
             ) : (
               <Link to={banner.ctaLink || '/products'} className="block w-full h-full cursor-pointer" id={`hero-link-${current}`}>
                 <img
-                  src={banner.image}
+                  src={getImageUrl(banner.image)}
                   alt={banner.title || "Hero banner"}
                   className="w-full h-full object-cover"
                   fetchpriority={current === 0 ? 'high' : 'auto'}

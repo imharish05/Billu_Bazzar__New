@@ -529,11 +529,26 @@ const updateReviewStatusAdmin = async (req, res) => {
  */
 const syncAllProductRatings = async () => {
   try {
-    const products = await Product.findAll();
-    for (const prod of products) {
-      await recalculateProductRating(prod.id);
-    }
-    console.log(`[RatingSync] Recalculated real ratings for ${products.length} products.`);
+    const sequelize = Review.sequelize;
+    const stats = await Review.findAll({
+      attributes: [
+        'productId',
+        [sequelize.fn('AVG', sequelize.col('rating')), 'avgRating'],
+        [sequelize.fn('COUNT', sequelize.col('id')), 'reviewCount']
+      ],
+      where: { isApproved: true },
+      group: ['productId'],
+      raw: true
+    });
+
+    const updatePromises = stats.map(s => {
+      const avg = parseFloat(parseFloat(s.avgRating || 0).toFixed(2));
+      const count = parseInt(s.reviewCount || 0, 10);
+      return Product.update({ rating: avg, reviewCount: count }, { where: { id: s.productId } });
+    });
+
+    await Promise.all(updatePromises);
+    console.log(`[RatingSync] Recalculated real ratings for ${stats.length} products with reviews.`);
   } catch (err) {
     console.error('[RatingSync] Error syncing product ratings:', err.message);
   }

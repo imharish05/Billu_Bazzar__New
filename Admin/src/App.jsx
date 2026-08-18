@@ -27,6 +27,7 @@ import ReviewsAdminPage from './pages/ReviewsAdminPage';
 import StockAlertsAdminPage from './pages/StockAlertsAdminPage';
 import DeliveryZonesAdminPage from './pages/DeliveryZonesAdminPage';
 import ContactEnquiriesAdminPage from './pages/ContactEnquiriesAdminPage';
+import PersonalShopperAdminPage from './pages/PersonalShopperAdminPage';
 import RolesPermissionsAdminPage from './pages/RolesPermissionsAdminPage';
 import AdminUsersAdminPage from './pages/AdminUsersAdminPage';
 import NotFoundAdminPage from './pages/NotFoundAdminPage';
@@ -90,6 +91,7 @@ const App = () => {
         <Route path="/orders"      element={<Protected><OrdersAdminPage /></Protected>} />
         <Route path="/customers"   element={<Protected><CustomersAdminPage /></Protected>} />
         <Route path="/contact-enquiries" element={<Protected><ContactEnquiriesAdminPage /></Protected>} />
+        <Route path="/personal-shopper"   element={<Protected><PersonalShopperAdminPage /></Protected>} />
         <Route path="/abandoned-carts" element={<Protected><AbandonedCartsAdminPage /></Protected>} />
         <Route path="/slider-messages" element={<Protected><SliderMessagesAdminPage /></Protected>} />
         <Route path="/banners"     element={<Protected><BannersAdminPage /></Protected>} />

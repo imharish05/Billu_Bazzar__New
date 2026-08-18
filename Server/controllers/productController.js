@@ -151,6 +151,37 @@ const processProductData = (req) => {
   return { data, existingImages, existingSpinImages };
 };
 
+const { toAbsoluteUrl } = require('../utils/imageUrl');
+
+const formatProduct = (product, req) => {
+  if (!product) return product;
+  const json = typeof product.toJSON === 'function' ? product.toJSON() : { ...product };
+
+  if (json.defaultProductImage) {
+    json.defaultProductImage = toAbsoluteUrl(json.defaultProductImage, req);
+  }
+  if (Array.isArray(json.images)) {
+    json.images = json.images.map(img => toAbsoluteUrl(img, req));
+  }
+  if (Array.isArray(json.spin_images)) {
+    json.spin_images = json.spin_images.map(img => toAbsoluteUrl(img, req));
+  }
+  if (json.videoUrl) {
+    json.videoUrl = toAbsoluteUrl(json.videoUrl, req);
+  }
+  if (json.vendor && json.vendor.logo) {
+    json.vendor.logo = toAbsoluteUrl(json.vendor.logo, req);
+  }
+  if (Array.isArray(json.variants)) {
+    json.variants = json.variants.map(v => {
+      if (v.image) v.image = toAbsoluteUrl(v.image, req);
+      if (Array.isArray(v.images)) v.images = v.images.map(img => toAbsoluteUrl(img, req));
+      return v;
+    });
+  }
+  return json;
+};
+
 const getAll = async (req, res) => {
   try {
     const { page = 1, limit = 20, category, search, minPrice, maxPrice, sort = 'createdAt', order = 'DESC', featured, newArrival, bestSeller, vendorId, minDiscount, maxDiscount, admin } = req.query;
@@ -224,7 +255,8 @@ const getAll = async (req, res) => {
       ],
     });
 
-    res.json({ success: true, products: rows, total: count, page: parseInt(page), totalPages: Math.ceil(count / parseInt(limit)) });
+    const formattedProducts = rows.map(p => formatProduct(p, req));
+    res.json({ success: true, products: formattedProducts, total: count, page: parseInt(page), totalPages: Math.ceil(count / parseInt(limit)) });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -244,7 +276,7 @@ const getOne = async (req, res) => {
       ],
     });
     if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
-    res.json({ success: true, product });
+    res.json({ success: true, product: formatProduct(product, req) });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -325,9 +357,13 @@ const create = async (req, res) => {
 
           const mainVarImg = vMainPath || v.image || newGalleryPaths[0] || product.defaultProductImage || product.images?.[0] || null;
 
+          const comboLabel = v.attributes ? Object.values(v.attributes).join('-').toUpperCase().replace(/[^A-Z0-9-]/g, '') : '';
+          const prodPrefix = product.sku ? product.sku.trim().toUpperCase() : (product.slug ? product.slug.substring(0, 8).toUpperCase().replace(/[^A-Z0-9]/g, '') : `PRD${product.id}`);
+          const fallbackSku = comboLabel ? `SKU-${prodPrefix}-${comboLabel}` : `SKU-${prodPrefix}-VAR-${i + 1}`;
+
           const variant = await ProductVariant.create({
             productId: product.id,
-            sku: v.sku ? v.sku.trim() : `PV-${product.id}-${i}-${Date.now()}`,
+            sku: (v.sku && v.sku.trim() !== '') ? v.sku.trim() : fallbackSku,
             price: (v.price !== undefined && v.price !== '') ? parseFloat(v.price) : parseFloat(product.price || 0),
             mrp: (v.mrp !== undefined && v.mrp !== '') ? parseFloat(v.mrp) : (product.comparePrice ? parseFloat(product.comparePrice) : null),
             stock: (v.stock !== undefined && v.stock !== '') ? parseInt(v.stock, 10) : parseInt(product.stock || 0, 10),
@@ -335,7 +371,7 @@ const create = async (req, res) => {
             gstRate: (v.gstRate !== undefined && v.gstRate !== null && v.gstRate !== '') ? v.gstRate : (product.gstRate || '0%'),
             attributes: v.attributes || {},
             image: mainVarImg,
-            images: newGalleryPaths.length > 0 ? newGalleryPaths.slice(0, 5) : (v.images || []),
+            images: (newGalleryPaths.length > 0 ? newGalleryPaths : (v.images || [])).filter(img => img && img !== mainVarImg).slice(0, 5),
             warehouseId: v.warehouseId ? parseInt(v.warehouseId, 10) : (product.warehouseId ? parseInt(product.warehouseId, 10) : null),
           });
 
@@ -422,14 +458,16 @@ const update = async (req, res) => {
             return '/' + normalizedPath.substring(uploadsIndex);
           });
 
-          // Concat existing variant images and new uploads (max 5)
           const existingGallery = v.images ? (typeof v.images === 'string' ? JSON.parse(v.images) : v.images) : (v.existingImages || []);
-          const vImages = [...existingGallery, ...newGalleryPaths].slice(0, 5);
-          const mainVarImg = vMainPath || v.image || vImages[0] || product.defaultProductImage || null;
+          const mainVarImg = vMainPath || v.image || product.defaultProductImage || null;
+          const galleryFiltered = existingGallery.filter(img => img && img !== mainVarImg);
+          const vImages = [...galleryFiltered, ...newGalleryPaths].slice(0, 5);
 
           let existingVariant = null;
           if (v.id && oldVariantMap.has(parseInt(v.id, 10))) {
             existingVariant = oldVariantMap.get(parseInt(v.id, 10));
+          } else if ((req.body.isSingleVariantEdit === 'true' || req.body.isSingleVariantEdit === true) && oldVariants.length > 0) {
+            existingVariant = oldVariants[0];
           }
 
           const variantWarehouseId = v.warehouseId ? parseInt(v.warehouseId, 10) : (product.warehouseId ? parseInt(product.warehouseId, 10) : null);
@@ -439,9 +477,13 @@ const update = async (req, res) => {
           const varLowStock = v.lowStockThreshold ? parseInt(v.lowStockThreshold, 10) : (product.lowStockThreshold || 10);
           const varGst = (v.gstRate !== undefined && v.gstRate !== null && v.gstRate !== '') ? v.gstRate : (product.gstRate || '0%');
 
+          const comboLabel = v.attributes ? Object.values(v.attributes).join('-').toUpperCase().replace(/[^A-Z0-9-]/g, '') : '';
+          const prodPrefix = product.sku ? product.sku.trim().toUpperCase() : (product.slug ? product.slug.substring(0, 8).toUpperCase().replace(/[^A-Z0-9]/g, '') : `PRD${product.id}`);
+          const fallbackSku = comboLabel ? `SKU-${prodPrefix}-${comboLabel}` : `SKU-${prodPrefix}-VAR-${i + 1}`;
+
           if (existingVariant) {
             await existingVariant.update({
-              sku: v.sku ? v.sku.trim() : existingVariant.sku,
+              sku: (v.sku && v.sku.trim() !== '') ? v.sku.trim() : (existingVariant.sku || fallbackSku),
               price: varPrice,
               mrp: varMrp,
               stock: varStock,
@@ -457,7 +499,7 @@ const update = async (req, res) => {
           } else {
             const newVar = await ProductVariant.create({
               productId: product.id,
-              sku: v.sku ? v.sku.trim() : `PV-${product.id}-${i}-${Date.now()}`,
+              sku: (v.sku && v.sku.trim() !== '') ? v.sku.trim() : fallbackSku,
               price: varPrice,
               mrp: varMrp,
               stock: varStock,
@@ -473,11 +515,13 @@ const update = async (req, res) => {
           }
         }
 
-        // Delete variants that were removed
-        const deletedVariants = oldVariants.filter(ov => !activeVariantIds.has(ov.id));
-        for (const dv of deletedVariants) {
-          await WarehouseStock.destroy({ where: { variantId: dv.id } });
-          await dv.destroy();
+        // Delete variants that were removed (unless in single variant edit mode)
+        if (req.body.isSingleVariantEdit !== 'true' && req.body.isSingleVariantEdit !== true) {
+          const deletedVariants = oldVariants.filter(ov => !activeVariantIds.has(ov.id));
+          for (const dv of deletedVariants) {
+            await WarehouseStock.destroy({ where: { variantId: dv.id } });
+            await dv.destroy();
+          }
         }
 
         // Sync parent product price and total stock

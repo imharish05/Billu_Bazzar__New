@@ -2,10 +2,11 @@ import { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trash2, ShoppingBag, ChevronRight, Tag } from 'lucide-react';
+import { Trash2, ShoppingBag, ChevronRight, Tag, Gift } from 'lucide-react';
 import { removeLocal, addLocal, clearLocal, openCart, fetchCart } from '../redux/slices/cartSlice';
 import Footer from '../components/Footer';
 import { formatPrice } from '../utils/currency';
+import { getImageUrl } from '../utils/imageUrl';
 import api from '../services/api';
 import { toast } from 'react-hot-toast';
 
@@ -89,8 +90,8 @@ const CartPage = () => {
                 let img = item.image || item.productImage || item.product?.image || (item.product?.images && item.product.images[0]);
                 if (!img || img === 'undefined') {
                   img = 'https://images.unsplash.com/photo-1469334031218-e382a71b716b?w=200';
-                } else if (typeof img === 'string' && img.startsWith('/') && !img.startsWith('//')) {
-                  img = `http://localhost:5000${img}`;
+                } else {
+                  img = getImageUrl(img);
                 }
 
                 const variantText = formatVariantName(item.selectedVariant || item.variant?.attributes || item.variant);
@@ -178,7 +179,7 @@ const CartPage = () => {
             {isGiftServiceActive && (
               <div className="bg-white border border-brand-light p-6 shadow-sm space-y-4 mt-6">
                 <h3 className="font-playfair text-base font-semibold flex items-center gap-2 text-brand-text">
-                  🎁 Premium Gift Services
+                  <Gift size={18} className="text-brand-gold" /> Premium Gift Services
                 </h3>
                 
                 <div className="flex flex-col gap-3">

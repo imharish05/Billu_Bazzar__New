@@ -8,17 +8,30 @@ const helmet = require('helmet');
 
 const app = express();
 
+// Trust reverse proxy (Nginx, Webuzo, Cloudflare) for accurate HTTPS detection
+app.set('trust proxy', true);
+
 // ── Security & Logging ────────────────────────────────────────────────────────
-app.use(helmet({ crossOriginResourcePolicy: false }));
+app.use(helmet({ crossOriginResourcePolicy: false, contentSecurityPolicy: false }));
 app.use(morgan('dev'));
 
 // ── CORS ─────────────────────────────────────────────────────────────────────
-// app.use(cors({
-//   origin: [process.env.CLIENT_URL, process.env.ADMIN_URL],
-//   credentials: true,
-// }));
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin, x-session-id');
 
-app.use(cors())
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+  next();
+});
 
 // ── Body Parsing ──────────────────────────────────────────────────────────────
 app.use(express.json({ limit: '10mb' }));
@@ -60,6 +73,7 @@ app.use('/api/loyalty',       require('./routes/loyaltyRoutes'));
 app.use('/api/stock-alerts',  require('./routes/stockAlertRoutes'));
 app.use('/api/delivery-zones', require('./routes/deliveryZoneRoutes'));
 app.use('/api/contact-enquiries', require('./routes/contactEnquiryRoutes'));
+app.use('/api/personal-shopper',   require('./routes/personalShopperRoutes'));
 app.use('/api/currency',          require('./routes/currencyRoutes'));
 app.use('/api/roles',             require('./routes/roleRoutes'));
 app.use('/api/admin-users',       require('./routes/adminUserRoutes'));
@@ -74,7 +88,32 @@ try {
   const swaggerSpecPath = path.join(__dirname, 'swagger-output.json');
   if (fs.existsSync(swaggerSpecPath)) {
     const swaggerDocument = JSON.parse(fs.readFileSync(swaggerSpecPath, 'utf8'));
-    app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+
+    app.use('/api-docs', (req, res, next) => {
+      // Dynamically detect scheme/host from proxy or fallback to relative URL
+      const reqHost = req.get('host');
+      const forwardedProto = req.headers['x-forwarded-proto'];
+      const reqProtocol = forwardedProto || req.protocol || 'http';
+      const dynamicUrl = `${reqProtocol}://${reqHost}`;
+      
+      swaggerDocument.servers = [
+        { url: '/', description: 'Current Domain / Relative Path (Recommended for Live HTTPS)' },
+        { url: dynamicUrl, description: `Request Origin (${dynamicUrl})` },
+        ...(process.env.API_URL ? [{ url: process.env.API_URL, description: 'Environment API_URL' }] : [])
+      ];
+      req.swaggerDoc = swaggerDocument;
+      next();
+    }, swaggerUi.serve, (req, res, next) => {
+      swaggerUi.setup(req.swaggerDoc, {
+        customSiteTitle: 'Billu Bazaar API Documentation',
+        swaggerOptions: {
+          persistAuthorization: true,
+          displayRequestDuration: true,
+          docExpansion: 'list',
+          filter: true
+        }
+      })(req, res, next);
+    });
   }
 } catch (swaggerErr) {
   console.log('⚠️ Swagger UI setup note:', swaggerErr.message);
@@ -89,7 +128,13 @@ app.use((req, res) => res.status(404).json({ success: false, message: 'Route not
 // ── Global Error Handler ──────────────────────────────────────────────────────
 app.use((err, req, res, next) => {
   console.error(err.stack);
-  res.status(500).json({ success: false, message: 'Internal server error' });
+  if (err.code === 'LIMIT_FILE_SIZE') {
+    return res.status(400).json({ success: false, message: 'Uploaded file is too large. Maximum file size allowed is 10MB.' });
+  }
+  if (err.name === 'MulterError') {
+    return res.status(400).json({ success: false, message: `Upload error: ${err.message}` });
+  }
+  res.status(500).json({ success: false, message: err.message || 'Internal server error' });
 });
 
 module.exports = app;

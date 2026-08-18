@@ -59,6 +59,8 @@ const getCart = async (req, res) => {
     let cartAdjusted = false;
     const adjustments = [];
 
+    const updatePromises = [];
+
     // Audit each item's stock level against database truth
     for (const item of cart.items) {
       let physicalStock = 0;
@@ -70,26 +72,25 @@ const getCart = async (req, res) => {
 
       let currentQty = item.quantity;
       let status = 'VALID';
-      let msg = '';
 
       if (physicalStock <= 0) {
         // Case A: Product/Variant is completely out of stock
         status = 'OUT_OF_STOCK';
         currentQty = 0;
         if (item.quantity !== 0) {
-          await item.update({ quantity: 0 });
+          updatePromises.push(item.update({ quantity: 0 }));
           cartAdjusted = true;
-          adjustments.push({ itemId: item.id, message: `"${item.product.name}" is now out of stock.` });
+          adjustments.push({ itemId: item.id, message: `"${item.product?.name || 'Product'}" is now out of stock.` });
         }
       } else if (physicalStock < item.quantity) {
         // Case B: Stock is less than cart quantity. Auto-reduce quantity.
         status = 'QUANTITY_REDUCED';
         currentQty = physicalStock;
-        await item.update({ quantity: physicalStock });
+        updatePromises.push(item.update({ quantity: physicalStock }));
         cartAdjusted = true;
         adjustments.push({
           itemId: item.id,
-          message: `Quantity of "${item.product.name}" reduced from ${item.quantity} to ${physicalStock} due to limited stock.`
+          message: `Quantity of "${item.product?.name || 'Product'}" reduced from ${item.quantity} to ${physicalStock} due to limited stock.`
         });
       }
 
@@ -102,6 +103,10 @@ const getCart = async (req, res) => {
         stockStatus: status,
         availableStock: physicalStock
       });
+    }
+
+    if (updatePromises.length > 0) {
+      await Promise.all(updatePromises);
     }
 
     // Recalculate subtotal excluding out of stock items

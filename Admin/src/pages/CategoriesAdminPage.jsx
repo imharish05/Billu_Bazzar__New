@@ -22,6 +22,7 @@ import { PaginationTop, PaginationBottom } from '../components/Pagination';
 import api from '../services/api';
 import toast from 'react-hot-toast';
 import { checkPermission } from '../utils/rbac';
+import { getImageUrl } from '../utils/imageUrl';
 
 const CategoriesAdminPage = () => {
   const { admin } = useSelector((s) => s.auth);
@@ -291,7 +292,7 @@ const CategoriesAdminPage = () => {
                         <td className="px-5 py-4">
                           <div className="w-12 h-12 rounded-lg bg-neutral-100 overflow-hidden border border-neutral-200 flex items-center justify-center shrink-0 shadow-xs">
                             {cat.image ? (
-                              <img src={cat.image} alt={cat.name} className="w-full h-full object-cover" />
+                              <img src={getImageUrl(cat.image)} alt={cat.name} className="w-full h-full object-cover" />
                             ) : (
                               <span className="text-brand-grey text-xs font-bold uppercase">{cat.name.substring(0, 2)}</span>
                             )}

@@ -7,6 +7,8 @@ import { fetchOrderById, cancelCustomerOrder } from '../../redux/slices/ordersSl
 import { createReview } from '../../redux/slices/reviewsSlice';
 import { formatPrice } from '../../utils/currency';
 import { printInvoice } from '../../utils/invoiceGenerator';
+import { getImageUrl } from '../../utils/imageUrl';
+import { getPlaceholderSvg } from '../../utils/placeholder';
 import toast from 'react-hot-toast';
 
 const STATUS_COLORS = {
@@ -197,15 +199,31 @@ const OrderDetailPage = () => {
 
   const parseVariant = (val) => {
     if (!val) return null;
-    if (typeof val === 'string') {
-      try {
-        const parsed = JSON.parse(val);
-        if (typeof parsed === 'object' && parsed !== null) return parsed;
-      } catch {
-        return null;
+    let parsed = val;
+    for (let i = 0; i < 5; i++) {
+      if (typeof parsed === 'string') {
+        const trimmed = parsed.trim();
+        if (
+          (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+          (trimmed.startsWith('[') && trimmed.endsWith(']')) ||
+          (trimmed.startsWith('"') && trimmed.endsWith('"'))
+        ) {
+          try {
+            const next = JSON.parse(parsed);
+            if (next === parsed) break;
+            parsed = next;
+          } catch {
+            break;
+          }
+        } else {
+          break;
+        }
+      } else {
+        break;
       }
     }
-    if (typeof val === 'object') return val;
+    if (Array.isArray(parsed) && parsed.length > 0) parsed = parsed[0];
+    if (typeof parsed === 'object' && parsed !== null) return parsed;
     return null;
   };
 
@@ -364,10 +382,10 @@ const OrderDetailPage = () => {
             return (
               <div key={item.id || idx} className="flex items-center gap-4 py-3 border-b border-neutral-100 last:border-0 flex-wrap sm:flex-nowrap">
                 <img
-                  src={item.productImage || item.image || '/placeholder.jpg'}
+                  src={getImageUrl(item.productImage || item.image) || getPlaceholderSvg(item.productName || item.name || 'Product')}
                   alt={item.productName || item.name || 'Product'}
                   className="w-16 h-20 object-cover rounded border border-neutral-100 flex-shrink-0"
-                  onError={(e) => { e.target.onerror = null; e.target.src = '/placeholder.jpg'; }}
+                  onError={(e) => { e.target.onerror = null; e.target.src = getPlaceholderSvg(item.productName || item.name || 'Product'); }}
                 />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-neutral-900 truncate">{item.productName || item.name}</p>

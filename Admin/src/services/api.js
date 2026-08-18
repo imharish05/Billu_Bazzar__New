@@ -25,7 +25,16 @@ const processQueue = (error, token = null) => {
   failedQueue = [];
 };
 
-const baseURL = import.meta.env.VITE_API_BASE_URL || '/api';
+const serverUrl = (import.meta.env.VITE_SERVER_URL || '').replace(/\/$/, '');
+const rawApiBase = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '');
+
+let baseURL = rawApiBase;
+if (rawApiBase.startsWith('http://') || rawApiBase.startsWith('https://')) {
+  baseURL = rawApiBase;
+} else if (serverUrl) {
+  baseURL = `${serverUrl}${rawApiBase.startsWith('/') ? '' : '/'}${rawApiBase}`;
+}
+
 const api = axios.create({ baseURL, timeout: 15000 });
 
 api.interceptors.request.use((config) => {

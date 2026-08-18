@@ -4,6 +4,7 @@ import { X, Minus, Plus, ShoppingBag, Trash2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { closeCart, removeLocal, addLocal } from '../redux/slices/cartSlice';
 import { formatPrice } from '../utils/currency';
+import { getImageUrl } from '../utils/imageUrl';
 import { toast } from 'react-hot-toast';
 
 const FREE_SHIPPING_THRESHOLD = 1499;
@@ -87,8 +88,8 @@ const CartDrawer = () => {
                       let img = item.image || item.productImage || item.product?.image || (item.product?.images && item.product.images[0]);
                       if (!img || img === 'undefined') {
                         img = 'https://images.unsplash.com/photo-1469334031218-e382a71b716b?w=160';
-                      } else if (typeof img === 'string' && img.startsWith('/') && !img.startsWith('//')) {
-                        img = `http://localhost:5000${img}`;
+                      } else {
+                        img = getImageUrl(img);
                       }
 
                       let variantText = null;

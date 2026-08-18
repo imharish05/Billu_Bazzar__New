@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { 
   Search, Calendar, Filter, TrendingUp, ShoppingBag, 
   Users, BarChart3, RefreshCw, FileSpreadsheet, 
-  ArrowUpRight, CheckCircle2, ChevronLeft, ChevronRight, Info, CreditCard, Clock, PackageCheck, AlertCircle
+  ArrowUpRight, CheckCircle2, ChevronLeft, ChevronRight, Info, CreditCard, Clock, PackageCheck, AlertCircle, X
 } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
 import api from '../services/api';
@@ -519,7 +519,7 @@ const ReportsAdminPage = () => {
                   onClick={() => setSearchQuery('')}
                   className="absolute right-2.5 top-2 text-xs text-neutral-400 hover:text-neutral-600"
                 >
-                  ✕
+                  <X size={14} />
                 </button>
               )}
             </div>

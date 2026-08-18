@@ -4,6 +4,7 @@ import { Save, Upload, Eye, Sparkles, Target, Settings, HelpCircle, BarChart3, L
 import AdminLayout from '../components/AdminLayout';
 import api from '../services/api';
 import toast from 'react-hot-toast';
+import { validateImageFile } from '../utils/fileValidation';
 
 const TABS = [
   { id: 'hero-story', label: 'Hero & Story', icon: Sparkles },
@@ -72,6 +73,12 @@ const SiteSettingsAdminPage = () => {
   const handleImageChange = (eOrFile) => {
     const file = eOrFile instanceof File ? eOrFile : eOrFile.target?.files?.[0];
     if (file) {
+      const val = validateImageFile(file, { maxSizeMB: 5 });
+      if (!val.isValid) {
+        toast.error(val.error);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        return;
+      }
       setImageFile(file);
       const reader = new FileReader();
       reader.onloadend = () => setImagePreview(reader.result);

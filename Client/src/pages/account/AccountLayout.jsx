@@ -15,7 +15,7 @@ const NAV_ITEMS = [
   { to: '/account/reviews', label: 'My Reviews', icon: MessageSquare },
   { to: '/account/loyalty', label: 'Loyalty & Cashback', icon: Star },
   { to: '/account/personal-shopper', label: 'Personal Shopper', icon: Gift },
-  { to: '/account/support', label: 'Support', icon: Headphones },
+  // { to: '/account/support', label: 'Support', icon: Headphones },
 ];
 
 // Auth view states
@@ -88,7 +88,7 @@ const AccountLayout = () => {
       else if (tabParam === 'reviews') navigate('/account/reviews', { replace: true });
       else if (tabParam === 'loyalty') navigate('/account/loyalty', { replace: true });
       else if (tabParam === 'personal-shopper' || tabParam === 'shopper') navigate('/account/personal-shopper', { replace: true });
-      else if (tabParam === 'support') navigate('/account/support', { replace: true });
+      // else if (tabParam === 'support') navigate('/account/support', { replace: true });
     }
   }, [searchParams, navigate]);
 

@@ -3,7 +3,7 @@ import { useSelector } from 'react-redux';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   MapPin, Plus, FileSpreadsheet, Download, Search, Edit, Trash2, CheckCircle2,
-  XCircle, Filter, RefreshCw, UploadCloud, AlertCircle, Check, X, ShieldAlert
+  XCircle, Filter, RefreshCw, UploadCloud, AlertCircle, Check, X, ShieldAlert, Zap
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import AdminLayout from '../components/AdminLayout';
@@ -815,11 +815,11 @@ const DeliveryZonesAdminPage = () => {
                         <div className="bg-emerald-100 text-emerald-900 p-2 rounded-lg text-center font-semibold">
                           +{uploadResult.addedCount} Added
                         </div>
-                        <div className="bg-blue-100 text-blue-900 p-2 rounded-lg text-center font-semibold">
-                          ⚡ {uploadResult.updatedCount} Updated
+                        <div className="bg-blue-100 text-blue-900 p-2 rounded-lg text-center font-semibold flex items-center justify-center gap-1">
+                          <Zap size={14} /> {uploadResult.updatedCount} Updated
                         </div>
                         <div className="bg-amber-100 text-amber-900 p-2 rounded-lg text-center font-semibold">
-                          ⏭️ {uploadResult.skippedCount} Skipped
+                          {uploadResult.skippedCount} Skipped
                         </div>
                       </div>
                     </div>

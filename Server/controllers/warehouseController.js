@@ -37,18 +37,30 @@ const syncStorefrontStock = async (productId, variantId = null) => {
     } else {
       const allVars = await ProductVariant.findAll({ where: { productId } });
       if (allVars.length > 0) {
+        const varStocks = await WarehouseStock.findAll({
+          attributes: [
+            'variantId',
+            [WarehouseStock.sequelize.fn('SUM', WarehouseStock.sequelize.col('quantity')), 'totalQty']
+          ],
+          where: {
+            productId,
+            variantId: { [Op.ne]: null },
+            warehouseId: { [Op.in]: activeWhIds }
+          },
+          group: ['variantId'],
+          raw: true
+        });
+
+        const qtyMap = new Map(varStocks.map(s => [s.variantId, parseInt(s.totalQty, 10) || 0]));
         let totalProductStock = 0;
-        for (const v of allVars) {
-          const varQty = await WarehouseStock.sum('quantity', {
-            where: {
-              productId,
-              variantId: v.id,
-              warehouseId: { [Op.in]: activeWhIds }
-            }
-          }) || 0;
-          await v.update({ stock: varQty });
+
+        const updatePromises = allVars.map(v => {
+          const varQty = qtyMap.get(v.id) || 0;
           totalProductStock += varQty;
-        }
+          return v.update({ stock: varQty });
+        });
+
+        await Promise.all(updatePromises);
         const product = await Product.findByPk(productId);
         if (product) await product.update({ stock: totalProductStock });
       } else {

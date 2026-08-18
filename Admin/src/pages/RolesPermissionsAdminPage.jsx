@@ -62,6 +62,8 @@ const PERMISSION_GROUPS = [
     items: [
       { key: 'view_customers', label: 'View Customers & Enquiries' },
       { key: 'manage_customers', label: 'Manage Customer Accounts & Support' },
+      { key: 'view_personal_shopper', label: 'View Personal Shopper Requests' },
+      { key: 'delete_personal_shopper', label: 'Delete Personal Shopper Requests' },
     ]
   },
   {

@@ -3,8 +3,11 @@ const { Op } = require('sequelize');
 const { Product, ProductVariant, Warehouse, WarehouseStock, InventoryMovementLog } = require('../models');
 
 // Helper to generate a unique SKU if not provided
-const generateSku = () => {
-  return `PV-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
+const generateSku = (productId, attributes) => {
+  const comboStr = attributes ? (typeof attributes === 'string' ? JSON.parse(attributes) : attributes) : {};
+  const comboLabel = typeof comboStr === 'object' && comboStr ? Object.values(comboStr).join('-').toUpperCase().replace(/[^A-Z0-9-]/g, '') : '';
+  const uniqueTag = Math.random().toString(36).substring(2, 6).toUpperCase();
+  return comboLabel ? `SKU-PRD${productId}-${comboLabel}-${uniqueTag}` : `SKU-PRD${productId}-VAR-${uniqueTag}`;
 };
 
 // Helper to normalize file paths
@@ -65,7 +68,7 @@ const syncWarehouseStock = async (productId, variantId, stockQty, reorderLevel =
   }
 };
 
-// Helper to sync variant details back to the main Product (price and total stock)
+// Helper to sync variant details back to the main Product (price, stock, and attributes)
 const syncProductVariants = async (productId) => {
   if (!productId) return;
   try {
@@ -80,26 +83,34 @@ const syncProductVariants = async (productId) => {
 
       // Find the lowest active price, or the first variant price
       const price = parseFloat(variants[0].price) || product.price;
-      const stock = variants.reduce((sum, v) => sum + (parseInt(v.stock, 10) || 0), 0);
+      const primaryStock = parseInt(variants[0].stock, 10);
+      const stock = !isNaN(primaryStock) ? primaryStock : variants.reduce((sum, v) => sum + (parseInt(v.stock, 10) || 0), 0);
       const gstRate = variants[0].gstRate || product.gstRate || '0%';
 
-      // Merge all variant attributes into parent product.attributes
-      const mergedAttrs = {};
+      // Collect and aggregate attributes from all active variants
+      const aggregatedAttrs = {};
       variants.forEach(v => {
         const vAttrs = typeof v.attributes === 'string' ? (JSON.parse(v.attributes) || {}) : (v.attributes || {});
         Object.entries(vAttrs).forEach(([k, val]) => {
-          if (k && val) {
-            if (!mergedAttrs[k]) mergedAttrs[k] = new Set();
-            mergedAttrs[k].add(String(val).trim());
+          if (!k || val === undefined || val === null) return;
+          const cleanK = k.trim();
+          const cleanVal = String(val).trim();
+          if (!cleanK || !cleanVal) return;
+
+          if (!aggregatedAttrs[cleanK]) {
+            aggregatedAttrs[cleanK] = [cleanVal];
+          } else if (!aggregatedAttrs[cleanK].includes(cleanVal)) {
+            aggregatedAttrs[cleanK].push(cleanVal);
           }
         });
       });
-      const updatedAttrsObj = {};
-      Object.entries(mergedAttrs).forEach(([k, setVals]) => {
-        updatedAttrsObj[k] = Array.from(setVals).join(', ');
+
+      const finalAttributes = {};
+      Object.entries(aggregatedAttrs).forEach(([k, vals]) => {
+        finalAttributes[k] = vals.join(', ');
       });
 
-      await product.update({ price, stock, gstRate, attributes: updatedAttrsObj });
+      await product.update({ price, stock, gstRate, attributes: finalAttributes });
     }
   } catch (err) {
     console.error('[syncProductVariants] Error:', err.message);
@@ -160,7 +171,7 @@ const add = async (req, res) => {
     if (price !== undefined && Number(price) < 0) return res.status(400).json({ success: false, message: 'Price cannot be negative' });
     if (stock !== undefined && Number(stock) < 0) return res.status(400).json({ success: false, message: 'Stock cannot be negative' });
 
-    const finalSku = (sku && sku.trim() !== '') ? sku.trim() : generateSku();
+    const finalSku = (sku && sku.trim() !== '') ? sku.trim() : generateSku(productId, attributes);
 
     // Check SKU conflicts
     const conflict = await ProductVariant.findOne({ where: { sku: finalSku } });
@@ -208,7 +219,11 @@ const add = async (req, res) => {
       return res.status(400).json({ success: false, message: 'A variant with this combination of option attributes already exists for this product.' });
     }
 
-    const { lowStockThreshold, gstRate } = req.body;
+    const { lowStockThreshold } = req.body;
+
+    // Auto-inherit GST from parent product — variant does not accept manual gstRate override
+    const parentProduct = await Product.findByPk(parseInt(productId, 10));
+    const inheritedGstRate = parentProduct?.gstRate || '0%';
 
     const variant = await ProductVariant.create({
       productId: parseInt(productId, 10),
@@ -217,7 +232,7 @@ const add = async (req, res) => {
       mrp: mrp === '' || mrp === undefined ? null : parseFloat(mrp),
       stock: stock === '' || stock === undefined ? 0 : parseInt(stock, 10),
       lowStockThreshold: lowStockThreshold ? parseInt(lowStockThreshold, 10) : 10,
-      gstRate: (gstRate !== undefined && gstRate !== null && gstRate !== '') ? gstRate : '0%',
+      gstRate: inheritedGstRate,
       attributes: parsedAttributes,
       image: mainVarImg,
       images: allImages.slice(0, 5),
@@ -242,7 +257,11 @@ const update = async (req, res) => {
     const variant = await ProductVariant.findByPk(req.params.id);
     if (!variant) return res.status(404).json({ success: false, message: 'Variant not found' });
 
-    const { sku, price, mrp, stock, attributes, warehouseId, lowStockThreshold, gstRate } = req.body;
+    const { sku, price, mrp, stock, attributes, warehouseId, lowStockThreshold } = req.body;
+
+    // Always re-inherit GST from parent product on update
+    const parentProduct = await Product.findByPk(variant.productId);
+    const inheritedGstRate = parentProduct?.gstRate || variant.gstRate || '0%';
 
     if (price !== undefined && Number(price) < 0) return res.status(400).json({ success: false, message: 'Price cannot be negative' });
     if (stock !== undefined && Number(stock) < 0) return res.status(400).json({ success: false, message: 'Stock cannot be negative' });
@@ -260,7 +279,7 @@ const update = async (req, res) => {
       ...(mrp !== undefined && { mrp: mrp === '' ? null : parseFloat(mrp) }),
       ...(stock !== undefined && { stock: stock === '' ? 0 : parseInt(stock, 10) }),
       ...(lowStockThreshold !== undefined && { lowStockThreshold: parseInt(lowStockThreshold, 10) }),
-      ...(gstRate !== undefined && { gstRate }),
+      gstRate: inheritedGstRate,
       ...(warehouseId !== undefined && { warehouseId: warehouseId === '' || warehouseId === 'null' ? null : parseInt(warehouseId, 10) }),
     };
 
@@ -323,15 +342,53 @@ const remove = async (req, res) => {
 
     const productId = variant.productId;
 
-    // Destroy associated stock records
+    // Fetch all variants for this product ordered by id ASC (oldest = primary)
+    const productVariants = await ProductVariant.findAll({
+      where: { productId },
+      order: [['id', 'ASC']]
+    });
+
+    // ── CASE 1: Last remaining variant ──────────────────────────────────────────
+    // Delete variant + cascade delete the parent product entirely
+    if (productVariants.length <= 1) {
+      // Destroy variant stock records
+      await WarehouseStock.destroy({ where: { variantId: variant.id } });
+      await variant.destroy();
+
+      // Cascade: remove orphan parent product and all its remaining stock
+      const { Product } = require('../models');
+      const product = await Product.findByPk(productId);
+      if (product) {
+        // Clean up any parent-level stock entries
+        await WarehouseStock.destroy({ where: { productId, variantId: null } });
+        await product.destroy();
+      }
+
+      return res.json({
+        success: true,
+        cascadeDeletedProduct: true,
+        productId,
+        message: 'Last variant removed — parent product has also been deleted from the catalog.'
+      });
+    }
+
+    // ── CASE 2: Multiple variants exist ─────────────────────────────────────────
+    // Allow deleting any variant (including the current first/default).
+    // The next available variant will automatically become the new primary via syncProductVariants.
+
+    // Destroy associated stock records first
     await WarehouseStock.destroy({ where: { variantId: variant.id } });
 
     await variant.destroy();
 
-    // Sync product price and stock
+    // Re-sync parent product (price, stock, attributes) from remaining variants
     await syncProductVariants(productId);
 
-    res.json({ success: true, message: 'Variant deleted successfully' });
+    res.json({
+      success: true,
+      cascadeDeletedProduct: false,
+      message: 'Variant deleted successfully. Product default has been updated to the next available variant.'
+    });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

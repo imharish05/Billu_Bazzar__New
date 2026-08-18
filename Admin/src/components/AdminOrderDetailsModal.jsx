@@ -1,7 +1,9 @@
 import { motion } from 'framer-motion';
-import { X, MapPin, CreditCard, Truck, FileText, Package, Check, Circle, Phone, Mail, Gift } from 'lucide-react';
+import { X, MapPin, CreditCard, Truck, FileText, Package, Check, Circle, Phone, Mail, Gift, Copy } from 'lucide-react';
 import currencyJs from 'currency.js';
 import toast from 'react-hot-toast';
+import { getImageUrl } from '../utils/imageUrl';
+import { getPlaceholderSvg } from '../utils/placeholder';
 
 const fmt = (v, currency = 'INR') => {
   const sym = currency === 'USD' ? '$' : (currency === 'EUR' ? '€' : (currency === 'GBP' ? '£' : '₹'));
@@ -19,6 +21,8 @@ const STATUS_COLORS = {
   DELIVERED: 'bg-green-50 text-green-700 border-green-200',
   CANCELLED: 'bg-red-50 text-red-700 border-red-200',
   RETURNED: 'bg-pink-50 text-pink-700 border-pink-200',
+  REFUNDED: 'bg-purple-50 text-purple-700 border-purple-200',
+  PAYMENT_RECEIVED_STOCK_FAILED: 'bg-rose-50 text-rose-700 border-rose-200',
 };
 
 const parseJsonObj = (val) => {
@@ -92,6 +96,13 @@ const AdminOrderDetailsModal = ({ order, onClose, onStatusUpdate }) => {
 
   const currency = order.currency || 'INR';
 
+  const shippingObj = parseJsonObj(order.shippingAddress) || {};
+  const billingObj = parseJsonObj(order.billingAddress) || {};
+
+  const customerName = order.customer?.name || billingObj.fullName || billingObj.name || shippingObj.fullName || shippingObj.name || 'Guest / Customer';
+  const customerEmail = order.customer?.email || billingObj.email || shippingObj.email || '';
+  const customerPhone = order.customer?.phone || billingObj.phone || shippingObj.phone || '';
+
   const handlePrintInvoice = () => {
     toast.success(`Printing Tax Invoice for Order #${order.orderNumber}...`);
     window.print();
@@ -121,13 +132,6 @@ const AdminOrderDetailsModal = ({ order, onClose, onStatusUpdate }) => {
           </div>
 
           <div className="flex items-center gap-3">
-            {/* <button
-              onClick={handlePrintInvoice}
-              className="btn-outline flex items-center gap-1 text-xs py-1.5 px-3 rounded hover:bg-neutral-50"
-            >
-              <FileText size={13} /> Print Invoice
-            </button> */}
-
             <button
               onClick={onClose}
               className="p-1.5 text-neutral-400 hover:text-neutral-700 transition-colors rounded-full hover:bg-neutral-100"
@@ -141,21 +145,55 @@ const AdminOrderDetailsModal = ({ order, onClose, onStatusUpdate }) => {
         <div className="p-6 space-y-6">
 
           {/* Customer Metadata Card */}
-          <div className="bg-neutral-50 p-4 rounded-lg border border-neutral-200/80 flex justify-between items-center flex-wrap gap-4 text-xs">
-            <div>
-              <span className="text-neutral-500 block uppercase tracking-wider text-[10px] font-semibold">Customer Details</span>
-              <p className="font-semibold text-neutral-900 text-sm mt-0.5">{order.customer?.name || 'Guest / Customer'}</p>
-              <p className="text-neutral-500">{order.customer?.email} {order.customer?.phone ? `· ${order.customer.phone}` : ''}</p>
+          <div className="bg-neutral-50 p-4 rounded-xl border border-neutral-200/90 flex flex-wrap justify-between items-start gap-5 text-xs">
+            <div className="min-w-[220px] flex-1">
+              <span className="text-neutral-500 block uppercase tracking-wider text-[10px] font-bold">Customer Details</span>
+              <p className="font-bold text-neutral-900 text-sm mt-0.5">{customerName}</p>
+              {(customerEmail || customerPhone) && (
+                <p className="text-neutral-600 text-xs mt-0.5 font-medium leading-relaxed">
+                  {customerEmail}{customerEmail && customerPhone ? ' · ' : ''}{customerPhone}
+                </p>
+              )}
             </div>
+
             <div>
-              <span className="text-neutral-500 block uppercase tracking-wider text-[10px] font-semibold">Payment Status</span>
-              <span className={`inline-block mt-0.5 text-[10px] font-bold px-2 py-0.5 rounded ${order.paymentStatus === 'PAID' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+              <span className="text-neutral-500 block uppercase tracking-wider text-[10px] font-bold">Payment Status</span>
+              <span className={`inline-block mt-1 text-[11px] font-bold px-2.5 py-1 rounded-md uppercase tracking-wide ${
+                order.paymentStatus === 'PAID' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' :
+                order.paymentStatus === 'REFUNDED' ? 'bg-purple-100 text-purple-800 border border-purple-200' :
+                'bg-amber-100 text-amber-800 border border-amber-200'
+              }`}>
                 {order.paymentStatus || 'UNPAID'}
               </span>
             </div>
+
             <div>
-              <span className="text-neutral-500 block uppercase tracking-wider text-[10px] font-semibold">Payment Method</span>
-              <p className="font-semibold text-neutral-800 mt-0.5">{order.paymentMethod || 'Online Payment'}</p>
+              <span className="text-neutral-500 block uppercase tracking-wider text-[10px] font-bold">Payment Method</span>
+              <p className="font-semibold text-neutral-800 text-xs mt-1">{order.paymentMethod || 'Online Payment'}</p>
+            </div>
+
+            <div>
+              <span className="text-neutral-500 block uppercase tracking-wider text-[10px] font-bold mb-1">Transaction Ref ID</span>
+              {(order.razorpay_payment_id || order.paymentGatewayRef) ? (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-mono font-bold text-neutral-900 bg-white border border-neutral-300 px-2.5 py-1 rounded-md shadow-2xs select-all tracking-wide">
+                    {order.razorpay_payment_id || order.paymentGatewayRef}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(order.razorpay_payment_id || order.paymentGatewayRef);
+                      toast.success('Transaction Ref ID copied to clipboard!');
+                    }}
+                    className="p-1 text-neutral-400 hover:text-brand-gold transition-colors rounded hover:bg-neutral-200/60"
+                    title="Copy Transaction Ref ID"
+                  >
+                    <Copy size={14} />
+                  </button>
+                </div>
+              ) : (
+                <span className="text-xs text-neutral-400 italic mt-1 block">N/A</span>
+              )}
             </div>
           </div>
 
@@ -191,10 +229,10 @@ const AdminOrderDetailsModal = ({ order, onClose, onStatusUpdate }) => {
                         <td className="py-3 px-4">
                           <div className="flex items-center gap-3">
                             <img
-                              src={item.productImage || item.image || '/placeholder.jpg'}
+                              src={getImageUrl(item.productImage || item.image) || getPlaceholderSvg(item.productName || item.name || 'Product')}
                               alt={item.productName || item.name}
                               className="w-12 h-14 object-cover rounded border border-neutral-200 flex-shrink-0"
-                              onError={(e) => { e.target.onerror = null; e.target.src = '/placeholder.jpg'; }}
+                              onError={(e) => { e.target.onerror = null; e.target.src = getPlaceholderSvg(item.productName || item.name || 'Product'); }}
                             />
                             <div>
                               <p className="font-semibold text-neutral-900 text-xs">{item.productName || item.name || 'Product'}</p>
@@ -265,7 +303,7 @@ const AdminOrderDetailsModal = ({ order, onClose, onStatusUpdate }) => {
 
                 {/* Gift Wrap Status */}
                 <p className="text-neutral-600 font-medium flex items-center gap-1.5">
-                  <span>🎁 Gift Packaging:</span> 
+                  <span className="flex items-center gap-1"><Gift size={14} className="text-brand-gold" /> Gift Packaging:</span> 
                   <span className="font-semibold text-neutral-900">
                     {Number(order.giftWrapFee || order.giftWrapPrice || 0) > 0 || order.isGiftWrap ? 'Luxury Gift Wrap (Included)' : 'Complimentary Gift Service'}
                   </span>

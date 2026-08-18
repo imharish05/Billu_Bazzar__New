@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Search, Edit2, Trash2, X, Upload, ChevronLeft, ChevronRight, ChevronDown, Check, Eye, Play, Pause, RotateCw, Sparkles, Box, ShieldCheck, Tag, Camera } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, X, Upload, ChevronLeft, ChevronRight, ChevronDown, Check, Eye, Play, Pause, RotateCw, Sparkles, Box, ShieldCheck, Tag, Camera, Palette, Ruler, Lightbulb } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
 import Switch from '../components/Switch';
 import { PaginationTop, PaginationBottom } from '../components/Pagination';
@@ -10,6 +10,7 @@ import currencyJs from 'currency.js';
 import toast from 'react-hot-toast';
 import api from '../services/api';
 import { checkPermission } from '../utils/rbac';
+import { validateImageFile, validateVideoFile, validateVideoUrl } from '../utils/fileValidation';
 
 const fmt = (v) => currencyJs(v, { symbol: '₹', precision: 0 }).format();
 
@@ -598,97 +599,78 @@ const ProductModal = ({ product, onClose, onSave }) => {
   // Live Storefront Preview state inside modal
   const [previewOpen, setPreviewOpen] = useState(false);
 
-  // Dynamic Key-Value Option Rows with Color Support
+  // Dynamic Key-Value Option Rows with Color Support (Single Base Variant focus)
   const [optionRows, setOptionRows] = useState(() => {
-    // 1. First preference: extract aggregated attributes from product.variants
+    // 1. Extract primary variant attributes from product.variants[0] if present
     if (product && Array.isArray(product.variants) && product.variants.length > 0) {
-      const varAttrMap = {};
-      product.variants.forEach(v => {
-        const vAttrs = typeof v.attributes === 'string' ? (JSON.parse(v.attributes) || {}) : (v.attributes || {});
-        Object.entries(vAttrs).forEach(([k, val]) => {
+      const primaryVar = product.variants[0];
+      const rawAttrs = typeof primaryVar.attributes === 'string' ? (JSON.parse(primaryVar.attributes) || {}) : (primaryVar.attributes || {});
+      if (Object.keys(rawAttrs).length > 0) {
+        return Object.entries(rawAttrs).map(([k, v], i) => {
           const keyStr = String(k || '').trim();
-          const valStr = String(val || '').trim();
-          if (keyStr && valStr) {
-            if (!varAttrMap[keyStr]) varAttrMap[keyStr] = new Set();
-            varAttrMap[keyStr].add(valStr);
-          }
-        });
-      });
-
-      const entries = Object.entries(varAttrMap);
-      if (entries.length > 0) {
-        return entries.map(([k, setVals], i) => {
-          const valStr = Array.from(setVals).join(', ');
+          const valStr = Array.isArray(v) ? v.join(', ') : (v !== null && v !== undefined ? String(v).trim() : '');
           return {
             id: Date.now() + i,
-            optionName: k,
+            optionName: keyStr,
             optionValue: valStr,
-            colorHex: k.toLowerCase() === 'color' && valStr.startsWith('#') ? valStr : '#8B0000',
+            colorHex: keyStr.toLowerCase() === 'color' && valStr.startsWith('#') ? valStr : '#8B0000',
           };
         });
       }
-    }
-
-    // 2. Second preference: fallback to product.attributes
-    if (product && product.attributes && Object.keys(product.attributes).length > 0) {
-      const attrs = typeof product.attributes === 'string' ? JSON.parse(product.attributes) : product.attributes;
-      if (Array.isArray(attrs)) {
-        return attrs.map((item, i) => {
-          const k = String(item?.key || item?.name || item?.optionName || `Option ${i + 1}`);
-          const v = item?.values || item?.value || item?.optionValue || '';
-          const valStr = Array.isArray(v) ? v.join(', ') : (v !== null && v !== undefined ? String(v) : '');
-          return {
-            id: Date.now() + i,
-            optionName: k,
-            optionValue: valStr,
-            colorHex: k.toLowerCase() === 'color' && valStr.startsWith('#') ? valStr : '#8B0000',
-          };
-        });
-      }
-      return Object.entries(attrs).map(([k, v], i) => {
-        const keyStr = String(k || '');
-        const valStr = Array.isArray(v) ? v.join(', ') : (v !== null && v !== undefined ? String(v) : '');
-        return {
-          id: Date.now() + i,
-          optionName: keyStr,
-          optionValue: valStr,
-          colorHex: keyStr.toLowerCase() === 'color' && valStr.startsWith('#') ? valStr : '#8B0000',
-        };
-      });
     }
     return [{ id: Date.now(), optionName: 'Size', optionValue: '', colorHex: '#8B0000' }];
   });
 
-  // Product Variants Matrix State
+  const generateAutoVariantSku = useCallback((baseSku, productName, combo, idx = 0) => {
+    const comboLabel = combo ? Object.values(combo).join('-').toUpperCase().replace(/[^A-Z0-9-]/g, '') : '';
+    const prefix = baseSku?.trim()
+      ? baseSku.trim().toUpperCase()
+      : (productName?.trim() ? productName.trim().substring(0, 8).toUpperCase().replace(/[^A-Z0-9]/g, '') : 'SKU');
+    return comboLabel ? `SKU-${prefix}-${comboLabel}` : `SKU-${prefix}-VAR-${idx + 1}`;
+  }, []);
+
+  // Product Variants Matrix State (Single Base Variant Focus)
   const [productVariants, setProductVariants] = useState(() => {
     if (product && Array.isArray(product.variants) && product.variants.length > 0) {
-      return product.variants.map((v, idx) => {
-        const rawImgs = typeof v.images === 'string' ? (JSON.parse(v.images) || []) : (Array.isArray(v.images) ? v.images : []);
-        const gallery = rawImgs.length > 0 ? rawImgs : (v.image ? [v.image] : []);
-        const rawAttrs = typeof v.attributes === 'string' ? (JSON.parse(v.attributes) || {}) : (v.attributes || {});
-        const mainImg = v.image || (gallery.length > 0 ? gallery[0] : null);
+      const primaryVar = product.variants[0];
+      const rawAttrs = typeof primaryVar.attributes === 'string' ? (JSON.parse(primaryVar.attributes) || {}) : (primaryVar.attributes || {});
+      const rawImgs = typeof primaryVar.images === 'string' ? (JSON.parse(primaryVar.images) || []) : (Array.isArray(primaryVar.images) ? primaryVar.images : []);
+      const mainImg = primaryVar.image || null;
+      const gallery = rawImgs.filter(img => img && img !== mainImg).slice(0, 5);
 
-        return {
-          id: v.id || Date.now() + idx,
-          sku: v.sku || '',
-          price: v.price !== undefined ? String(v.price) : '',
-          mrp: v.mrp !== undefined ? String(v.mrp) : '',
-          stock: v.stock !== undefined ? String(v.stock) : '0',
-          lowStockThreshold: v.lowStockThreshold !== undefined ? String(v.lowStockThreshold) : '10',
-          gstRate: v.gstRate || product?.gstRate || '0%',
-          attributes: rawAttrs,
-          existingImages: gallery,
-          mainImagePreview: mainImg,
-          warehouseId: v.warehouseId || '',
-          newFiles: [],
-        };
-      });
+      const initialSku = (primaryVar.sku && primaryVar.sku.trim() !== '')
+        ? primaryVar.sku.trim()
+        : generateAutoVariantSku(product.sku || form.sku, product.name || form.name, rawAttrs, 0);
+
+      return [{
+        id: primaryVar.id || Date.now(),
+        sku: initialSku,
+        price: primaryVar.price !== undefined ? String(primaryVar.price) : String(product.price || ''),
+        mrp: primaryVar.mrp !== undefined ? String(primaryVar.mrp) : String(product.comparePrice || ''),
+        stock: primaryVar.stock !== undefined ? String(primaryVar.stock) : String(product.stock || '0'),
+        lowStockThreshold: primaryVar.lowStockThreshold !== undefined ? String(primaryVar.lowStockThreshold) : '10',
+        gstRate: primaryVar.gstRate || product?.gstRate || '0%',
+        attributes: rawAttrs,
+        existingImages: gallery,
+        mainImagePreview: mainImg,
+        warehouseId: primaryVar.warehouseId || '',
+        newFiles: [],
+      }];
     }
     return [];
   });
 
+  const isInitialMountRef = useRef(true);
+
   // Real-time auto-sync variant combinations from Section 4 optionRows
   useEffect(() => {
+    if (isInitialMountRef.current) {
+      isInitialMountRef.current = false;
+      if (product && Array.isArray(product.variants) && product.variants.length > 0) {
+        return;
+      }
+    }
+
     const validRows = optionRows.filter(r => {
       const name = String(r.optionName || '');
       const val = Array.isArray(r.optionValue) ? r.optionValue.join(', ') : String(r.optionValue || '');
@@ -737,18 +719,17 @@ const ProductModal = ({ product, onClose, onSave }) => {
           .sort(([a], [b]) => a.localeCompare(b))
           .map(([k, val]) => `${k.trim().toLowerCase()}:${String(val).trim().toLowerCase()}`)
           .join('|');
-        const existing = existingMap.get(key);
+        const existing = existingMap.get(key) || prev[idx];
+        const generatedSku = generateAutoVariantSku(form.sku, form.name, combo, idx);
 
         if (existing) {
-          return { ...existing, attributes: combo };
+          const currentSku = (existing.sku && existing.sku.trim() !== '') ? existing.sku : generatedSku;
+          return { ...existing, attributes: combo, sku: currentSku };
         }
-
-        const comboLabel = Object.values(combo).join('-');
-        const skuCode = form.sku ? `${form.sku}-${comboLabel}`.toUpperCase().replace(/\s+/g, '') : `PV-${Date.now()}-${idx + 1}`;
 
         return {
           id: Date.now() + Math.random() + idx,
-          sku: skuCode,
+          sku: generatedSku,
           price: form.price || '',
           mrp: form.comparePrice || '',
           stock: form.stock || '0',
@@ -760,7 +741,7 @@ const ProductModal = ({ product, onClose, onSave }) => {
         };
       });
     });
-  }, [optionRows, form.sku]);
+  }, [optionRows, form.sku, form.name, generateAutoVariantSku]);
 
   const removeVariantRow = (variantId) => {
     setProductVariants(prev => prev.filter(v => v.id !== variantId));
@@ -797,15 +778,27 @@ const ProductModal = ({ product, onClose, onSave }) => {
   };
 
   const handleVariantRowFilesSelect = (variantId, e) => {
-    const files = Array.from(e.target.files || []);
+    const rawFiles = Array.from(e.target.files || []);
+    const validFiles = [];
+    for (const file of rawFiles) {
+      const val = validateImageFile(file, { maxSizeMB: 5 });
+      if (!val.isValid) {
+        toast.error(val.error);
+      } else {
+        validFiles.push(file);
+      }
+    }
+    if (validFiles.length === 0) return;
+
     setProductVariants(prev => prev.map(v => {
       if (v.id !== variantId) return v;
-      const remaining = 10 - ((v.existingImages?.length || 0) + (v.newFiles?.length || 0));
+      const galleryCount = (v.existingImages?.length || 0) + (v.newFiles?.length || 0);
+      const remaining = 5 - galleryCount;
       if (remaining <= 0) {
-        toast.error('Maximum 10 images per variant allowed');
+        toast.error('Maximum 5 gallery images allowed');
         return v;
       }
-      const selected = files.slice(0, remaining).map(file => {
+      const selected = validFiles.slice(0, remaining).map(file => {
         file.preview = URL.createObjectURL(file);
         return file;
       });
@@ -1062,6 +1055,12 @@ const ProductModal = ({ product, onClose, onSave }) => {
   const handleDefaultImageSelect = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    const val = validateImageFile(file, { maxSizeMB: 5 });
+    if (!val.isValid) {
+      toast.error(val.error);
+      e.target.value = '';
+      return;
+    }
     setDefaultProductImageFile(file);
     const reader = new FileReader();
     reader.onloadend = () => setDefaultProductImagePreview(reader.result);
@@ -1069,13 +1068,24 @@ const ProductModal = ({ product, onClose, onSave }) => {
   };
 
   const handleVariantImagesSelect = (e) => {
-    const files = Array.from(e.target.files || []);
+    const rawFiles = Array.from(e.target.files || []);
+    const validFiles = [];
+    for (const file of rawFiles) {
+      const val = validateImageFile(file, { maxSizeMB: 5 });
+      if (!val.isValid) {
+        toast.error(val.error);
+      } else {
+        validFiles.push(file);
+      }
+    }
+    if (validFiles.length === 0) return;
+
     const remainingSlots = 10 - (existingVariantImages.length + newVariantImageFiles.length);
     if (remainingSlots <= 0) {
       toast.error('Maximum 10 variant gallery images allowed');
       return;
     }
-    const selected = files.slice(0, remainingSlots).map(file => {
+    const selected = validFiles.slice(0, remainingSlots).map(file => {
       file.preview = URL.createObjectURL(file);
       return file;
     });
@@ -1104,11 +1114,36 @@ const ProductModal = ({ product, onClose, onSave }) => {
 
   // 360 Spin Handlers
   const handleSpinFileSelect = (e) => {
-    const files = Array.from(e.target.files || []).filter(f => f.type.startsWith('image/')).map(file => {
-      file.preview = URL.createObjectURL(file);
-      return file;
-    });
-    setNewSpinImageFiles(prev => [...prev, ...files]);
+    const rawFiles = Array.from(e.target.files || []);
+    const validFiles = [];
+    for (const file of rawFiles) {
+      const val = validateImageFile(file, { maxSizeMB: 5 });
+      if (!val.isValid) {
+        toast.error(val.error);
+      } else {
+        file.preview = URL.createObjectURL(file);
+        validFiles.push(file);
+      }
+    }
+    if (validFiles.length > 0) {
+      setNewSpinImageFiles(prev => [...prev, ...validFiles]);
+    }
+  };
+
+  const handleVideoFileSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) {
+      setVideoFile(null);
+      return;
+    }
+    const val = validateVideoFile(file, { maxSizeMB: 10 });
+    if (!val.isValid) {
+      toast.error(val.error);
+      e.target.value = '';
+      setVideoFile(null);
+      return;
+    }
+    setVideoFile(file);
   };
 
   const moveSpinFrame = (index, direction, isNew = false) => {
@@ -1189,9 +1224,18 @@ const ProductModal = ({ product, onClose, onSave }) => {
       return;
     }
 
-    if (form.hasVideo && !videoFile && (!form.videoUrl || form.videoUrl.trim() === '')) {
-      toast.error('Please upload a video file or provide a video URL');
-      return;
+    if (form.hasVideo) {
+      if (!videoFile && (!form.videoUrl || form.videoUrl.trim() === '')) {
+        toast.error('Please upload a video file or provide a video URL');
+        return;
+      }
+      if (form.videoUrl && form.videoUrl.trim()) {
+        const valUrl = validateVideoUrl(form.videoUrl.trim());
+        if (!valUrl.isValid) {
+          toast.error(valUrl.error);
+          return;
+        }
+      }
     }
 
     const finalSubCategoryId = form.subCategoryId;
@@ -1238,9 +1282,13 @@ const ProductModal = ({ product, onClose, onSave }) => {
       fd.append('variants', JSON.stringify(productVariants.map(v => {
         const rawId = Number(v.id);
         const isValidDbId = Boolean(v.id && !isNaN(rawId) && rawId > 0 && rawId < 1000000000000);
+        const autoVariantSku = (v.sku && v.sku.trim() !== '')
+          ? v.sku.trim()
+          : generateAutoVariantSku(form.sku, form.name, v.attributes, 0);
+
         return {
           id: isValidDbId ? rawId : null,
-          sku: v.sku,
+          sku: autoVariantSku,
           price: v.price,
           mrp: v.mrp,
           stock: v.stock,
@@ -1248,7 +1296,7 @@ const ProductModal = ({ product, onClose, onSave }) => {
           gstRate: v.gstRate || form.gstRate || '0%',
           attributes: v.attributes,
           image: (v.mainImagePreview && typeof v.mainImagePreview === 'string' && !v.mainImagePreview.startsWith('blob:')) ? v.mainImagePreview : (v.existingImages?.[0] || null),
-          existingImages: v.existingImages || [],
+          existingImages: (v.existingImages || []).filter(img => img && img !== v.mainImagePreview),
           warehouseId: v.warehouseId || form.warehouseId || null,
         };
       })));
@@ -1265,6 +1313,7 @@ const ProductModal = ({ product, onClose, onSave }) => {
       });
     }
 
+    fd.append('isSingleVariantEdit', 'true');
     fd.append('existingImages', JSON.stringify(existingVariantImages));
     newVariantImageFiles.forEach(file => {
       fd.append('variantImages', file);
@@ -1597,8 +1646,9 @@ const ProductModal = ({ product, onClose, onSave }) => {
                 const optName = String(row.optionName || '');
                 const isColor = optName.toLowerCase() === 'color';
                 const selectedValue = Array.isArray(row.optionValue)
-                  ? row.optionValue.join(', ').trim()
-                  : String(row.optionValue || '').trim();
+                  ? (row.optionValue[0] || '').trim()
+                  : (String(row.optionValue || '').split(',')[0] || '').trim();
+
                 const presets = resolvePresetValues(optName);
 
                 const toggleValue = (valToToggle) => {
@@ -1612,9 +1662,9 @@ const ProductModal = ({ product, onClose, onSave }) => {
                     <div className="flex items-center justify-between border-b border-neutral-100 pb-2.5">
                       <div className="flex items-center gap-2">
                         {isColor ? (
-                          <span className="text-amber-600 font-bold text-sm">🎨</span>
+                          <Palette size={16} className="text-amber-600 shrink-0" />
                         ) : (
-                          <span className="text-neutral-500 font-bold text-sm">📐</span>
+                          <Ruler size={16} className="text-neutral-500 shrink-0" />
                         )}
                         <OptionTypeSelect
                           value={row.optionName}
@@ -1717,7 +1767,7 @@ const ProductModal = ({ product, onClose, onSave }) => {
                         <button
                           type="button"
                           onClick={() => toggleValue(selectedValue)}
-                          className="text-xs font-bold px-3 py-1.5 rounded-full border-2 border-emerald-500 bg-emerald-50 text-emerald-950 flex items-center gap-1.5 shadow-sm"
+                          className="text-xs font-bold px-3 py-1.5 rounded-full border-2 border-emerald-500 bg-emerald-50 text-emerald-950 flex items-center gap-1.5 shadow-sm cursor-pointer"
                         >
                           {isColor && (
                             <span
@@ -1747,7 +1797,7 @@ const ProductModal = ({ product, onClose, onSave }) => {
             {productVariants.length > 0 && (
               <div className="pt-4 border-t border-neutral-200 space-y-4">
                 {productVariants.map((v, vIdx) => {
-                  const totalImgs = (v.existingImages?.length || 0) + (v.newFiles?.length || 0);
+                  const galleryCount = (v.existingImages?.length || 0) + (v.newFiles?.length || 0);
 
                   return (
                     <div key={v.id} className="bg-white p-5 border border-amber-300 rounded-xl shadow-sm space-y-4 hover:border-amber-400 transition-colors">
@@ -1796,8 +1846,8 @@ const ProductModal = ({ product, onClose, onSave }) => {
                         </div>
                       </div>
 
-                      {/* Row 2: MRP (₹), STOCK QTY, LOW STOCK THRESHOLD & GST RATE */}
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                      {/* Row 2: MRP (₹), STOCK QTY, LOW STOCK THRESHOLD */}
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                         <div>
                           <label className="block text-[10px] font-bold uppercase tracking-wider text-neutral-600 mb-1">MRP (₹)</label>
                           <input
@@ -1830,20 +1880,6 @@ const ProductModal = ({ product, onClose, onSave }) => {
                             placeholder="10"
                             className="w-full border border-neutral-300 rounded-lg px-3 py-2 text-xs font-sans font-medium text-neutral-800 focus:outline-none focus:border-brand-gold bg-white"
                           />
-                        </div>
-
-                        <div>
-                          <label className="block text-[10px] font-bold uppercase tracking-wider text-neutral-600 mb-1">GST RATE</label>
-                          <select
-                            value={v.gstRate || '0%'}
-                            onChange={e => updateVariantRow(v.id, 'gstRate', e.target.value)}
-                            className="w-full border border-neutral-300 rounded-lg px-3 py-2 text-xs font-sans font-medium text-neutral-800 focus:outline-none focus:border-brand-gold bg-white"
-                          >
-                            <option value="0%">0% (Exempt / 0%)</option>
-                            <option value="5%">5% (SGST 2.5% + CGST 2.5%)</option>
-                            <option value="18%">18% (SGST 9% + CGST 9%)</option>
-                            <option value="40%">40% (SGST 20% + CGST 20%)</option>
-                          </select>
                         </div>
                       </div>
 
@@ -1878,6 +1914,12 @@ const ProductModal = ({ product, onClose, onSave }) => {
                               onChange={e => {
                                 const file = e.target.files?.[0];
                                 if (file) {
+                                  const val = validateImageFile(file, { maxSizeMB: 5 });
+                                  if (!val.isValid) {
+                                    toast.error(val.error);
+                                    e.target.value = '';
+                                    return;
+                                  }
                                   updateVariantRow(v.id, 'mainImageFile', file);
                                   updateVariantRow(v.id, 'mainImagePreview', URL.createObjectURL(file));
                                 }
@@ -1894,7 +1936,7 @@ const ProductModal = ({ product, onClose, onSave }) => {
                           <label className="block text-[10px] font-bold uppercase tracking-wider text-neutral-600">
                             VARIANT GALLERY (MAX 5 IMAGES)
                           </label>
-                          <span className="text-[10px] font-mono font-bold text-amber-600">{totalImgs} / 5</span>
+                          <span className="text-[10px] font-mono font-bold text-amber-600">{galleryCount} / 5</span>
                         </div>
                         <div className="flex items-center gap-2 overflow-x-auto py-1 custom-scrollbar">
                           {v.existingImages?.map((imgUrl, iIdx) => (
@@ -1926,7 +1968,7 @@ const ProductModal = ({ product, onClose, onSave }) => {
                               </div>
                             );
                           })}
-                          {totalImgs < 5 && (
+                          {galleryCount < 5 && (
                             <label className="w-14 h-14 border-2 border-dashed border-neutral-300 hover:border-brand-gold flex flex-col items-center justify-center text-neutral-400 hover:text-brand-gold cursor-pointer rounded-lg bg-neutral-50 transition-colors">
                               <Plus size={16} />
                               <span className="text-[9px] font-semibold">Image</span>
@@ -1968,8 +2010,8 @@ const ProductModal = ({ product, onClose, onSave }) => {
                     {/* Frame Reordering Grid (Drag and Drop enabled) */}
                     {combinedSpinPreviews.length > 0 && (
                       <div className="space-y-3">
-                        <p className="text-[10px] text-amber-800 font-semibold bg-amber-50 p-2 rounded border border-amber-200">
-                          💡 Drag & drop frame thumbnails to easily rearrange 360° spin sequence!
+                        <p className="text-[10px] text-amber-800 font-semibold bg-amber-50 p-2 rounded border border-amber-200 flex items-center gap-1">
+                          <Lightbulb size={13} className="text-amber-600 shrink-0" /> Drag & drop frame thumbnails to easily rearrange 360° spin sequence!
                         </p>
                         <div className="grid grid-cols-4 gap-2 max-h-40 overflow-y-auto p-1 bg-neutral-100 rounded border border-neutral-200">
                           {existingSpinImages.map((src, i) => (
@@ -2034,7 +2076,7 @@ const ProductModal = ({ product, onClose, onSave }) => {
                     </div>
                     <div>
                       <label className="block text-[11px] font-semibold text-neutral-700 mb-1">Or Upload Video File</label>
-                      <input type="file" accept="video/mp4,video/webm" onChange={e => setVideoFile(e.target.files?.[0] || null)} className="text-xs text-neutral-500" />
+                      <input type="file" accept="video/mp4,video/webm" onChange={handleVideoFileSelect} className="text-xs text-neutral-500" />
                     </div>
 
                     {/* Inline Video Player Preview */}
@@ -2254,11 +2296,18 @@ const ProductsAdminPage = () => {
                   </td>
                   <td className="px-4 py-3 font-medium text-brand-text max-w-xs truncate" title={product.name}>{product.name}</td>
                   <td className="px-4 py-3 text-brand-grey">{product.category?.name || '—'}</td>
-                  <td className="px-4 py-3 font-semibold">{fmt(product.price)}</td>
+                  <td className="px-4 py-3 font-semibold">{fmt(product.variants?.[0]?.price !== undefined ? product.variants[0].price : product.price)}</td>
                   <td className="px-4 py-3">
-                    <span className={`font-semibold ${product.stock > 0 ? 'text-green-600' : 'text-red-500'}`}>
-                      {product.stock > 0 ? `${product.stock} in stock` : 'Out of stock'}
-                    </span>
+                    {(() => {
+                      const displayStock = product.variants?.[0]?.stock !== undefined
+                        ? (parseInt(product.variants[0].stock, 10) || 0)
+                        : (parseInt(product.stock, 10) || 0);
+                      return (
+                        <span className={`font-semibold ${displayStock > 0 ? 'text-green-600' : 'text-red-500'}`}>
+                          {displayStock > 0 ? `${displayStock} in stock` : 'Out of stock'}
+                        </span>
+                      );
+                    })()}
                   </td>
                   <td className="px-4 py-3 text-brand-grey">
                     {product.vendor?.storeName || product.vendor?.name ? (

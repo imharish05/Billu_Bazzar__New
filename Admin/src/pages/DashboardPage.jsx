@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { motion } from 'framer-motion';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
-import { ShoppingBag, Users, TrendingUp, Clock, Package, AlertTriangle, Plus, ArrowRight, Eye, Coins, RotateCcw } from 'lucide-react';
+import { ShoppingBag, Users, TrendingUp, Clock, Package, AlertTriangle, Plus, ArrowRight, Eye, Coins, RotateCcw, Gift } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import AdminLayout from '../components/AdminLayout';
@@ -75,6 +75,7 @@ const DashboardPage = () => {
   const [revenueRange, setRevenueRange] = useState('7_days'); // '7_days' | '30_days' | 'this_month' | 'this_year'
   const [revenueCurrency, setRevenueCurrency] = useState('INR'); // 'INR' | 'AED'
   const [lowStockAlerts, setLowStockAlerts] = useState([]);
+  const [recentShopperRequests, setRecentShopperRequests] = useState([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastRefreshedAt, setLastRefreshedAt] = useState(new Date());
 
@@ -88,6 +89,14 @@ const DashboardPage = () => {
       }
     } catch (err) {
       console.warn('Low stock fetch warning:', err);
+    }
+    try {
+      const shopperRes = await api.get('/personal-shopper?limit=5');
+      if (shopperRes.data.success && shopperRes.data.requests) {
+        setRecentShopperRequests(shopperRes.data.requests);
+      }
+    } catch (err) {
+      console.warn('Personal shopper fetch warning:', err);
     }
   };
 
@@ -410,6 +419,81 @@ const DashboardPage = () => {
                         >
                           <Eye size={14} /> Details
                         </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Recent Personal Shopper Requests Widget */}
+        <div className="bg-white rounded-xl shadow-sm overflow-hidden mb-6 border border-brand-light/60">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-brand-light">
+            <h2 className="font-playfair text-lg font-semibold flex items-center gap-2">
+              <Gift size={18} className="text-brand-gold" /> Recent Personal Shopper Requests
+            </h2>
+            <Link to="/personal-shopper" className="text-xs text-brand-gold hover:underline flex items-center gap-1 font-semibold" id="view-all-shopper-requests">
+              View All <ArrowRight size={12} />
+            </Link>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm" aria-label="Recent personal shopper requests">
+              <thead>
+                <tr className="bg-brand-light/50 text-left">
+                  {['Customer Name', 'Email / Phone', 'Occasion', 'Budget', 'Status', 'Date', 'Actions'].map(h => (
+                    <th key={h} className="px-4 py-3 text-xs font-semibold text-brand-grey uppercase tracking-wider">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {recentShopperRequests.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-4 py-6 text-center text-xs text-brand-grey">
+                      No personal shopper styling requests received yet.
+                    </td>
+                  </tr>
+                ) : (
+                  recentShopperRequests.slice(0, 5).map(req => (
+                    <tr key={req.id} className="border-b border-brand-light hover:bg-brand-light/30 transition-colors">
+                      <td className="px-4 py-3 font-semibold text-brand-text">
+                        {req.name}
+                        {req.customerId && (
+                          <span className="ml-1.5 px-1.5 py-0.5 bg-amber-100 text-amber-800 text-[10px] rounded font-bold uppercase">
+                            Member
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-brand-grey">
+                        <div>{req.email}</div>
+                        {req.phone && <div className="text-[11px] text-neutral-400">{req.phone}</div>}
+                      </td>
+                      <td className="px-4 py-3 text-xs font-medium text-neutral-800">{req.occasion}</td>
+                      <td className="px-4 py-3 text-xs font-bold text-amber-800">₹{req.budget}</td>
+                      <td className="px-4 py-3">
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${
+                          req.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-800' :
+                          req.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-800' :
+                          req.status === 'CONTACTED' ? 'bg-purple-100 text-purple-800' :
+                          req.status === 'CANCELLED' ? 'bg-neutral-100 text-neutral-700' :
+                          'bg-amber-100 text-amber-800'
+                        }`}>
+                          {req.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-brand-grey text-xs">
+                        {req.createdAt ? new Date(req.createdAt).toLocaleDateString('en-IN') : '—'}
+                      </td>
+                      <td className="px-4 py-3">
+                        <Link
+                          to="/personal-shopper"
+                          className="p-1.5 bg-brand-gold/10 hover:bg-brand-gold hover:text-white text-brand-gold rounded-lg transition-all inline-flex items-center gap-1 text-xs font-medium border border-brand-gold/20"
+                          title="View Personal Shopper Requests"
+                        >
+                          <Eye size={14} /> View
+                        </Link>
                       </td>
                     </tr>
                   ))
