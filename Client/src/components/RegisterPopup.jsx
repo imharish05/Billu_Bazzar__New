@@ -31,7 +31,7 @@ const RegisterPopup = () => {
 
     const fetchPoints = async () => {
       try {
-        const res = await api.get('/settings/loyalty');
+        const res = await api.get('/site-settings/loyalty');
         if (res.data?.success && res.data?.data) {
           const pts = Number(res.data.data.signupPoints);
           const enabled = res.data.data.signupPointsEnabled !== false;

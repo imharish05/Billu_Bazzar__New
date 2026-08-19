@@ -200,19 +200,31 @@ const LoyaltyAdminPage = () => {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium mb-1">Earn Rate (INR per 1 Point)</label>
-                  <input type="number" value={settings.earnRate} onChange={e => setSettings({ ...settings, earnRate: Number(e.target.value) })} className="w-full border border-brand-light rounded p-2 focus:border-brand-gold outline-none" required />
+                  <input type="number" min="1" value={settings.earnRate} onChange={e => setSettings({ ...settings, earnRate: Number(e.target.value) })} className="w-full border border-brand-light rounded p-2 focus:border-brand-gold outline-none" required />
+                  <span className="text-[11px] text-brand-grey mt-1 block">
+                    AED equivalent: ≈ {settings.earnRate ? (settings.earnRate / 26.06).toFixed(2) : 0} AED per 1 Point
+                  </span>
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-1">Redeem Rate (INR per 1 Point)</label>
-                  <input type="number" step="0.01" value={settings.redeemRate} onChange={e => setSettings({ ...settings, redeemRate: Number(e.target.value) })} className="w-full border border-brand-light rounded p-2 focus:border-brand-gold outline-none" required />
+                  <input type="number" step="0.01" min="0.01" value={settings.redeemRate} onChange={e => setSettings({ ...settings, redeemRate: Number(e.target.value) })} className="w-full border border-brand-light rounded p-2 focus:border-brand-gold outline-none" required />
+                  <span className="text-[11px] text-brand-grey mt-1 block">
+                    AED equivalent: 1 Point ≈ {settings.redeemRate ? (settings.redeemRate / 26.06).toFixed(4) : 0} AED discount
+                  </span>
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-1">Max Redeem Amount per Order (INR)</label>
-                  <input type="number" value={settings.maxRedeemAmount} onChange={e => setSettings({ ...settings, maxRedeemAmount: Number(e.target.value) })} className="w-full border border-brand-light rounded p-2 focus:border-brand-gold outline-none" required />
+                  <input type="number" min="0" value={settings.maxRedeemAmount} onChange={e => setSettings({ ...settings, maxRedeemAmount: Number(e.target.value) })} className="w-full border border-brand-light rounded p-2 focus:border-brand-gold outline-none" required />
+                  <span className="text-[11px] text-brand-grey mt-1 block">
+                    AED equivalent: ≈ {settings.maxRedeemAmount ? (settings.maxRedeemAmount / 26.06).toFixed(2) : 0} AED max per order
+                  </span>
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-1">Points Expiry (Months)</label>
-                  <input type="number" value={settings.expiryMonths} onChange={e => setSettings({ ...settings, expiryMonths: Number(e.target.value) })} className="w-full border border-brand-light rounded p-2 focus:border-brand-gold outline-none" required />
+                  <input type="number" min="1" value={settings.expiryMonths} onChange={e => setSettings({ ...settings, expiryMonths: Number(e.target.value) })} className="w-full border border-brand-light rounded p-2 focus:border-brand-gold outline-none" required />
+                  <span className="text-[11px] text-brand-grey mt-1 block">
+                    Applies universally to all earned customer points
+                  </span>
                 </div>
               </div>
               

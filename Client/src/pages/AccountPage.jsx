@@ -6,7 +6,7 @@ import { User, Package, Heart, Star, Headphones, MessageCircle, LogOut, Edit3, G
 import { fetchMyOrders } from '../redux/slices/ordersSlice';
 import { logout } from '../redux/slices/authSlice';
 import Footer from '../components/Footer';
-import { formatPrice } from '../utils/currency';
+import { formatPrice, formatOrderAmount } from '../utils/currency';
 import api from '../services/api';
 
 const STATUS_COLORS = {
@@ -187,7 +187,7 @@ const AccountPage = () => {
                         <div key={order.id} className="bg-white shadow-sm p-5">
                           <div className="flex justify-between items-start mb-3 flex-wrap gap-2">
                             <div>
-                              <p className="font-medium">Order #{order.orderNumber}</p>
+                              <p className="font-medium">Order {order.orderNumber}</p>
                               <p className="text-xs text-brand-grey">{new Date(order.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
                             </div>
                             <span className={`text-xs font-medium px-3 py-1 rounded-full ${STATUS_COLORS[order.status] || 'bg-gray-100'}`}>
@@ -195,8 +195,8 @@ const AccountPage = () => {
                             </span>
                           </div>
                           <div className="flex justify-between items-center text-sm">
-                            <span className="text-brand-grey">{order.items?.length || 0} items · {order.paymentMethod}</span>
-                            <span className="font-semibold text-brand-gold">{fmt(order.totalAmount)}</span>
+                            <span className="text-brand-grey">{order.items?.length || 0} item{(order.items?.length || 0) > 1 ? 's' : ''}</span>
+                            <span className="font-semibold text-brand-gold">{formatOrderAmount(order.totalAmount, order.currency || 'INR')}</span>
                           </div>
                         </div>
                       ))}

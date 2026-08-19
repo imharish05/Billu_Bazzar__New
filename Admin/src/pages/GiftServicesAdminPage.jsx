@@ -131,7 +131,7 @@ const GiftServicesAdminPage = () => {
         <div className="flex justify-between items-center bg-white p-6 rounded-xl shadow-sm border border-brand-light">
           <div>
             <h1 className="font-playfair text-xl font-bold text-brand-text flex items-center gap-2">
-              <Gift className="text-brand-gold" size={24} />
+              {/* <Gift className="text-brand-gold" size={24} /> */}
               Premium Gift Services
             </h1>
             <p className="text-xs text-brand-grey mt-1">
@@ -225,7 +225,7 @@ const GiftServicesAdminPage = () => {
             <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.96 }} className="bg-white rounded-xl w-full max-w-lg overflow-hidden shadow-2xl">
               <div className="flex items-center justify-between px-6 py-4 border-b border-brand-light">
                 <h2 className="font-playfair text-lg font-semibold flex items-center gap-2">
-                  <Gift size={18} className="text-brand-gold" />
+                  {/* <Gift size={18} className="text-brand-gold" /> */}
                   {giftService ? 'Edit Premium Gift Service' : 'Add Premium Gift Service'}
                 </h2>
                 <button onClick={() => setGiftModalOpen(false)} className="p-1.5 hover:text-brand-gold"><X size={18} /></button>

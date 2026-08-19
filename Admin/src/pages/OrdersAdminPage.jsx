@@ -19,7 +19,7 @@ const STATUS_LABELS = {
   All: 'All',
   PENDING: 'New Orders',
   PENDING_PAYMENT: 'Pending Payment',
-  PAID: 'Payment Received',
+  PAID: 'Paid',
   CONFIRMED: 'Confirmed',
   PROCESSING: 'Packing',
   SHIPPED: 'Dispatched',
@@ -119,7 +119,7 @@ const OrdersAdminPage = () => {
         ? orders.filter(o => o.status === 'PENDING' || o.status === 'PENDING_PAYMENT' || o.status === 'PAID' || o.status === 'PAYMENT_RECEIVED_STOCK_FAILED') 
         : orders.filter(o => o.status === activeStatus));
 
-  const orderHeaders = ['Order #', 'Customer', 'Items', 'Amount', 'Payment'];
+  const orderHeaders = ['Order', 'Customer', 'Items', 'Amount', 'Payment'];
   if (canUpdateOrder) orderHeaders.push('Status');
   orderHeaders.push('Date', 'Actions');
 
@@ -159,7 +159,7 @@ const OrdersAdminPage = () => {
         <PaginationTop
           search={search}
           onSearchChange={(s) => { setSearch(s); setPage(1); }}
-          searchPlaceholder="Search order #..."
+          searchPlaceholder="Search order..."
           currentPage={page}
           totalItems={total || 0}
           limit={limit}

@@ -159,14 +159,22 @@ const DeliveryZonesAdminPage = () => {
   };
 
   const handleToggleActive = async (zone) => {
+    const previousState = zone.isActive;
+    const nextState = !previousState;
+
+    // 1. Optimistic UI update
+    setZones((prev) => prev.map((z) => (z.id === zone.id ? { ...z, isActive: nextState } : z)));
+
     try {
+      // 2. Silent backend sync
       await api.put(`/delivery-zones/${zone.id}`, {
-        isActive: !zone.isActive
+        isActive: nextState,
       });
-      toast.success(`Pincode ${zone.pincode} ${!zone.isActive ? 'activated' : 'deactivated'}`);
-      setZones(prev => prev.map(z => z.id === zone.id ? { ...z, isActive: !z.isActive } : z));
+      toast.success(`Pincode ${zone.pincode} ${nextState ? 'activated' : 'deactivated'}`);
     } catch (err) {
-      toast.error('Failed to toggle status');
+      // 3. Rollback on error
+      setZones((prev) => prev.map((z) => (z.id === zone.id ? { ...z, isActive: previousState } : z)));
+      toast.error(err.response?.data?.message || 'Failed to toggle status');
     }
   };
 
@@ -606,7 +614,7 @@ const DeliveryZonesAdminPage = () => {
               >
                 <div className="flex items-center justify-between p-5 border-b border-neutral-100 bg-neutral-50/50">
                   <h3 className="text-base font-bold text-neutral-900 flex items-center gap-2">
-                    <MapPin className="w-5 h-5 text-indigo-600" />
+                    {/* <MapPin className="w-5 h-5 text-indigo-600" /> */}
                     {editingId ? 'Edit Pincode Delivery Zone' : 'Add New Pincode Delivery Zone'}
                   </h3>
                   <button

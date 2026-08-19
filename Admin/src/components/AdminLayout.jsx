@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
 import { NavLink, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import toast from 'react-hot-toast';
@@ -197,6 +197,186 @@ const NAV_SECTIONS = [
   },
 ];
 
+let globalSidebarScrollTop = 0;
+
+const Sidebar = ({
+  admin,
+  ordersOpen,
+  setOrdersOpen,
+  isOrdersSectionActive,
+  location,
+  currentStatusParam,
+  orderCounts,
+  setSidebarOpen,
+  handleLogout,
+  navigate,
+}) => {
+  const navRef = useRef(null);
+
+  useLayoutEffect(() => {
+    if (navRef.current) {
+      const saved = sessionStorage.getItem('admin_sidebar_scroll');
+      const targetScroll = saved !== null ? Number(saved) : globalSidebarScrollTop;
+      navRef.current.scrollTop = targetScroll;
+    }
+  });
+
+  const handleScroll = (e) => {
+    const top = e.currentTarget.scrollTop;
+    globalSidebarScrollTop = top;
+    try {
+      sessionStorage.setItem('admin_sidebar_scroll', String(top));
+    } catch {}
+  };
+
+  return (
+    <aside className="flex flex-col h-full bg-white border-r border-brand-light w-60">
+      {/* Logo */}
+      <div className="px-5 py-5 border-b border-brand-light flex-shrink-0">
+        <Logo size="md" showText={true} />
+        <p className="text-[10px] text-brand-grey mt-1 tracking-widest uppercase">Admin Panel</p>
+      </div>
+
+      {/* Nav */}
+      <nav
+        ref={navRef}
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto py-4 px-2"
+        aria-label="Admin navigation"
+      >
+      {NAV_SECTIONS.map((section, si) => {
+        const visibleItems = section.items.filter(item => item.isAccordion ? canAccessNav(admin, '/orders') : canAccessNav(admin, item.to));
+        if (visibleItems.length === 0) return null;
+
+        return (
+          <div key={si}>
+            {section.heading && (
+              <p className="px-3 py-2 text-[10px] font-bold text-brand-grey uppercase tracking-[0.15em]">
+                {section.heading}
+              </p>
+            )}
+            {visibleItems.map((item) => {
+              if (item.isAccordion) {
+              return (
+                <div key={item.label} className="mb-0.5">
+                  {/* Orders Parent Toggle */}
+                  <button
+                    onClick={() => {
+                      setOrdersOpen(prev => !prev);
+                      if (!isOrdersSectionActive) {
+                        navigate('/orders');
+                      }
+                    }}
+                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-all border-l-2 ${
+                      isOrdersSectionActive
+                        ? 'bg-amber-50/70 text-brand-gold border-brand-gold font-semibold'
+                        : 'border-transparent text-brand-grey hover:bg-brand-light hover:text-brand-text'
+                    }`}
+                    id="nav-orders-toggle"
+                  >
+                    <div className="flex items-center gap-3">
+                      <item.icon size={17} strokeWidth={1.5} />
+                      <span>{item.label}</span>
+                    </div>
+                    {ordersOpen ? (
+                      <ChevronDown size={15} className="text-neutral-400" />
+                    ) : (
+                      <ChevronRight size={15} className="text-neutral-400" />
+                    )}
+                  </button>
+
+                  {/* Orders Sub-Items Collapsible List */}
+                  <AnimatePresence initial={false}>
+                    {ordersOpen && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="overflow-hidden pl-4 pr-1 py-1 space-y-0.5"
+                      >
+                        {ORDER_SUB_ITEMS.map(subItem => {
+                          const isActive = subItem.match(location.pathname, currentStatusParam);
+                          const count = orderCounts[subItem.badgeKey];
+                          const SubIcon = subItem.icon;
+
+                          return (
+                            <NavLink
+                              key={subItem.to}
+                              to={subItem.to}
+                              onClick={() => setSidebarOpen(false)}
+                              className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                                isActive
+                                  ? 'bg-[#FFF4F4] text-[#711425] font-semibold'
+                                  : 'text-neutral-600 hover:bg-neutral-100/70 hover:text-neutral-900'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <SubIcon size={15} strokeWidth={1.5} className={isActive ? 'text-[#711425]' : 'text-neutral-500'} />
+                                <span className="truncate">{subItem.label}</span>
+                              </div>
+                              {count !== undefined && count > 0 && (
+                                <span className={`text-[11px] min-w-[20px] text-center ${subItem.badgeClass}`}>
+                                  {count}
+                                </span>
+                              )}
+                            </NavLink>
+                          );
+                        })}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              );
+            }
+
+            const { to, label, icon: Icon } = item;
+            return (
+              <NavLink
+                key={to}
+                to={to}
+                className={({ isActive }) =>
+                  `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium mb-0.5 transition-all border-l-2 ${
+                    isActive
+                      ? 'bg-amber-50 text-brand-gold border-brand-gold'
+                      : 'border-transparent text-brand-grey hover:bg-brand-light hover:text-brand-text'
+                  }`
+                }
+                id={`nav-${label.toLowerCase().replace(/\s+/g, '-')}`}
+                onClick={() => setSidebarOpen(false)}
+              >
+                <Icon size={17} strokeWidth={1.5} />
+                {label}
+              </NavLink>
+            );
+          })}
+        </div>
+      );
+    })}
+    </nav>
+
+    {/* Bottom user section */}
+    <div className="px-4 py-4 border-t border-brand-light">
+      <div className="flex items-center gap-3 mb-3">
+        <div className="w-8 h-8 rounded-full bg-brand-gold flex items-center justify-center flex-shrink-0">
+          <span className="text-white text-xs font-bold">{admin?.name?.[0] || 'A'}</span>
+        </div>
+        <div className="min-w-0">
+          <p className="text-xs font-medium truncate">{admin?.name || 'Admin'}</p>
+          <p className="text-[10px] text-brand-grey truncate">{admin?.role || 'superadmin'}</p>
+        </div>
+      </div>
+      <button
+        onClick={handleLogout}
+        className="w-full flex items-center gap-2 text-xs text-red-400 hover:text-red-600 transition-colors py-1.5 focus-visible:outline-brand-gold"
+        id="admin-logout-btn"
+      >
+        <LogOut size={14} /> Sign Out
+      </button>
+    </div>
+  </aside>
+);
+};
 
 const AdminLayout = ({ children, title = '' }) => {
   const dispatch = useDispatch();
@@ -285,7 +465,7 @@ const AdminLayout = ({ children, title = '' }) => {
 
           newOrders.forEach(o => {
             playNewOrderChime();
-            toast.success(`New Order #${o.orderNumber || o.id} Received! (${o.customer?.name || o.shippingAddress?.fullName || 'Customer'} - ${o.currency || 'INR'} ${o.totalAmount})`, {
+            toast.success(`New Order ${o.orderNumber || o.id} Received! (${o.customer?.name || o.shippingAddress?.fullName || 'Customer'} - ${o.currency || 'INR'} ${o.totalAmount})`, {
               duration: 8000,
             });
 
@@ -294,7 +474,7 @@ const AdminLayout = ({ children, title = '' }) => {
                 id: `order-${o.id}`,
                 type: 'order',
                 orderId: o.id,
-                text: `New Order #${o.orderNumber || o.id} (${o.customer?.name || o.shippingAddress?.fullName || 'Customer'})`,
+                text: `New Order ${o.orderNumber || o.id} (${o.customer?.name || o.shippingAddress?.fullName || 'Customer'})`,
                 time: `${o.currency || 'INR'} ${o.totalAmount} · ${new Date(o.createdAt).toLocaleDateString()} ${new Date(o.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
                 read: false,
               };
@@ -388,155 +568,25 @@ const AdminLayout = ({ children, title = '' }) => {
 
   const isOrdersSectionActive = location.pathname === '/orders' || location.pathname === '/abandoned-carts';
 
-  const Sidebar = () => (
-    <aside className="flex flex-col h-full bg-white border-r border-brand-light w-60">
-      {/* Logo */}
-      <div className="px-5 py-5 border-b border-brand-light flex-shrink-0">
-        <Logo size="md" showText={true} />
-        <p className="text-[10px] text-brand-grey mt-1 tracking-widest uppercase">Admin Panel</p>
-      </div>
-
-      {/* Nav */}
-      <nav className="flex-1 overflow-y-auto py-4 px-2" aria-label="Admin navigation">
-        {NAV_SECTIONS.map((section, si) => {
-          const visibleItems = section.items.filter(item => item.isAccordion ? canAccessNav(admin, '/orders') : canAccessNav(admin, item.to));
-          if (visibleItems.length === 0) return null;
-
-          return (
-            <div key={si}>
-              {section.heading && (
-                <p className="px-3 py-2 text-[10px] font-bold text-brand-grey uppercase tracking-[0.15em]">
-                  {section.heading}
-                </p>
-              )}
-              {visibleItems.map((item) => {
-                if (item.isAccordion) {
-                return (
-                  <div key={item.label} className="mb-0.5">
-                    {/* Orders Parent Toggle */}
-                    <button
-                      onClick={() => {
-                        setOrdersOpen(prev => !prev);
-                        if (!isOrdersSectionActive) {
-                          navigate('/orders');
-                        }
-                      }}
-                      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-all border-l-2 ${
-                        isOrdersSectionActive
-                          ? 'bg-amber-50/70 text-brand-gold border-brand-gold font-semibold'
-                          : 'border-transparent text-brand-grey hover:bg-brand-light hover:text-brand-text'
-                      }`}
-                      id="nav-orders-toggle"
-                    >
-                      <div className="flex items-center gap-3">
-                        <item.icon size={17} strokeWidth={1.5} />
-                        <span>{item.label}</span>
-                      </div>
-                      {ordersOpen ? (
-                        <ChevronDown size={15} className="text-neutral-400" />
-                      ) : (
-                        <ChevronRight size={15} className="text-neutral-400" />
-                      )}
-                    </button>
-
-                    {/* Orders Sub-Items Collapsible List */}
-                    <AnimatePresence initial={false}>
-                      {ordersOpen && (
-                        <motion.div
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: 'auto', opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }}
-                          transition={{ duration: 0.2 }}
-                          className="overflow-hidden pl-4 pr-1 py-1 space-y-0.5"
-                        >
-                          {ORDER_SUB_ITEMS.map(subItem => {
-                            const isActive = subItem.match(location.pathname, currentStatusParam);
-                            const count = orderCounts[subItem.badgeKey];
-                            const SubIcon = subItem.icon;
-
-                            return (
-                              <NavLink
-                                key={subItem.to}
-                                to={subItem.to}
-                                onClick={() => setSidebarOpen(false)}
-                                className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-                                  isActive
-                                    ? 'bg-[#FFF4F4] text-[#711425] font-semibold'
-                                    : 'text-neutral-600 hover:bg-neutral-100/70 hover:text-neutral-900'
-                                }`}
-                              >
-                                <div className="flex items-center gap-2.5 min-w-0">
-                                  <SubIcon size={15} strokeWidth={1.5} className={isActive ? 'text-[#711425]' : 'text-neutral-500'} />
-                                  <span className="truncate">{subItem.label}</span>
-                                </div>
-                                {count !== undefined && count > 0 && (
-                                  <span className={`text-[11px] min-w-[20px] text-center ${subItem.badgeClass}`}>
-                                    {count}
-                                  </span>
-                                )}
-                              </NavLink>
-                            );
-                          })}
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
-                );
-              }
-
-              const { to, label, icon: Icon } = item;
-              return (
-                <NavLink
-                  key={to}
-                  to={to}
-                  className={({ isActive }) =>
-                    `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium mb-0.5 transition-all border-l-2 ${
-                      isActive
-                        ? 'bg-amber-50 text-brand-gold border-brand-gold'
-                        : 'border-transparent text-brand-grey hover:bg-brand-light hover:text-brand-text'
-                    }`
-                  }
-                  id={`nav-${label.toLowerCase().replace(/\s+/g, '-')}`}
-                  onClick={() => setSidebarOpen(false)}
-                >
-                  <Icon size={17} strokeWidth={1.5} />
-                  {label}
-                </NavLink>
-              );
-            })}
-          </div>
-        );
-      })}
-      </nav>
-
-      {/* Bottom user section */}
-      <div className="px-4 py-4 border-t border-brand-light">
-        <div className="flex items-center gap-3 mb-3">
-          <div className="w-8 h-8 rounded-full bg-brand-gold flex items-center justify-center flex-shrink-0">
-            <span className="text-white text-xs font-bold">{admin?.name?.[0] || 'A'}</span>
-          </div>
-          <div className="min-w-0">
-            <p className="text-xs font-medium truncate">{admin?.name || 'Admin'}</p>
-            <p className="text-[10px] text-brand-grey truncate">{admin?.role || 'superadmin'}</p>
-          </div>
-        </div>
-        <button
-          onClick={handleLogout}
-          className="w-full flex items-center gap-2 text-xs text-red-400 hover:text-red-600 transition-colors py-1.5 focus-visible:outline-brand-gold"
-          id="admin-logout-btn"
-        >
-          <LogOut size={14} /> Sign Out
-        </button>
-      </div>
-    </aside>
-  );
+  const sidebarProps = {
+    admin,
+    ordersOpen,
+    setOrdersOpen,
+    isOrdersSectionActive,
+    location,
+    currentStatusParam,
+    orderCounts,
+    setSidebarOpen,
+    handleLogout,
+    navigate,
+  };
 
 
   return (
     <div className="flex h-screen bg-brand-bg overflow-hidden">
       {/* Desktop sidebar */}
       <div className="hidden lg:flex flex-col flex-shrink-0">
-        <Sidebar />
+        <Sidebar {...sidebarProps} />
       </div>
 
       {/* Mobile sidebar overlay */}
@@ -555,7 +605,7 @@ const AdminLayout = ({ children, title = '' }) => {
               transition={{ type: 'tween', duration: 0.28 }}
               className="fixed left-0 top-0 bottom-0 z-50 lg:hidden"
             >
-              <Sidebar />
+              <Sidebar {...sidebarProps} />
             </motion.div>
           </>
         )}

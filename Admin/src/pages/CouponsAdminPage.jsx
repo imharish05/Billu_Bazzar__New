@@ -107,16 +107,21 @@ const CouponsAdminPage = () => {
 
   const handleToggleActive = async (coupon) => {
     if (!canEditCoupon) return;
+    const previousStatus = coupon.isActive;
+    const nextStatus = !previousStatus;
+
+    // 1. Optimistic UI update
+    setCoupons((prev) => prev.map((c) => (c.id === coupon.id ? { ...c, isActive: nextStatus } : c)));
+
     try {
-      const nextStatus = !coupon.isActive;
-      setCoupons((prev) => prev.map((c) => (c.id === coupon.id ? { ...c, isActive: nextStatus } : c)));
+      // 2. Silent backend sync
       await api.put(`/coupons/${coupon.id}`, { isActive: nextStatus });
       toast.success(`Coupon status updated to ${nextStatus ? 'Active' : 'Inactive'}`);
-      load();
     } catch (err) {
+      // 3. Rollback on error
+      setCoupons((prev) => prev.map((c) => (c.id === coupon.id ? { ...c, isActive: previousStatus } : c)));
       console.error(err);
       toast.error(err.response?.data?.message || 'Failed to toggle status');
-      load();
     }
   };
 

@@ -5,7 +5,7 @@ import { motion } from 'framer-motion';
 import { CheckCircle, Package, Download, MapPin, Clock, RefreshCw } from 'lucide-react';
 import Footer from '../components/Footer';
 import { printInvoice } from '../utils/invoiceGenerator';
-import { formatPrice } from '../utils/currency';
+import { formatPrice, formatOrderAmount } from '../utils/currency';
 import { fetchOrderById } from '../redux/slices/ordersSlice';
 import api from '../services/api';
 
@@ -61,7 +61,7 @@ const OrderConfirmationPage = () => {
   const dispatch = useDispatch();
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
-  const orderIdFromUrl = searchParams.get('orderId');
+  const orderIdFromUrl = searchParams.get('orderId') || searchParams.get('orderNumber') || searchParams.get('cartId');
 
   const { current: order } = useSelector(s => s.orders);
   const { code: currencyCode, rate: currencyRate } = useSelector(s => s.currency);
@@ -99,7 +99,7 @@ const OrderConfirmationPage = () => {
     setTimeout(() => setRefreshing(false), 500);
   };
 
-  const fmt = (v) => formatPrice(v, currencyCode, currencyRate);
+  const fmt = (v) => formatOrderAmount(v, order?.currency || currencyCode);
 
   const isSuccessParam = searchParams.get('status') === 'success';
   const displayStatus = (order?.status === 'PENDING_PAYMENT' && isSuccessParam) ? 'CONFIRMED' : (order?.status || 'CONFIRMED');
@@ -120,6 +120,7 @@ const OrderConfirmationPage = () => {
     addr.pincode || addr.zipCode || addr.zip_code
   ].filter(Boolean).join(', ');
   const addrPhone = addr.phone || order?.customer?.phone;
+  const addrEmail = addr.email || order?.customer?.email;
 
   return (
     <main id="main-content">
@@ -137,7 +138,7 @@ const OrderConfirmationPage = () => {
           <p className="text-brand-grey text-sm sm:text-base">Thank you for shopping at Billu Bazaar.</p>
           {order && (
             <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 mt-3">
-              <span className="text-brand-gold font-bold text-base sm:text-lg">Order #{order.orderNumber}</span>
+              <span className="text-brand-gold font-bold text-base sm:text-lg">Order {order.orderNumber}</span>
               <span className={`text-xs font-semibold px-3 py-1 rounded-full uppercase tracking-wider ${
                 displayStatus === 'DELIVERED' || displayStatus === 'PAID' || displayStatus === 'CONFIRMED'
                   ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
@@ -180,16 +181,34 @@ const OrderConfirmationPage = () => {
               </div>
             </div>
             <div className="bg-white shadow-sm p-5 sm:p-6 border border-brand-light rounded-xl">
-              <h3 className="font-playfair text-lg font-bold text-brand-text mb-4 flex items-center gap-2.5">
-                <MapPin size={22} className="text-brand-gold shrink-0" /> Shipping Address
+              <h3 className="font-playfair text-base sm:text-lg font-bold text-brand-text mb-4 flex items-center gap-2.5">
+                <MapPin size={22} className="text-brand-gold shrink-0" /> 
+                Shipping Address
               </h3>
-              <p className="text-sm font-semibold text-brand-text">{addrName}</p>
-              {addrLine1 && <p className="text-sm text-brand-grey mt-1">{addrLine1}</p>}
-              {addrLine2 && <p className="text-sm text-brand-grey">{addrLine2}</p>}
-              {addr.landmark && <p className="text-xs text-brand-grey text-neutral-500">Near {addr.landmark}</p>}
-              {addrCityStateZip && <p className="text-sm text-brand-grey mt-1">{addrCityStateZip}</p>}
-              {addr.country && <p className="text-xs font-medium text-brand-text mt-0.5">{addr.country}</p>}
-              {addrPhone && <p className="text-xs text-brand-grey mt-2 font-mono">{addrPhone}</p>}
+              <div className="text-sm font-sans space-y-1">
+                <p className="font-semibold text-brand-text text-sm">{addrName}</p>
+                {addrLine1 && <p className="text-neutral-600 text-sm mt-1">{addrLine1}</p>}
+                {addrLine2 && <p className="text-neutral-600 text-sm">{addrLine2}</p>}
+                {addr.landmark && <p className="text-neutral-500 text-sm">Near {addr.landmark}</p>}
+                {addrCityStateZip && <p className="text-neutral-600 text-sm mt-1">{addrCityStateZip}</p>}
+                {addr.country && <p className="font-medium text-brand-text text-sm mt-0.5">{addr.country}</p>}
+                {(addrPhone || addrEmail) && (
+                  <div className="text-neutral-500 text-sm mt-3 pt-2.5 border-t border-neutral-100 space-y-1">
+                    {addrPhone && (
+                      <p className="text-sm text-neutral-700">
+                        <span className="font-medium text-neutral-900">Phone : </span>
+                        <span className="text-neutral-600">{addrPhone}</span>
+                      </p>
+                    )}
+                    {addrEmail && (
+                      <p className="text-sm text-neutral-700 break-all">
+                        <span className="font-medium text-neutral-900">Email : </span>
+                        <span className="text-neutral-600">{addrEmail}</span>
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}

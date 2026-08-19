@@ -306,7 +306,7 @@ const AccountLayout = () => {
                       type="email"
                       value={forgotEmail}
                       onChange={e => { setForgotEmail(e.target.value); if (forgotEmailError) setForgotEmailError(''); }}
-                      placeholder="yourname@domain.com"
+                      placeholder="Enter your mail"
                       className={`w-full border ${forgotEmailError ? 'border-red-400 focus:border-red-500' : 'border-neutral-200/80 focus:border-brand-gold'} rounded-lg pl-10 pr-4 py-3 text-sm focus:outline-none bg-neutral-50/30 transition-colors`}
                     />
                   </div>
@@ -561,9 +561,9 @@ const AccountLayout = () => {
     <main id="main-content">
       <div className="max-w-site mx-auto px-4 md:px-8 py-6 md:py-12">
         {/* Mobile Navigation Header & Horizontal Pill Strip (< md) */}
-        <div className="block md:hidden mb-4 space-y-2">
+        <div className="block md:hidden mb-6">
           {/* User Info Bar */}
-          <div className="bg-white shadow-xs px-3 py-2 rounded-lg border border-neutral-200/60 flex items-center justify-between">
+          <div className="bg-white shadow-xs px-3 py-2.5 rounded-lg border border-neutral-200/60 flex items-center justify-between">
             <div className="flex items-center gap-2 min-w-0">
               <div className="w-7 h-7 rounded-full bg-brand-gold flex items-center justify-center flex-shrink-0">
                 <span className="text-white font-bold text-xs">{customer?.name?.[0]?.toUpperCase() || 'B'}</span>
@@ -586,14 +586,14 @@ const AccountLayout = () => {
           </div>
 
           {/* Horizontal Nav Pills — Single line compact strip with custom 3px thin scrollbar */}
-          <nav className="flex items-center gap-1.5 overflow-x-auto scrollbar-thin pb-1.5 pt-0.5 select-none">
+          <nav className="flex items-center gap-2 overflow-x-auto scrollbar-thin mt-2 mb-2 py-3 px-1 select-none">
             {NAV_ITEMS.map(({ to, label, icon: Icon, end }) => (
               <NavLink
                 key={to}
                 to={to}
                 end={end}
                 className={({ isActive }) =>
-                  `flex-shrink-0 flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold rounded-full border transition-all ${
+                  `flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold rounded-full border transition-all ${
                     isActive
                       ? 'bg-brand-gold text-white border-brand-gold shadow-xs'
                       : 'bg-white text-neutral-700 border-neutral-200 hover:bg-neutral-50'

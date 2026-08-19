@@ -5,7 +5,7 @@ import { ArrowLeft, Check, Circle, MapPin, Truck, CreditCard, FileText, Phone, M
 import { useSelector, useDispatch } from 'react-redux';
 import { fetchOrderById, cancelCustomerOrder } from '../../redux/slices/ordersSlice';
 import { createReview } from '../../redux/slices/reviewsSlice';
-import { formatPrice } from '../../utils/currency';
+import { formatPrice, formatOrderAmount } from '../../utils/currency';
 import { printInvoice } from '../../utils/invoiceGenerator';
 import { getImageUrl } from '../../utils/imageUrl';
 import { getPlaceholderSvg } from '../../utils/placeholder';
@@ -27,7 +27,7 @@ const STATUS_COLORS = {
 
 const STATUS_LABELS = {
   PENDING_PAYMENT: 'Pending Payment',
-  PAID: 'Payment Received',
+  PAID: 'Paid',
   PENDING: 'Order Placed',
   CONFIRMED: 'Confirmed',
   PROCESSING: 'Processing',
@@ -153,33 +153,44 @@ const OrderDetailPage = () => {
       { key: 'DELIVERED', label: 'Delivered' },
     ];
 
+    let timeline = order.statusTimeline || {};
+    if (typeof timeline === 'string') {
+      try { timeline = JSON.parse(timeline); } catch (e) { timeline = {}; }
+    }
+
     if (order.status === 'CANCELLED') {
       return [
-        { label: 'Order Placed', date: order.createdAt, done: true },
-        { label: 'Cancelled', date: order.updatedAt || order.createdAt, done: true },
+        { label: 'Order Placed', date: timeline.PENDING || order.createdAt, done: true },
+        { label: 'Cancelled', date: timeline.CANCELLED || order.updatedAt || order.createdAt, done: true, isCancelled: true },
       ];
     }
 
     const orderSequence = ['PENDING_PAYMENT', 'PAID', 'PENDING', 'CONFIRMED', 'PROCESSING', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED'];
     const currentIndex = orderSequence.indexOf(order.status);
-    const baseDate = new Date(order.createdAt);
 
     return steps.map((step, idx) => {
       const stepIndex = orderSequence.indexOf(step.key);
       const done = stepIndex <= currentIndex || order.status === 'DELIVERED';
+      const isCurrent = step.key === order.status || (step.key === 'PENDING' && (order.status === 'PENDING_PAYMENT' || order.status === 'PAID'));
 
       let date = null;
       if (done) {
-        if (step.key === 'PENDING') {
-          date = order.createdAt;
+        if (timeline && timeline[step.key]) {
+          date = timeline[step.key];
+        } else if (step.key === 'PENDING') {
+          date = timeline.PENDING || timeline.PENDING_PAYMENT || order.createdAt;
         } else if (step.key === order.status) {
           date = order.updatedAt || order.createdAt;
         } else if (step.key === 'DELIVERED' && order.deliveredAt) {
           date = order.deliveredAt;
+        } else {
+          // For intermediate completed steps on legacy orders before statusTimeline was logged,
+          // display the order creation / update timestamp as fallback so it's not blank
+          date = order.createdAt;
         }
       }
 
-      return { label: step.label, date, done };
+      return { label: step.label, key: step.key, date, done, isCurrent };
     });
   })();
 
@@ -231,7 +242,7 @@ const OrderDetailPage = () => {
     const addr = parseAddressObj(rawAddr);
     if (!addr) return <p className="text-neutral-400 text-sm">No address details recorded</p>;
     if (addr.plainText) {
-      return <p className="text-neutral-600 text-sm leading-relaxed">{addr.plainText}</p>;
+      return <p className="text-neutral-600 text-sm leading-relaxed font-sans">{addr.plainText}</p>;
     }
     const name = addr.fullName || addr.name || `${addr.firstName || ''} ${addr.lastName || ''}`.trim();
     const phone = addr.phone || addr.mobile || '';
@@ -245,18 +256,27 @@ const OrderDetailPage = () => {
     const country = addr.country || '';
 
     return (
-      <div className="text-sm">
-        {name && <p className="font-semibold text-neutral-900 mb-0.5">{name}</p>}
-        <p className="text-neutral-600 leading-relaxed">
+      <div className="text-sm font-sans space-y-1">
+        {name && <p className="font-semibold text-neutral-900 text-sm mb-0.5">{name}</p>}
+        <p className="text-neutral-600 text-sm leading-relaxed">
           {line1}{line2 ? `, ${line2}` : ''}{landmark ? ` (near ${landmark})` : ''}{city ? `, ${city}` : ''}{state ? `, ${state}` : ''} {pincode}
           {country ? `, ${country}` : ''}
         </p>
         {(phone || email) && (
-          <p className="text-neutral-500 text-xs mt-2 pt-1 border-t border-neutral-100">
-            {phone && <span>Phone: {phone}</span>}
-            {phone && email && <span> · </span>}
-            {email && <span>Email: {email}</span>}
-          </p>
+          <div className="text-neutral-500 text-sm mt-3 pt-2 border-t border-neutral-100 space-y-1">
+            {phone && (
+              <p className="text-sm text-neutral-700">
+                <span className="font-medium text-neutral-900">Phone : </span>
+                <span className="text-neutral-600">{phone}</span>
+              </p>
+            )}
+            {email && (
+              <p className="text-sm text-neutral-700 break-all">
+                <span className="font-medium text-neutral-900">Email : </span>
+                <span className="text-neutral-600">{email}</span>
+              </p>
+            )}
+          </div>
         )}
       </div>
     );
@@ -277,10 +297,10 @@ const OrderDetailPage = () => {
       </Link>
 
       {/* Main Order Metadata Header */}
-      <div className="bg-white shadow-sm p-6 mb-5 border border-neutral-100 rounded-lg flex justify-between items-start flex-wrap gap-4">
+      <div className="bg-white shadow-sm p-4 sm:p-6 mb-5 border border-neutral-100 rounded-lg flex justify-between items-start flex-wrap gap-4">
         <div>
           <div className="flex items-center gap-3 mb-1.5 flex-wrap">
-            <h1 className="font-playfair text-xl font-bold text-neutral-900">Order #{order.orderNumber}</h1>
+            <h1 className="font-playfair text-xl font-bold text-neutral-900">Order {order.orderNumber}</h1>
             <span className={`text-xs font-semibold px-3 py-1 rounded-full ${STATUS_COLORS[order.status] || 'bg-gray-100'}`}>
               {STATUS_LABELS[order.status] || order.status}
             </span>
@@ -291,26 +311,64 @@ const OrderDetailPage = () => {
         </div>
         <button 
           onClick={handleDownloadInvoice}
-          className="btn-outline flex items-center gap-1.5 text-xs py-2 px-4 hover:bg-brand-light transition-colors"
+          className="group inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold uppercase tracking-wider text-neutral-700 bg-white border border-neutral-300 rounded-lg shadow-sm hover:border-brand-gold hover:text-brand-gold hover:bg-amber-50/50 hover:shadow active:scale-95 transition-all duration-200 cursor-pointer"
           id="btn-download-invoice"
         >
-          <FileText size={14} /> Download Invoice
+          <FileText size={14} className="text-neutral-500 group-hover:text-brand-gold transition-colors" />
+          <span>Download Invoice</span>
         </button>
       </div>
 
       {/* Tracking timeline */}
-      <div className="bg-white shadow-sm p-6 mb-5 border border-neutral-100 rounded-lg">
-        <h2 className="font-semibold text-sm mb-5 text-neutral-950">Order Tracking</h2>
-        <div className="flex items-start overflow-x-auto pb-2 scrollbar-hide">
+      <div className="bg-white shadow-sm p-4 sm:p-6 mb-5 border border-neutral-100 rounded-lg">
+        <div className="flex items-center justify-between gap-3 mb-5">
+          <h2 className="font-semibold text-sm text-neutral-950 flex items-center gap-2">
+            <Truck size={16} className="text-brand-gold" /> Order Tracking
+          </h2>
+          <span className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full ${STATUS_COLORS[order.status] || 'bg-gray-100'}`}>
+            {STATUS_LABELS[order.status] || order.status}
+          </span>
+        </div>
+
+        {/* Desktop / Tablet Horizontal Stepper (>= md) */}
+        <div className="hidden md:flex items-start justify-between relative px-2">
           {trackingSteps.map((step, i) => (
-            <div key={step.label} className="flex-1 min-w-[80px] flex flex-col items-center text-center relative">
+            <div key={step.label} className="flex-1 flex flex-col items-center text-center relative min-w-0">
+              {/* Horizontal connecting line */}
               {i !== 0 && (
-                <div className={`absolute top-3 right-1/2 w-full h-0.5 -z-0 ${trackingSteps[i - 1]?.done ? 'bg-brand-gold' : 'bg-neutral-200'}`} />
+                <div
+                  className={`absolute top-3.5 right-1/2 w-full h-0.5 -z-0 transition-colors ${
+                    trackingSteps[i]?.done ? 'bg-brand-gold' : 'bg-neutral-200'
+                  }`}
+                />
               )}
-              <div className={`w-6 h-6 rounded-full flex items-center justify-center z-10 ${step.done ? 'bg-brand-gold text-white' : 'bg-neutral-100 text-neutral-400'}`}>
-                {step.done ? <Check size={13} /> : <Circle size={8} />}
+              {/* Step Circle Node */}
+              <div
+                className={`w-7 h-7 rounded-full flex items-center justify-center z-10 transition-all ${
+                  step.isCancelled
+                    ? 'bg-red-500 text-white shadow-xs'
+                    : step.done
+                    ? 'bg-brand-gold text-white shadow-xs'
+                    : 'bg-neutral-100 text-neutral-400 border border-neutral-200'
+                } ${step.isCurrent && !step.isCancelled ? 'ring-4 ring-amber-100' : ''}`}
+              >
+                {step.isCancelled ? (
+                  <X size={14} className="stroke-[2.5]" />
+                ) : step.done ? (
+                  <Check size={14} className="stroke-[2.5]" />
+                ) : (
+                  <Circle size={7} className="fill-neutral-300" />
+                )}
               </div>
-              <p className={`text-xs mt-2 font-medium ${step.done ? 'text-neutral-900' : 'text-neutral-400'}`}>{step.label}</p>
+              {/* Label */}
+              <p
+                className={`text-xs mt-2.5 font-medium px-1 leading-snug break-words max-w-[110px] ${
+                  step.done ? 'text-neutral-900 font-semibold' : 'text-neutral-400'
+                }`}
+              >
+                {step.label}
+              </p>
+              {/* Date */}
               {step.date && (
                 <p className="text-[10px] text-neutral-500 mt-0.5">
                   {new Date(step.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
@@ -319,46 +377,111 @@ const OrderDetailPage = () => {
             </div>
           ))}
         </div>
+
+        {/* Mobile Vertical Stepper (< md) */}
+        <div className="block md:hidden space-y-0 pl-1">
+          {trackingSteps.map((step, i) => {
+            const isLast = i === trackingSteps.length - 1;
+            return (
+              <div key={step.label} className="flex items-start gap-3.5 relative">
+                {/* Vertical connecting line */}
+                {!isLast && (
+                  <div
+                    className={`absolute left-[13px] top-7 bottom-0 w-0.5 -translate-x-1/2 ${
+                      trackingSteps[i + 1]?.done ? 'bg-brand-gold' : 'bg-neutral-200'
+                    }`}
+                  />
+                )}
+                {/* Step Circle Node */}
+                <div
+                  className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 z-10 transition-all ${
+                    step.isCancelled
+                      ? 'bg-red-500 text-white shadow-xs'
+                      : step.done
+                      ? 'bg-brand-gold text-white shadow-xs'
+                      : 'bg-neutral-100 text-neutral-400 border border-neutral-200'
+                  } ${step.isCurrent && !step.isCancelled ? 'ring-4 ring-amber-100' : ''}`}
+                >
+                  {step.isCancelled ? (
+                    <X size={14} className="stroke-[2.5]" />
+                  ) : step.done ? (
+                    <Check size={14} className="stroke-[2.5]" />
+                  ) : (
+                    <Circle size={7} className="fill-neutral-300" />
+                  )}
+                </div>
+                {/* Content */}
+                <div className="flex-1 min-w-0 pb-5">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <p
+                      className={`text-xs sm:text-sm font-semibold ${
+                        step.done ? 'text-neutral-900' : 'text-neutral-400'
+                      }`}
+                    >
+                      {step.label}
+                    </p>
+                    {step.isCurrent && !step.isCancelled && (
+                      <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 bg-amber-50 text-brand-gold border border-amber-200/60 rounded-full">
+                        Current Status
+                      </span>
+                    )}
+                  </div>
+                  {step.date && (
+                    <p className="text-[11px] text-neutral-500 mt-0.5">
+                      {new Date(step.date).toLocaleDateString('en-IN', {
+                        day: 'numeric',
+                        month: 'short',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </p>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {/* Shipping Address & Payment Card Grid */}
       <div className="grid md:grid-cols-2 gap-5 mb-5">
         {/* Shipping Address */}
-        <div className="bg-white shadow-sm p-6 border border-neutral-100 rounded-lg flex gap-3">
-          <MapPin size={18} className="text-brand-gold flex-shrink-0 mt-0.5" />
+        <div className="bg-white shadow-sm p-4 sm:p-6 border border-neutral-100 rounded-lg flex gap-3">
+          {/* <MapPin size={18} className="text-brand-gold flex-shrink-0 mt-0.5" /> */}
           <div className="flex-1">
-            <h2 className="text-sm font-semibold mb-3 text-neutral-900">Shipping Address</h2>
+            <h2 className="font-sans text-sm font-semibold mb-3 text-neutral-900">Shipping Address</h2>
             {renderAddress(order.shippingAddress)}
           </div>
         </div>
 
         {/* Payment & Billing Details */}
-        <div className="bg-white shadow-sm p-6 border border-neutral-100 rounded-lg flex gap-3">
-          <CreditCard size={18} className="text-brand-gold flex-shrink-0 mt-0.5" />
+        <div className="bg-white shadow-sm p-4 sm:p-6 border border-neutral-100 rounded-lg flex gap-3">
+          {/* <CreditCard size={18} className="text-brand-gold flex-shrink-0 mt-0.5" /> */}
           <div className="flex-1">
-            <h2 className="text-sm font-semibold mb-3 text-neutral-900">Payment & Billing</h2>
+            <h2 className="font-sans text-sm font-semibold mb-3 text-neutral-900">Payment & Billing</h2>
 
-            <div className="mb-4 bg-neutral-50 p-3 rounded border border-neutral-100">
+            <div className="mb-4 bg-neutral-50 p-3 rounded border border-neutral-100 text-sm">
               <div className="flex justify-between items-center mb-1">
-                <span className="text-xs text-neutral-500">Method</span>
-                <span className="text-xs font-semibold text-neutral-800">{order.paymentMethod || 'Online Payment'}</span>
+                <span className="text-neutral-500 text-sm">Method</span>
+                <span className="font-semibold text-neutral-800 text-sm">{order.paymentMethod || 'Online Payment'}</span>
               </div>
               <div className="flex justify-between items-center mb-1">
-                <span className="text-xs text-neutral-500">Payment Status</span>
-                <span className={`text-[11px] font-bold px-2 py-0.5 rounded ${order.paymentStatus === 'PAID' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}>
+                <span className="text-neutral-500 text-sm">Payment Status</span>
+                <span className={`text-xs font-bold px-2 py-0.5 rounded ${order.paymentStatus === 'PAID' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}>
                   {order.paymentStatus || 'UNPAID'}
                 </span>
               </div>
               {order.razorpay_payment_id && (
                 <div className="mt-2 pt-2 border-t border-neutral-200/60">
-                  <span className="text-[10px] text-neutral-400 block uppercase tracking-wider font-semibold">Razorpay Transaction ID</span>
-                  <span className="text-xs font-mono font-medium text-brand-gold select-all">{order.razorpay_payment_id}</span>
+                  <span className="text-[11px] text-neutral-400 block uppercase tracking-wider font-semibold">Razorpay Transaction ID</span>
+                  <span className="text-sm font-mono font-medium text-brand-gold select-all">{order.razorpay_payment_id}</span>
                 </div>
               )}
             </div>
 
             <div>
-              <p className="text-xs font-semibold text-neutral-500 mb-1">Billing Address</p>
+              <p className="font-sans text-sm font-semibold text-neutral-500 mb-1">Billing Address</p>
               {renderAddress(order.billingAddress || order.shippingAddress)}
             </div>
           </div>
@@ -366,8 +489,8 @@ const OrderDetailPage = () => {
       </div>
 
       {/* Item details */}
-      <div className="bg-white shadow-sm p-6 mb-5 border border-neutral-100 rounded-lg">
-        <h2 className="font-semibold text-sm mb-4 text-neutral-900">Ordered Items ({order.items?.length || 0})</h2>
+      <div className="bg-white shadow-sm p-4 sm:p-6 mb-5 border border-neutral-100 rounded-lg">
+        <h2 className="font-sans font-semibold text-xs sm:text-sm mb-4 text-neutral-900">Ordered Items ({order.items?.length || 0})</h2>
         <div className="space-y-4">
           {(order.items || []).map((item, idx) => {
             const variantObj = parseVariant(item.selectedVariant);
@@ -393,12 +516,12 @@ const OrderDetailPage = () => {
                     <p className="text-xs text-brand-grey mt-0.5">{variantInfo}</p>
                   )}
                   <p className="text-xs text-neutral-500 mt-1">
-                    Qty: {item.quantity} × {formatPrice(item.unitPrice || item.price, currency)}
+                    Qty: {item.quantity} × {formatOrderAmount(item.unitPrice || item.price, currency)}
                   </p>
                 </div>
                 <div className="flex flex-col items-end gap-2 flex-shrink-0">
                   <span className="text-sm font-bold text-brand-gold">
-                    {formatPrice(item.totalPrice || (item.quantity * (item.unitPrice || item.price)), currency)}
+                    {formatOrderAmount(item.totalPrice || (item.quantity * (item.unitPrice || item.price)), currency)}
                   </span>
                   {order.status === 'DELIVERED' && (
                     <button
@@ -418,27 +541,27 @@ const OrderDetailPage = () => {
         <div className="mt-6 pt-5 border-t border-neutral-100 space-y-2 text-sm text-neutral-600">
           <div className="flex justify-between">
             <span>Subtotal</span>
-            <span>{formatPrice(subtotal, currency)}</span>
+            <span>{formatOrderAmount(subtotal, currency)}</span>
           </div>
           {discountAmount > 0 && (
-            <div className="flex justify-between text-green-600 font-medium">
+            <div className="flex justify-between text-green-600">
               <span>Discount (Coupon / Loyalty)</span>
-              <span>-{formatPrice(discountAmount, currency)}</span>
+              <span>-{formatOrderAmount(discountAmount, currency)}</span>
             </div>
           )}
           <div className="flex justify-between">
             <span>Shipping Fee</span>
-            <span>{shippingAmount === 0 ? 'FREE' : formatPrice(shippingAmount, currency)}</span>
+            <span>{shippingAmount === 0 ? 'FREE' : formatOrderAmount(shippingAmount, currency)}</span>
           </div>
           {taxAmount > 0 && (
             <div className="flex justify-between">
               <span>GST ({order?.taxRate ? `${Number(order.taxRate)}% Included` : 'Included'})</span>
-              <span>{formatPrice(taxAmount, currency)}</span>
+              <span>{formatOrderAmount(taxAmount, currency)}</span>
             </div>
           )}
           <div className="flex justify-between items-center pt-4 border-t border-neutral-200 text-neutral-900 font-bold text-base">
             <span>Total Value</span>
-            <span className="text-brand-gold">{formatPrice(totalAmount, currency)}</span>
+            <span className="text-brand-gold">{formatOrderAmount(totalAmount, currency)}</span>
           </div>
         </div>
       </div>
@@ -464,10 +587,11 @@ const OrderDetailPage = () => {
             href="https://wa.me/919876500000"
             target="_blank"
             rel="noopener noreferrer"
-            className="btn-outline flex items-center gap-1.5 text-xs py-2 px-4 hover:bg-neutral-900 hover:text-white rounded"
+            className="group inline-flex items-center gap-1.5 px-4 py-2 border border-neutral-300 text-neutral-700 text-xs font-semibold rounded-lg bg-white shadow-sm hover:border-brand-gold hover:text-brand-gold hover:bg-amber-50/50 hover:shadow active:scale-95 transition-all duration-200"
             id="btn-order-support"
           >
-            <MessageSquare size={14} /> Support Chat
+            <MessageSquare size={14} className="text-neutral-500 group-hover:text-brand-gold transition-colors" />
+            <span>Support Chat</span>
           </a>
         </div>
       </div>
@@ -490,7 +614,7 @@ const OrderDetailPage = () => {
               Review {targetItem.productName || targetItem.name}
             </h3>
             <p className="text-xs text-neutral-500 mb-5">
-              Share your feedback for your delivered purchase (Order #{order.orderNumber})
+              Share your feedback for your delivered purchase (Order {order.orderNumber})
             </p>
 
             <form onSubmit={handleReviewSubmit} className="space-y-4">

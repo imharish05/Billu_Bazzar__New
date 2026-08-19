@@ -46,11 +46,11 @@ const Order = sequelize.define('Order', {
   notes: { type: DataTypes.TEXT },
   trackingNumber: { type: DataTypes.STRING(80) },
   trackingUrl: { type: DataTypes.STRING(500) },
-  shiprocketOrderId: { type: DataTypes.STRING(80) },
   estimatedDelivery: { type: DataTypes.DATE },
   deliveredAt: { type: DataTypes.DATE },
   isFraudFlagged: { type: DataTypes.BOOLEAN, defaultValue: false },
   invoicePath: { type: DataTypes.STRING(500) },
+  statusTimeline: { type: DataTypes.JSON, defaultValue: {} },
 }, {
   tableName: 'Orders',
   timestamps: true,

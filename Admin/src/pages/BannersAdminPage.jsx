@@ -426,7 +426,16 @@ const BannersAdminPage = () => {
   };
 
   const handleToggle = async (b) => {
+    const previousState = b.isActive;
+    const nextState = !previousState;
+
+    // 1. Optimistic UI update
+    setBanners((prev) =>
+      prev.map((item) => (item.id === b.id ? { ...item, isActive: nextState } : item))
+    );
+
     try {
+      // 2. Silent backend sync
       await api.put(`/banners/${b.id}`, {
         title: b.title,
         subtitle: b.subtitle,
@@ -436,11 +445,14 @@ const BannersAdminPage = () => {
         position: b.position,
         badgeText: b.badgeText,
         countdown: b.countdown || '',
-        isActive: !b.isActive
+        isActive: nextState,
       });
-      toast.success(`Banner ${!b.isActive ? 'activated' : 'deactivated'}`);
-      load();
+      toast.success(`Banner ${nextState ? 'activated' : 'deactivated'}`);
     } catch (err) {
+      // 3. Rollback on error
+      setBanners((prev) =>
+        prev.map((item) => (item.id === b.id ? { ...item, isActive: previousState } : item))
+      );
       toast.error(err.response?.data?.message || err.message || 'Failed to update banner status');
       console.error(err);
     }
@@ -517,7 +529,9 @@ const BannersAdminPage = () => {
                     <span className="bg-brand-gold text-white text-[10px] font-bold px-2 py-0.5 rounded shadow-2xs">
                       {banner.type === 'EXCLUSIVE_DEAL' ? 'EXCLUSIVE DEAL' : banner.type}
                     </span>
-                    <span className="bg-white/90 text-brand-text text-[10px] font-bold px-2 py-0.5 rounded border border-brand-light">Pos: {banner.position}</span>
+                    {banner.type !== 'COUNTDOWN' && (
+                      <span className="bg-white/90 text-brand-text text-[10px] font-bold px-2 py-0.5 rounded border border-brand-light">Pos: {banner.position}</span>
+                    )}
                     {!banner.isActive && (
                       <span className="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded">Inactive</span>
                     )}
@@ -573,7 +587,7 @@ const BannersAdminPage = () => {
 
               <form onSubmit={handleSave} className="p-6 space-y-4">
                 {/* Banner Type select dropdown — ordered exactly like homepage display (1st Hero, 2nd Countdown, 3rd Exclusive Deal, 4th Promo) */}
-                <div className="grid grid-cols-2 gap-4">
+                <div className={`grid ${form.type === 'COUNTDOWN' ? 'grid-cols-1' : 'grid-cols-2'} gap-4`}>
                   <div>
                     <label className="block text-xs font-semibold text-brand-grey mb-1.5" htmlFor="ban-type">
                       Banner Type (Section Order) *
@@ -590,10 +604,12 @@ const BannersAdminPage = () => {
                       <option value="PROMO">PROMO</option>
                     </select>
                   </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-brand-grey mb-1.5" htmlFor="ban-pos">Position Order</label>
-                    <input id="ban-pos" type="number" min="1" value={form.position} onChange={e => setForm(p => ({ ...p, position: Number(e.target.value) }))} className="w-full border border-brand-light px-3 py-2 text-sm focus:outline-none focus:border-brand-gold rounded-sm" />
-                  </div>
+                  {form.type !== 'COUNTDOWN' && (
+                    <div>
+                      <label className="block text-xs font-semibold text-brand-grey mb-1.5" htmlFor="ban-pos">Position Order</label>
+                      <input id="ban-pos" type="number" min="1" value={form.position} onChange={e => setForm(p => ({ ...p, position: Number(e.target.value) }))} className="w-full border border-brand-light px-3 py-2 text-sm focus:outline-none focus:border-brand-gold rounded-sm" />
+                    </div>
+                  )}
                 </div>
 
                 {/* Banner Image Upload & Live Dimension Inspector */}

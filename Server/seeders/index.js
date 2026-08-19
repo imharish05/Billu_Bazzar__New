@@ -60,6 +60,15 @@ const seedAll = async () => {
     console.log('✅ Categories seeded (13 total)');
   }
 
+  // ─── Products ─────────────────────────────────────────────────────────────
+  if (await isTableEmpty(Product)) {
+    const allCategories = await Category.findAll();
+    const catMap = {};
+    allCategories.forEach(c => { catMap[c.slug] = c.id; });
+    const vendors = await Vendor.findAll();
+    const rawVMap = {};
+    vendors.forEach((v, i) => { rawVMap[i] = v.id; });
+
     // Proxy wrapper for vendor lookups with safety fallback
     const vMap = new Proxy(rawVMap, {
       get: (target, prop) => {

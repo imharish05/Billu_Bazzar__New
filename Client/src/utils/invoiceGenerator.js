@@ -243,7 +243,7 @@ export const generateInvoiceHTML = (order) => {
         <h1>TAX INVOICE</h1>
         <div class="invoice-meta">
           <p><strong>Invoice No:</strong> ${invoiceNum}</p>
-          <p><strong>Order Ref:</strong> #${orderNum}</p>
+          <p><strong>Order Ref:</strong> ${orderNum}</p>
           <p><strong>Date:</strong> ${invoiceDate}</p>
           <p style="margin-top: 4px;">
             <span class="badge ${isPaid ? 'badge-paid' : 'badge-pending'}">

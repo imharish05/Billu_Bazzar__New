@@ -82,9 +82,21 @@ const renderAddress = (rawAddr) => {
         {country ? `, ${country}` : ''}
       </p>
       {(phone || email) && (
-        <div className="text-neutral-500 text-[11px] pt-1.5 border-t border-neutral-100 mt-2 space-y-0.5">
-          {phone && <p className="flex items-center gap-1"><Phone size={11} className="text-brand-gold" /> {phone}</p>}
-          {email && <p className="flex items-center gap-1"><Mail size={11} className="text-brand-gold" /> {email}</p>}
+        <div className="text-neutral-600 text-[11px] pt-1.5 border-t border-neutral-100 mt-2 space-y-0.5">
+          {phone && (
+            <p className="flex items-center gap-1">
+              <Phone size={11} className="text-brand-gold shrink-0" />
+              <span className="font-medium text-neutral-800">Phone : </span>
+              <span>{phone}</span>
+            </p>
+          )}
+          {email && (
+            <p className="flex items-center gap-1 break-all">
+              <Mail size={11} className="text-brand-gold shrink-0" />
+              <span className="font-medium text-neutral-800">Email : </span>
+              <span>{email}</span>
+            </p>
+          )}
         </div>
       )}
     </div>
@@ -104,7 +116,7 @@ const AdminOrderDetailsModal = ({ order, onClose, onStatusUpdate }) => {
   const customerPhone = order.customer?.phone || billingObj.phone || shippingObj.phone || '';
 
   const handlePrintInvoice = () => {
-    toast.success(`Printing Tax Invoice for Order #${order.orderNumber}...`);
+    toast.success(`Printing Tax Invoice for Order ${order.orderNumber}...`);
     window.print();
   };
 
@@ -121,7 +133,7 @@ const AdminOrderDetailsModal = ({ order, onClose, onStatusUpdate }) => {
         <div className="sticky top-0 bg-white z-20 px-6 py-4 border-b border-neutral-200 flex justify-between items-center flex-wrap gap-3">
           <div>
             <div className="flex items-center gap-3">
-              <h2 className="font-playfair text-xl font-bold text-neutral-900">Order #{order.orderNumber}</h2>
+              <h2 className="font-playfair text-xl font-bold text-neutral-900">Order {order.orderNumber}</h2>
               <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border uppercase tracking-wider ${STATUS_COLORS[order.status] || 'bg-neutral-100 text-neutral-700'}`}>
                 {order.status ? order.status.replace(/_/g, ' ') : 'PENDING'}
               </span>

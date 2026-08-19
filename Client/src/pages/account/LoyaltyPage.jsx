@@ -14,6 +14,7 @@ import api from '../../services/api';
  */
 const LoyaltyPage = () => {
   const customer = useSelector((state) => state.auth.customer);
+  const { code: currencyCode, rate: currencyRate } = useSelector((state) => state.currency);
 
   const [earnRules, setEarnRules] = useState(defaultEarnRules);
   const [loadingRules, setLoadingRules] = useState(true);
@@ -34,12 +35,13 @@ const LoyaltyPage = () => {
         if (settingsRes.data?.success && settingsRes.data?.data) {
           const d = settingsRes.data.data;
           if (d.redeemRate) {
-            setRedeemRate(d.redeemRate);
+            setRedeemRate(Number(d.redeemRate));
           }
 
           const dynamicRules = [];
           if (d.earnRate) {
-            dynamicRules.push({ action: `Shopping (Every ₹${d.earnRate} spent)`, points: '+1 point' });
+            const earnFormatted = formatPrice(d.earnRate, currencyCode, currencyRate);
+            dynamicRules.push({ action: `Shopping (Every ${earnFormatted} spent)`, points: '+1 point' });
           }
           if (d.signupPointsEnabled !== false && Number(d.signupPoints || 0) > 0) {
             dynamicRules.push({ action: 'Create an Account / Registration', points: `+${d.signupPoints} points` });
@@ -77,7 +79,7 @@ const LoyaltyPage = () => {
       setLoadingRules(false);
       setLoadingLedger(false);
     }
-  }, [customer]);
+  }, [customer, currencyCode, currencyRate]);
 
   const loyaltyTier = balance >= 1000 ? 'Gold' : balance >= 500 ? 'Silver' : 'Bronze';
   const worth = balance * redeemRate;
@@ -91,11 +93,11 @@ const LoyaltyPage = () => {
         <div className="bg-gradient-to-r from-brand-gold to-yellow-500 text-white p-6">
           <p className="text-sm opacity-80 mb-1 text-white">Loyalty Points · {loyaltyTier} Tier</p>
           <p className="font-playfair text-5xl font-bold text-white">{balance}</p>
-          <p className="text-sm opacity-80 mt-1 text-white">Worth {formatPrice(worth)}</p>
+          <p className="text-sm opacity-80 mt-1 text-white">Worth {formatPrice(worth, currencyCode, currencyRate)}</p>
         </div>
         <div className="bg-brand-text text-white p-6">
           <p className="text-sm opacity-70 mb-1 flex items-center gap-1.5 text-white"><Wallet size={14} /> Cashback Wallet</p>
-          <p className="font-playfair text-5xl font-bold text-white">{formatPrice(cashbackBalance)}</p>
+          <p className="font-playfair text-5xl font-bold text-white">{formatPrice(cashbackBalance, currencyCode, currencyRate)}</p>
           <p className="text-sm opacity-70 mt-1 text-white">Auto-applies at checkout</p>
         </div>
       </div>

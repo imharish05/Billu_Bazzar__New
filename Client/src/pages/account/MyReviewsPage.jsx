@@ -68,7 +68,7 @@ const EditReviewModal = ({ item, onClose, onSave, submitting }) => {
           />
           <div>
             <h3 className="font-semibold text-neutral-900 text-sm">{item.productName}</h3>
-            <p className="text-xs text-neutral-400">Order #{item.orderNumber}</p>
+            <p className="text-xs text-neutral-400">Order {item.orderNumber}</p>
           </div>
         </div>
 
@@ -275,7 +275,7 @@ const MyReviewsPage = () => {
                           <ExternalLink size={13} className="text-neutral-400 flex-shrink-0" />
                         </Link>
                         <p className="text-[11px] sm:text-xs text-neutral-400 mt-0.5">
-                          Order #{item.orderNumber} · {new Date(item.deliveredAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          Order {item.orderNumber} · {new Date(item.deliveredAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
                         </p>
                       </div>
 

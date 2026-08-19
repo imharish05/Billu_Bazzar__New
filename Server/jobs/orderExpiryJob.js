@@ -72,7 +72,7 @@ cron.schedule('* * * * *', async () => {
                 orderId: order.id,
                 quantity: item.quantity,
                 type: 'ORDER_CANCEL_RESTOCK',
-                reason: `Order payment timeout (15 min expired): #${order.orderNumber}`
+                reason: `Order payment timeout (15 min expired): ${order.orderNumber}`
               }, { transaction });
             }
           }
@@ -85,7 +85,7 @@ cron.schedule('* * * * *', async () => {
             }
           }
 
-          console.log(`[OrderExpiryJob] Successfully expired unpaid Order #${order.orderNumber} (ID: ${order.id}) and restocked inventory.`);
+          console.log(`[OrderExpiryJob] Successfully expired unpaid Order ${order.orderNumber} (ID: ${order.id}) and restocked inventory.`);
         } else {
           await transaction.rollback();
         }

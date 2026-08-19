@@ -10,26 +10,36 @@ class TelrService extends PaymentGatewayInterface {
    * @param {number} orderData.amount - Total amount in standard currency unit (AED)
    * @param {string} [orderData.currency='AED'] - Currency code
    * @param {string} orderData.receipt - Unique order number or receipt code
+   * @param {string|number} [orderData.orderId] - Internal database order ID
    * @returns {Promise<import('./PaymentGatewayInterface').PaymentResult>}
    */
-  async createOrder({ amount, currency = 'AED', receipt }) {
+  async createOrder({ amount, currency = 'AED', receipt, orderId }) {
     try {
+      const clientUrl = process.env.CLIENT_URL || process.env.FRONTEND_URL || 'http://localhost:5173';
+      const storeId = process.env.TELR_STORE_ID || 'mock_store_id';
+      const authKey = process.env.TELR_AUTH_KEY || 'mock_auth_key';
+      const isTestMode = process.env.TELR_TEST_MODE !== undefined ? process.env.TELR_TEST_MODE : '1';
+
       // ── TELR CREDENTIAL CHECK & FALLBACK ─────────────────────────────────────
       // If real Telr keys are not configured in .env, run in simulation mode.
       // Once real TELR_STORE_ID & TELR_AUTH_KEY are added to .env, this will
       // automatically execute the live Telr gateway request below.
-      const hasRealKeys = process.env.TELR_STORE_ID && process.env.TELR_STORE_ID !== 'mock_store_id' &&
-                          process.env.TELR_AUTH_KEY && process.env.TELR_AUTH_KEY !== 'mock_auth_key';
+      const hasRealKeys = process.env.TELR_STORE_ID && 
+                          process.env.TELR_STORE_ID !== 'mock_store_id' &&
+                          process.env.TELR_AUTH_KEY && 
+                          process.env.TELR_AUTH_KEY !== 'mock_auth_key';
+
+      const orderParam = orderId ? `orderId=${orderId}&orderNumber=${receipt}` : `orderId=${receipt}&cartId=${receipt}`;
 
       if (!hasRealKeys) {
         console.log('[TelrService] TELR_STORE_ID/AUTH_KEY not set in .env. Running Telr in simulation mode.');
         return {
           success: true,
           gatewayRef: `telr_sim_${Date.now()}`,
-          amount,
+          amount: parseFloat(amount),
           currency,
           status: 'CREATED',
-          redirectUrl: `${clientUrl}/order-confirmation?gateway=telr&status=success&cartId=${receipt}`,
+          redirectUrl: `${clientUrl}/order-confirmation?gateway=telr&status=success&${orderParam}`,
           raw: { isSimulation: true, note: 'Add TELR_STORE_ID & TELR_AUTH_KEY to .env for live Telr payment redirect' },
         };
       }
@@ -39,14 +49,14 @@ class TelrService extends PaymentGatewayInterface {
         ivp_method: 'create',
         ivp_store: storeId,
         ivp_authkey: authKey,
-        ivp_cart: receipt,
-        ivp_test: isTestMode,
+        ivp_cart: String(receipt),
+        ivp_test: String(isTestMode),
         ivp_amount: parseFloat(amount).toFixed(2),
         ivp_currency: currency,
         ivp_desc: `Payment for Order ${receipt}`,
-        return_auth: `${clientUrl}/order-confirmation?gateway=telr&status=success&cartId=${receipt}`,
-        return_decl: `${clientUrl}/checkout?gateway=telr&status=declined&cartId=${receipt}`,
-        return_can: `${clientUrl}/checkout?gateway=telr&status=cancelled&cartId=${receipt}`,
+        return_auth: `${clientUrl}/order-confirmation?gateway=telr&status=success&${orderParam}`,
+        return_decl: `${clientUrl}/checkout?gateway=telr&status=declined&${orderParam}`,
+        return_can: `${clientUrl}/checkout?gateway=telr&status=cancelled&${orderParam}`,
       };
 
       const response = await axios.post('https://secure.telr.com/gateway/order.json', payload);
@@ -64,7 +74,7 @@ class TelrService extends PaymentGatewayInterface {
       return {
         success: true,
         gatewayRef: data.order.ref,
-        amount,
+        amount: parseFloat(amount),
         currency,
         status: 'CREATED',
         redirectUrl: data.order.url,
@@ -85,6 +95,15 @@ class TelrService extends PaymentGatewayInterface {
    */
   async verifySignature(payload, signature) {
     try {
+      const hasRealKeys = process.env.TELR_STORE_ID && 
+                          process.env.TELR_STORE_ID !== 'mock_store_id' &&
+                          process.env.TELR_AUTH_KEY && 
+                          process.env.TELR_AUTH_KEY !== 'mock_auth_key';
+
+      if (!hasRealKeys) {
+        return true;
+      }
+
       const storeId = payload.tran_store || payload.store || payload.ivp_store;
       const orderRef = payload.tran_order_ref || payload.order_ref || payload.ivp_order;
       const expectedStoreId = process.env.TELR_STORE_ID || 'mock_store_id';
@@ -110,6 +129,22 @@ class TelrService extends PaymentGatewayInterface {
    */
   async fetchPayment(orderRef) {
     try {
+      const hasRealKeys = process.env.TELR_STORE_ID && 
+                          process.env.TELR_STORE_ID !== 'mock_store_id' &&
+                          process.env.TELR_AUTH_KEY && 
+                          process.env.TELR_AUTH_KEY !== 'mock_auth_key';
+
+      if (!hasRealKeys || (typeof orderRef === 'string' && orderRef.startsWith('telr_sim_'))) {
+        return {
+          success: true,
+          gatewayRef: orderRef,
+          amount: 0,
+          currency: 'AED',
+          status: 'PAID',
+          raw: { isSimulation: true }
+        };
+      }
+
       const storeId = process.env.TELR_STORE_ID || 'mock_store_id';
       const authKey = process.env.TELR_AUTH_KEY || 'mock_auth_key';
 
@@ -153,6 +188,22 @@ class TelrService extends PaymentGatewayInterface {
    */
   async refund(orderRef, amount) {
     try {
+      const hasRealKeys = process.env.TELR_STORE_ID && 
+                          process.env.TELR_STORE_ID !== 'mock_store_id' &&
+                          process.env.TELR_AUTH_KEY && 
+                          process.env.TELR_AUTH_KEY !== 'mock_auth_key';
+
+      if (!hasRealKeys || (typeof orderRef === 'string' && orderRef.startsWith('telr_sim_'))) {
+        return {
+          success: true,
+          gatewayRef: orderRef,
+          amount: parseFloat(amount),
+          currency: 'AED',
+          status: 'REFUNDED',
+          raw: { isSimulation: true }
+        };
+      }
+
       const storeId = process.env.TELR_STORE_ID || 'mock_store_id';
       const authKey = process.env.TELR_AUTH_KEY || 'mock_auth_key';
 
@@ -178,7 +229,7 @@ class TelrService extends PaymentGatewayInterface {
       return {
         success,
         gatewayRef: data.order?.ref || orderRef,
-        amount,
+        amount: parseFloat(amount),
         currency: data.order?.currency || 'AED',
         status: success ? 'REFUNDED' : 'FAILED',
         raw: data,

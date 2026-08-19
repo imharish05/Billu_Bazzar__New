@@ -158,11 +158,23 @@ const AffiliatesAdminPage = () => {
   };
 
   const handleToggleActive = async (aff) => {
+    const previousState = aff.isActive;
+    const nextState = !previousState;
+
+    // 1. Optimistic UI update
+    setAffiliates((prev) =>
+      prev.map((a) => (a.id === aff.id ? { ...a, isActive: nextState } : a))
+    );
+
     try {
-      await api.put(`/affiliates/${aff.id}`, { ...aff, isActive: !aff.isActive });
-      toast.success(aff.isActive ? 'Affiliate link disabled' : 'Affiliate link activated');
-      load();
+      // 2. Silent backend sync
+      await api.put(`/affiliates/${aff.id}`, { ...aff, isActive: nextState });
+      toast.success(nextState ? 'Affiliate link activated' : 'Affiliate link disabled');
     } catch (err) {
+      // 3. Rollback on error
+      setAffiliates((prev) =>
+        prev.map((a) => (a.id === aff.id ? { ...a, isActive: previousState } : a))
+      );
       console.error(err);
       toast.error('Failed to update status.');
     }
@@ -825,7 +837,7 @@ const AffiliatesAdminPage = () => {
                 <table className="w-full text-xs text-left border-collapse">
                   <thead>
                     <tr className="bg-brand-light/40 border-b border-brand-light text-brand-grey font-semibold uppercase">
-                      <th className="px-4 py-3">Order #</th>
+                      <th className="px-4 py-3">Order</th>
                       <th className="px-4 py-3">Customer</th>
                       <th className="px-4 py-3">Date</th>
                       <th className="px-4 py-3">Order Total</th>

@@ -920,7 +920,7 @@ const ProductDetailsPage = () => {
               <div>
                 <div className="flex justify-between items-center mb-3">
                   <p className="font-medium text-sm">Select Size {selectedSize && <span className="text-brand-gold">— {selectedSize}</span>}</p>
-                  <button className="text-xs text-brand-gold underline focus-visible:outline-brand-gold" id="size-guide-btn">Size Guide</button>
+                  {/* <button className="text-xs text-brand-gold underline focus-visible:outline-brand-gold" id="size-guide-btn">Size Guide</button> */}
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {sizes.map(size => (

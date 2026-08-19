@@ -107,8 +107,7 @@ const ReportsAdminPage = () => {
         currency: o.currency || 'INR',
         itemsCount: o.items?.length || 1,
         paymentMethod: o.paymentMethod || 'Razorpay',
-        status: o.status || 'PENDING',
-        shiprocket: o.shiprocketOrderId || 'Pending'
+        status: o.status || 'PENDING'
       }));
     } 
     
@@ -307,8 +306,7 @@ const ReportsAdminPage = () => {
           'Currency': r.currency,
           'Items Count': r.itemsCount,
           'Payment Method': r.paymentMethod,
-          'Order Status': r.status,
-          'Shiprocket Tracking': r.shiprocket
+          'Order Status': r.status
         }));
       } else if (reportType === 'customers') {
         exportRows = filteredData.map((r, i) => ({
@@ -605,7 +603,6 @@ const ReportsAdminPage = () => {
                       <th className="px-5 py-3 text-[11px] font-bold uppercase tracking-wider text-brand-grey">Date</th>
                       <th className="px-5 py-3 text-[11px] font-bold uppercase tracking-wider text-brand-grey">Total Amount</th>
                       <th className="px-5 py-3 text-[11px] font-bold uppercase tracking-wider text-brand-grey">Payment Method</th>
-                      <th className="px-5 py-3 text-[11px] font-bold uppercase tracking-wider text-brand-grey">Shiprocket ID</th>
                       <th className="px-5 py-3 text-[11px] font-bold uppercase tracking-wider text-brand-grey text-right">Order Status</th>
                     </>
                   )}
@@ -670,7 +667,6 @@ const ReportsAdminPage = () => {
                             {row.currency === 'AED' ? fmtAED(row.totalAmount) : fmtINR(row.totalAmount)}
                           </td>
                           <td className="px-5 py-3.5 text-neutral-600">{row.paymentMethod}</td>
-                          <td className="px-5 py-3.5 font-mono text-[11px] text-neutral-500">{row.shiprocket}</td>
                           <td className="px-5 py-3.5 text-right">
                             <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
                               row.status === 'DELIVERED' ? 'bg-emerald-100 text-emerald-800' :

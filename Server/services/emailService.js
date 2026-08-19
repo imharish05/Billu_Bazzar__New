@@ -252,7 +252,7 @@ const sendOrderStatusNotification = async (order, statusTypeOverride = null) => 
     ).trim();
 
     if (!toEmail) {
-      console.warn(`[emailService] Cannot send status email for Order #${order.orderNumber} - no recipient email found.`);
+      console.warn(`[emailService] Cannot send status email for Order ${order.orderNumber} - no recipient email found.`);
       return null;
     }
 
@@ -270,63 +270,63 @@ const sendOrderStatusNotification = async (order, statusTypeOverride = null) => 
     const statusConfig = {
       PAID: {
         heading: 'Your Order Has Been Confirmed',
-        subject: `Your Billu Bazaar Order #${order.orderNumber} is Confirmed!`,
+        subject: `Your Billu Bazaar Order ${order.orderNumber} is Confirmed!`,
         badgeText: 'Confirmed',
         icon: '🎉',
         message: 'Thank you for your purchase! We have successfully received your payment and your team is preparing it for shipment.',
       },
       CONFIRMED: {
         heading: 'Your Order Has Been Confirmed',
-        subject: `Your Billu Bazaar Order #${order.orderNumber} is Confirmed!`,
+        subject: `Your Billu Bazaar Order ${order.orderNumber} is Confirmed!`,
         badgeText: 'Confirmed',
         icon: '🎉',
         message: 'Thank you for your purchase! We have successfully received your order and our team is preparing it for shipment.',
       },
       PENDING: {
         heading: 'Your Order Has Been Received',
-        subject: `Order Received #${order.orderNumber} - Billu Bazaar`,
+        subject: `Order Received ${order.orderNumber} - Billu Bazaar`,
         badgeText: 'Pending',
         icon: '⏳',
         message: 'Thank you for your order! We have received your order details and are waiting for confirmation.',
       },
       PROCESSING: {
         heading: 'Your Order is Being Packed',
-        subject: `Your Order #${order.orderNumber} is Being Packed!`,
+        subject: `Your Order ${order.orderNumber} is Being Packed!`,
         badgeText: 'Processing',
         icon: '📦',
         message: 'Great news! Our warehouse team is currently packing your items with care.',
       },
       SHIPPED: {
         heading: 'Your Order Has Been Dispatched',
-        subject: `Your Order #${order.orderNumber} Has Been Dispatched!`,
+        subject: `Your Order ${order.orderNumber} Has Been Dispatched!`,
         badgeText: 'Dispatched',
         icon: '🚚',
         message: 'Your package is on its way! You can track your shipment using the tracking details below.',
       },
       OUT_FOR_DELIVERY: {
         heading: 'Your Order is Out for Delivery',
-        subject: `Your Order #${order.orderNumber} is Out for Delivery!`,
+        subject: `Your Order ${order.orderNumber} is Out for Delivery!`,
         badgeText: 'Out for Delivery',
         icon: '🚀',
         message: 'Get ready! Your package is out for delivery today and will reach your address soon.',
       },
       DELIVERED: {
         heading: 'Your Order Has Been Delivered',
-        subject: `Your Order #${order.orderNumber} Has Been Delivered!`,
+        subject: `Your Order ${order.orderNumber} Has Been Delivered!`,
         badgeText: 'Delivered',
         icon: '🎁',
         message: 'Your order has been successfully delivered. We hope you love your purchase!',
       },
       CANCELLED: {
         heading: 'Your Order Has Been Cancelled',
-        subject: `Your Order #${order.orderNumber} Has Been Cancelled`,
+        subject: `Your Order ${order.orderNumber} Has Been Cancelled`,
         badgeText: 'Cancelled',
         icon: '❌',
         message: 'Your order has been cancelled. If you have any questions or require assistance, please contact support.',
       },
       REFUNDED: {
         heading: 'Refund Has Been Processed',
-        subject: `Refund Processed for Order #${order.orderNumber}`,
+        subject: `Refund Processed for Order ${order.orderNumber}`,
         badgeText: 'Refunded',
         icon: '💳',
         message: 'Your refund has been successfully processed to your original payment method.',
@@ -335,7 +335,7 @@ const sendOrderStatusNotification = async (order, statusTypeOverride = null) => 
 
     const config = statusConfig[currentStatus] || {
       heading: `Order Status Updated: ${currentStatus}`,
-      subject: `Update on your Billu Bazaar Order #${order.orderNumber}`,
+      subject: `Update on your Billu Bazaar Order ${order.orderNumber}`,
       badgeText: currentStatus,
       icon: '🔔',
       message: `Your order status has been updated to ${currentStatus}.`,
@@ -468,7 +468,7 @@ const sendOrderStatusNotification = async (order, statusTypeOverride = null) => 
                         </td>
                         <td>
                           <span style="background-color:#1A1A1A;color:#FFFFFF;padding:6px 16px;border-radius:20px;font-size:12px;font-weight:700;display:inline-block;letter-spacing:0.02em;">
-                            Order ID: <span style="color:#C9A24B;">#${order.orderNumber}</span>
+                            Order ID: <span style="color:#C9A24B;">${order.orderNumber}</span>
                           </span>
                         </td>
                       </tr>
@@ -620,10 +620,10 @@ const sendOrderStatusNotification = async (order, statusTypeOverride = null) => 
     };
 
     const info = await transporter.sendMail(mailOptions);
-    console.log(`✅ Order status email [${currentStatus}] sent to [${recipients.join(', ')}] for Order #${order.orderNumber} — MsgID: ${info.messageId}`);
+    console.log(`✅ Order status email [${currentStatus}] sent to [${recipients.join(', ')}] for Order ${order.orderNumber} — MsgID: ${info.messageId}`);
     return info;
   } catch (err) {
-    console.error(`❌ Failed to send order status email for Order #${order.orderNumber}:`, err.message);
+    console.error(`❌ Failed to send order status email for Order ${order.orderNumber}:`, err.message);
     return null;
   }
 };

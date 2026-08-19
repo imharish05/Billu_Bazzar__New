@@ -6,20 +6,6 @@ const { Op } = require('sequelize');
 const resolver = require('../services/paymentGatewayResolver');
 const { sendOrderStatusNotification } = require('../services/emailService');
 
-// Helper to push order details to Shiprocket shipping API
-const pushToShiprocket = async (orderId) => {
-  try {
-    const order = await Order.findByPk(orderId, { include: [{ model: OrderItem, as: 'items' }] });
-    if (!order) return;
-    
-    console.log(`[Shiprocket] Asynchronously sending Order #${order.orderNumber} to Shiprocket API...`);
-    await order.update({ shiprocketOrderId: `SR-${Math.floor(Math.random() * 10000000)}` });
-    console.log(`[Shiprocket] Order #${order.orderNumber} successfully pushed to Shiprocket.`);
-  } catch (err) {
-    console.error(`[Shiprocket] Error pushing order ${orderId} to Shiprocket:`, err.message);
-  }
-};
-
 // Helper to check and alert administrators of low stock events
 const checkAndNotifyLowStock = async (items) => {
   try {
@@ -92,9 +78,17 @@ const initiateIdempotentRefund = async (orderId, paymentId, amount) => {
     }
 
     // Update order status and payment status to REFUNDED
+    let currentTimeline = order.statusTimeline || {};
+    if (typeof currentTimeline === 'string') {
+      try { currentTimeline = JSON.parse(currentTimeline); } catch (e) { currentTimeline = {}; }
+    }
     await order.update({
       status: 'REFUNDED',
-      paymentStatus: 'REFUNDED'
+      paymentStatus: 'REFUNDED',
+      statusTimeline: {
+        ...currentTimeline,
+        REFUNDED: new Date().toISOString()
+      }
     });
 
     // 2. Log refund to audit trail
@@ -123,7 +117,7 @@ const initiatePayment = async (req, res) => {
     // Lookup only by id — customerId can be null for guest orders
     const order = await Order.findOne({ where: { id: orderId } });
     if (!order) {
-      return res.status(404).json({ success: false, message: `Order #${orderId} not found` });
+      return res.status(404).json({ success: false, message: `Order ${orderId} not found` });
     }
 
     if (order.status !== 'PENDING_PAYMENT') {
@@ -135,12 +129,13 @@ const initiatePayment = async (req, res) => {
 
     // Resolve gateway based on order currency (INR → Razorpay, AED → Telr)
     const gateway = resolver.getGateway(order.currency);
-    console.log(`[initiatePayment] Order #${order.orderNumber} | Currency: ${order.currency} | Gateway: ${order.currency === 'INR' ? 'Razorpay' : 'Telr'}`);
+    console.log(`[initiatePayment] Order ${order.orderNumber} | Currency: ${order.currency} | Gateway: ${order.currency === 'INR' ? 'Razorpay' : 'Telr'}`);
 
     const gatewayOrder = await gateway.createOrder({
       amount: parseFloat(order.totalAmount),
       currency: order.currency,
       receipt: order.orderNumber,
+      orderId: order.id,
     });
 
     console.log(`[initiatePayment] Gateway order created: ${gatewayOrder.gatewayRef}`);
@@ -297,6 +292,18 @@ const processConfirmedPayment = async ({ orderQuery, gatewayPaymentId, signature
         }
       }
 
+      let currentTimeline = order.statusTimeline || {};
+      if (typeof currentTimeline === 'string') {
+        try { currentTimeline = JSON.parse(currentTimeline); } catch (e) { currentTimeline = {}; }
+      }
+      const nowIso = new Date().toISOString();
+      const updatedTimeline = {
+        ...currentTimeline,
+        PAID: nowIso,
+        CONFIRMED: currentTimeline.CONFIRMED || nowIso,
+        PENDING: currentTimeline.PENDING || (order.createdAt ? new Date(order.createdAt).toISOString() : nowIso)
+      };
+
       // Update Order PAID status
       await order.update({
         status: 'PAID',
@@ -304,12 +311,14 @@ const processConfirmedPayment = async ({ orderQuery, gatewayPaymentId, signature
         razorpay_payment_id: gatewayPaymentId,
         razorpay_signature: signature || null,
         paymentGatewayRef: order.paymentGatewayRef || gatewayPaymentId,
-        inventoryProcessed: true
+        inventoryProcessed: true,
+        statusTimeline: updatedTimeline
       }, { transaction });
 
       // Credit earned loyalty points to customer account ONLY after payment confirmation
       if (order.customerId) {
         const { LoyaltyLedger, SiteSetting } = require('../models');
+        const currencyRateService = require('../services/currencyRateService');
         const customer = await Customer.findByPk(order.customerId, { transaction });
         if (customer) {
           const existingEarn = await LoyaltyLedger.findOne({
@@ -323,7 +332,14 @@ const processConfirmedPayment = async ({ orderQuery, gatewayPaymentId, signature
               try { loyaltySettings = { ...loyaltySettings, ...JSON.parse(settingsRec.value) }; } catch (e) {}
             }
             const netAmount = Number(order.totalAmount || 0);
-            const earnedPts = Math.floor(netAmount / Number(loyaltySettings.earnRate || 20));
+            let baseAmountInr = netAmount;
+            if (String(order.currency).toUpperCase() === 'AED') {
+              const liveRate = currencyRateService.getRate();
+              const rate = (liveRate > 0) ? liveRate : currencyRateService.FALLBACK_RATE;
+              baseAmountInr = netAmount * rate;
+            }
+            const earnRate = Number(loyaltySettings.earnRate) || 20;
+            const earnedPts = earnRate > 0 ? Math.floor(baseAmountInr / earnRate) : 0;
             if (earnedPts > 0) {
               await LoyaltyLedger.create({
                 customerId: customer.id,
@@ -346,7 +362,6 @@ const processConfirmedPayment = async ({ orderQuery, gatewayPaymentId, signature
         syncStorefrontStock(item.productId, item.variantId || null).catch(console.error);
       }
 
-      pushToShiprocket(order.id).catch(console.error);
       checkAndNotifyLowStock(sortedItems).catch(console.error);
       sendOrderStatusNotification(order, 'PAID').catch(err => console.error('[paymentController] Error sending order paid email:', err.message));
 
@@ -553,7 +568,7 @@ const verifyRazorpayPayment = async (req, res) => {
       gatewayPaymentId: payId,
       signature: sig,
       paymentAmount: parseFloat(order.totalAmount),
-      gatewayType: 'razorpay',
+      gatewayType: order.currency === 'AED' ? 'telr' : 'razorpay',
       res
     });
   } catch (err) {

@@ -56,15 +56,29 @@ const ReviewsAdminPage = () => {
   const handleToggleStatus = async (reviewId, currentStatus) => {
     const newStatus = !currentStatus;
     setUpdatingId(reviewId);
+
+    // 1. Optimistic UI update
+    setReviews((prev) =>
+      prev.map((r) => (r.id === reviewId ? { ...r, isApproved: newStatus } : r))
+    );
+
     try {
+      // 2. Silent backend sync
       const res = await api.patch(`/reviews/admin/${reviewId}/status`, { isApproved: newStatus });
       if (res.data?.success) {
         toast.success(`Review ${newStatus ? 'Approved' : 'Rejected'} successfully!`);
-        fetchReviews();
       } else {
+        // Rollback
+        setReviews((prev) =>
+          prev.map((r) => (r.id === reviewId ? { ...r, isApproved: currentStatus } : r))
+        );
         toast.error(res.data?.message || 'Failed to update review status');
       }
     } catch (err) {
+      // Rollback
+      setReviews((prev) =>
+        prev.map((r) => (r.id === reviewId ? { ...r, isApproved: currentStatus } : r))
+      );
       toast.error('Failed to update status');
     } finally {
       setUpdatingId(null);

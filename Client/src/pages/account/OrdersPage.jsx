@@ -1,10 +1,10 @@
 import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Package, ChevronRight, RefreshCw, CreditCard } from 'lucide-react';
+import { Package, ChevronRight, RefreshCw } from 'lucide-react';
 import { useSelector, useDispatch } from 'react-redux';
 import { fetchMyOrders } from '../../redux/slices/ordersSlice';
-import { formatPrice } from '../../utils/currency';
+import { formatPrice, formatOrderAmount } from '../../utils/currency';
 import { getImageUrl } from '../../utils/imageUrl';
 import { getPlaceholderSvg } from '../../utils/placeholder';
 
@@ -24,7 +24,7 @@ const STATUS_COLORS = {
 
 const STATUS_LABELS = {
   PENDING_PAYMENT: 'Pending Payment',
-  PAID: 'Payment Received',
+  PAID: 'Paid',
   PENDING: 'Order Placed',
   CONFIRMED: 'Confirmed',
   PROCESSING: 'Processing',
@@ -88,7 +88,7 @@ const OrdersPage = () => {
                 <div className="flex justify-between items-start mb-3 flex-wrap gap-2">
                   <div>
                     <div className="flex items-center gap-2">
-                      <p className="font-semibold text-neutral-900 text-base">Order #{order.orderNumber}</p>
+                      <p className="font-semibold text-neutral-900 text-base">Order {order.orderNumber}</p>
                       {order.currency && (
                         <span className="text-[10px] uppercase bg-neutral-100 text-neutral-600 px-1.5 py-0.5 rounded font-mono">
                           {order.currency}
@@ -147,12 +147,9 @@ const OrdersPage = () => {
                 })()}
 
                 <div className="flex justify-between items-center text-xs sm:text-sm pt-1">
-                  <div className="flex items-center gap-1.5 text-neutral-500">
-                    <CreditCard size={14} className="text-brand-gold" />
-                    <span>{itemCount} item{itemCount > 1 ? 's' : ''} · {order.paymentMethod || 'Online Payment'}</span>
-                  </div>
+                  <span className="text-neutral-500 font-medium">{itemCount} item{itemCount > 1 ? 's' : ''}</span>
                   <span className="font-bold text-brand-gold flex items-center gap-1 text-base">
-                    {formatPrice(order.totalAmount, order.currency || 'INR')}
+                    {formatOrderAmount(order.totalAmount, order.currency || 'INR')}
                     <ChevronRight size={16} className="text-brand-grey group-hover:translate-x-0.5 transition-transform" />
                   </span>
                 </div>

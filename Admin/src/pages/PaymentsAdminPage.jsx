@@ -95,7 +95,7 @@ const PaymentsAdminPage = () => {
               <table className="w-full text-sm" aria-label="Payments table">
                 <thead>
                   <tr className="bg-brand-light/40 text-left">
-                    {['Order #', 'Amount', 'Method', 'Gateway Ref', 'Status', 'Date'].map(h => (
+                    {['Order', 'Amount', 'Method', 'Gateway Ref', 'Status', 'Date'].map(h => (
                       <th key={h} className="px-4 py-3 text-xs font-semibold text-brand-grey uppercase tracking-wider">
                         {h}
                       </th>

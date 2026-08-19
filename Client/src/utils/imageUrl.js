@@ -1,6 +1,11 @@
 export const getImageUrl = (imagePath) => {
   if (!imagePath) return '';
-  if (imagePath.startsWith('http://') || imagePath.startsWith('https://') || imagePath.startsWith('data:')) {
+  if (
+    imagePath.startsWith('http://') ||
+    imagePath.startsWith('https://') ||
+    imagePath.startsWith('data:') ||
+    imagePath.startsWith('blob:')
+  ) {
     return imagePath;
   }
   const serverUrl = (import.meta.env.VITE_SERVER_URL || '').replace(/\/$/, '');
@@ -9,3 +14,4 @@ export const getImageUrl = (imagePath) => {
   }
   return imagePath;
 };
+

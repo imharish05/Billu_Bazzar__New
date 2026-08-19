@@ -19,21 +19,6 @@ const formatOrder = (order, req) => {
   return json;
 };
 
-// Helper to push order details to Shiprocket shipping API
-const pushToShiprocket = async (orderId) => {
-  try {
-    const order = await Order.findByPk(orderId, { include: [{ model: OrderItem, as: 'items' }] });
-    if (!order) return;
-    
-    console.log(`[Shiprocket] Asynchronously sending Order #${order.orderNumber} to Shiprocket API...`);
-    // Mock Shiprocket API call
-    await order.update({ shiprocketOrderId: `SR-${Math.floor(Math.random() * 10000000)}` });
-    console.log(`[Shiprocket] Order #${order.orderNumber} successfully pushed to Shiprocket.`);
-  } catch (err) {
-    console.error(`[Shiprocket] Error pushing order ${orderId} to Shiprocket:`, err.message);
-  }
-};
-
 const getAll = async (req, res) => {
   try {
     const { page = 1, limit = 20, status, customerId, search } = req.query;
@@ -194,7 +179,16 @@ const cancelMyOrder = async (req, res) => {
       }
     }
 
-    await order.update({ status: 'CANCELLED', inventoryProcessed: false }, { transaction });
+    let currentTimeline = order.statusTimeline || {};
+    if (typeof currentTimeline === 'string') {
+      try { currentTimeline = JSON.parse(currentTimeline); } catch (e) { currentTimeline = {}; }
+    }
+    const updatedTimeline = {
+      ...currentTimeline,
+      CANCELLED: new Date().toISOString()
+    };
+
+    await order.update({ status: 'CANCELLED', inventoryProcessed: false, statusTimeline: updatedTimeline }, { transaction });
     await transaction.commit();
 
     if (order.items) {
@@ -439,6 +433,7 @@ const placeOrder = async (req, res) => {
     // --- Loyalty Points & Mutual Exclusivity (Best Single Discount) ---
     let loyaltyDiscount = 0;
     let earnedPoints = 0;
+    let pointsToRedeem = 0;
     let loyaltySettings = { earnRate: 20, redeemRate: 0.2, maxRedeemAmount: 500 };
     
     const settingsRec = await SiteSetting.findOne({ where: { key: 'loyalty' }, transaction });
@@ -465,6 +460,7 @@ const placeOrder = async (req, res) => {
         } else if (potentialLoyalty > 0) {
           // Loyalty discount is strictly better -> Use loyalty points, unapply coupon
           loyaltyDiscount = potentialLoyalty;
+          pointsToRedeem = Math.ceil(loyaltyDiscount / Number(loyaltySettings.redeemRate));
           if (discountAmount > 0) {
             discountAmount = 0;
             if (couponId) {
@@ -477,9 +473,9 @@ const placeOrder = async (req, res) => {
           }
         }
         
-        // Earn points based on net paid amount
+        // Earn points based on net paid amount (in base INR)
         const amountForEarn = subtotal - discountAmount - loyaltyDiscount;
-        if (amountForEarn > 0) {
+        if (amountForEarn > 0 && Number(loyaltySettings.earnRate) > 0) {
            earnedPoints = Math.floor(amountForEarn / Number(loyaltySettings.earnRate));
         }
       }
@@ -527,24 +523,18 @@ const placeOrder = async (req, res) => {
       totalAmount = Math.round(totalAmount);
     }
 
-    // Guard: Enforce currency uniformity and resolve correct currency code
-    // Priority: 1) requestedCurrency from client (set by geo-detection), 2) shippingAddress country, 3) customer preference
-    let orderCurrency = 'INR';
-    const requestedCurrency = (reqCurrency || '').toUpperCase();
+    // Guard: Enforce strict country-based currency and payment gateway resolution
+    // India (IN) -> Strictly INR & Razorpay
+    // UAE / Dubai (AE) -> Strictly AED & Telr
     const shippingCountry = (shippingAddress?.country || '').trim().toLowerCase();
-    const isUae = ['uae', 'united arab emirates', 'dubai', 'abu dhabi', 'sharjah'].includes(shippingCountry);
+    const billingCountry = (billingAddress?.country || '').trim().toLowerCase();
+    const reqGeoCountry = (req.body.geoCountry || '').trim().toUpperCase();
 
-    if (requestedCurrency === 'AED' || requestedCurrency === 'INR') {
-      // Trust the client's geo-detected currency (validated against known codes)
-      orderCurrency = requestedCurrency;
-    } else if (isUae) {
-      orderCurrency = 'AED';
-    } else if (req.customer) {
-      const user = await Customer.findByPk(req.customer.id, { transaction });
-      if (user && user.preferredCurrency === 'AED') {
-        orderCurrency = 'AED';
-      }
-    }
+    const isUae = reqGeoCountry === 'AE' ||
+                  ['uae', 'united arab emirates', 'dubai', 'abu dhabi', 'sharjah', 'ae'].includes(shippingCountry) ||
+                  ['uae', 'united arab emirates', 'dubai', 'abu dhabi', 'sharjah', 'ae'].includes(billingCountry);
+
+    let orderCurrency = isUae ? 'AED' : 'INR';
 
     // Validate for mixed-currency carts (products priced in different currencies)
     let cartCurrency = null;
@@ -557,16 +547,14 @@ const placeOrder = async (req, res) => {
         return res.status(400).json({ success: false, message: 'Mixed currency items are not allowed in the same cart/order.' });
       }
     }
-    // NOTE: cartCurrency (product.currency in DB) is intentionally NOT used to override orderCurrency.
-    // Products are stored with INR base price but displayed/charged in AED for UAE users via exchange rate.
+    // NOTE: Products are stored with INR base price but charged in AED for UAE users via live exchange rate.
 
     // If order is AED, convert all amounts from INR to AED using exchange rate
-    // The exchange rate is: 1 AED = X INR, so AED amount = INR amount / rate
-    // Use the live cached rate from currencyRateService (refreshed every 6h), fall back to client-sent rate
+    let toAed = (inr) => inr;
     if (orderCurrency === 'AED') {
       const liveRate = currencyRateService.getRate(); // cached, zero network overhead
       const rate = liveRate > 0 ? liveRate : ((Number(reqRate) > 0) ? Number(reqRate) : currencyRateService.FALLBACK_RATE);
-      const toAed = (inr) => Math.round((inr / rate) * 100) / 100; // 2 decimal places
+      toAed = (inr) => Math.round((inr / rate) * 100) / 100; // 2 decimal places
       subtotal          = toAed(subtotal);
       discountAmount    = toAed(discountAmount);
       loyaltyDiscount   = toAed(loyaltyDiscount);
@@ -577,6 +565,10 @@ const placeOrder = async (req, res) => {
       console.log(`[placeOrder] Converted amounts to AED (rate: ${rate} INR/AED): totalAmount=${totalAmount} AED`);
     }
 
+    const resolvedPaymentMethod = isCod
+      ? 'Cash on Delivery (COD)'
+      : (orderCurrency === 'AED' ? 'Telr Secure Online' : 'Razorpay Secure Online');
+
     // 7. Create Order record
     const order = await Order.create({
       orderNumber: `BB${uuidv4().slice(0, 8).toUpperCase()}`,
@@ -586,7 +578,7 @@ const placeOrder = async (req, res) => {
       couponId,
       status: isCod ? 'CONFIRMED' : 'PENDING_PAYMENT',
       paymentStatus: 'UNPAID',
-      paymentMethod,
+      paymentMethod: resolvedPaymentMethod,
       subtotal,
       discountAmount: discountAmount + loyaltyDiscount,
       shippingAmount,
@@ -598,28 +590,35 @@ const placeOrder = async (req, res) => {
       billingAddress: billingAddress || shippingAddress,
       notes: req.body.giftMessage || req.body.notes || null,
       giftWrapFee: isGiftWrap ? giftWrapCharge : 0,
-      inventoryProcessed: isCod
+      inventoryProcessed: isCod,
+      statusTimeline: isCod
+        ? { PENDING: new Date().toISOString(), CONFIRMED: new Date().toISOString() }
+        : { PENDING_PAYMENT: new Date().toISOString(), PENDING: new Date().toISOString() }
     }, { transaction });
 
     // 8. Snap order items
-    const orderItemsPayload = itemsToLock.map(item => ({
-      orderId: order.id,
-      productId: item.productId,
-      variantId: item.variantId,
-      productName: item.name,
-      productImage: item.image,
-      quantity: item.quantity,
-      unitPrice: item.price,
-      totalPrice: item.price * item.quantity,
-      // Store clean variant attributes snapshot — DataTypes.JSON column, pass plain object directly
-      selectedVariant: (() => {
-        let sv = item.selectedVariant;
-        if (typeof sv === 'string') {
-          try { sv = JSON.parse(sv); } catch (e) { sv = null; }
-        }
-        return (sv && typeof sv === 'object' && Object.keys(sv).length > 0) ? sv : null;
-      })()
-    }));
+    const orderItemsPayload = itemsToLock.map(item => {
+      const unitPrice = (orderCurrency === 'AED') ? toAed(item.price) : item.price;
+      const totalPrice = Math.round((unitPrice * item.quantity) * 100) / 100;
+      return {
+        orderId: order.id,
+        productId: item.productId,
+        variantId: item.variantId,
+        productName: item.name,
+        productImage: item.image,
+        quantity: item.quantity,
+        unitPrice,
+        totalPrice,
+        // Store clean variant attributes snapshot — DataTypes.JSON column, pass plain object directly
+        selectedVariant: (() => {
+          let sv = item.selectedVariant;
+          if (typeof sv === 'string') {
+            try { sv = JSON.parse(sv); } catch (e) { sv = null; }
+          }
+          return (sv && typeof sv === 'object' && Object.keys(sv).length > 0) ? sv : null;
+        })()
+      };
+    });
 
     for (const snapItem of orderItemsPayload) {
       await OrderItem.create(snapItem, { transaction });
@@ -684,18 +683,17 @@ const { syncStorefrontStock, resolveWarehouseIdForItem } = require('./warehouseC
     if (req.customer && req.customer.id) {
       const user = await Customer.findByPk(req.customer.id, { transaction });
       if (user) {
-        if (loyaltyDiscount > 0) {
-          const pointsRedeemed = Math.ceil(loyaltyDiscount / Number(loyaltySettings.redeemRate));
+        if (pointsToRedeem > 0) {
           await LoyaltyLedger.create({
             customerId: user.id,
             orderId: order.id,
             type: 'REDEEM',
-            points: -pointsRedeemed,
-            balance: user.loyaltyPoints - pointsRedeemed,
+            points: -pointsToRedeem,
+            balance: user.loyaltyPoints - pointsToRedeem,
             description: `Redeemed at checkout for Order ${order.orderNumber}`
           }, { transaction });
-          await user.decrement('loyaltyPoints', { by: pointsRedeemed, transaction });
-          user.loyaltyPoints -= pointsRedeemed; // update local instance for next calculation
+          await user.decrement('loyaltyPoints', { by: pointsToRedeem, transaction });
+          user.loyaltyPoints -= pointsToRedeem; // update local instance for next calculation
         }
         
         // Earn points immediately ONLY for COD orders. Online orders earn points upon payment confirmation.
@@ -731,10 +729,6 @@ const { syncStorefrontStock, resolveWarehouseIdForItem } = require('./warehouseC
     // 11. Post-commit operations (Asynchronous)
     for (const item of itemsToLock) {
       syncStorefrontStock(item.productId, item.variantId || null).catch(console.error);
-    }
-
-    if (isCod) {
-      pushToShiprocket(order.id).catch(console.error);
     }
 
     res.status(201).json({
@@ -836,11 +830,29 @@ const updateStatus = async (req, res) => {
       order.inventoryProcessed = false;
     }
 
-    await order.update({
+    let currentTimeline = order.statusTimeline || {};
+    if (typeof currentTimeline === 'string') {
+      try { currentTimeline = JSON.parse(currentTimeline); } catch (e) { currentTimeline = {}; }
+    }
+    const updatedTimeline = {
+      ...currentTimeline,
+      [status]: new Date().toISOString()
+    };
+    if (!updatedTimeline.PENDING) {
+      updatedTimeline.PENDING = order.createdAt ? new Date(order.createdAt).toISOString() : new Date().toISOString();
+    }
+
+    const orderUpdatePayload = {
       status,
       paymentStatus: paymentStatus || order.paymentStatus,
-      inventoryProcessed: order.inventoryProcessed
-    }, { transaction });
+      inventoryProcessed: order.inventoryProcessed,
+      statusTimeline: updatedTimeline
+    };
+    if (status === 'DELIVERED' && !order.deliveredAt) {
+      orderUpdatePayload.deliveredAt = new Date();
+    }
+
+    await order.update(orderUpdatePayload, { transaction });
 
     await transaction.commit();
 

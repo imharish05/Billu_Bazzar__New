@@ -1,8 +1,9 @@
-import { useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useDispatch } from 'react-redux';
 import { Routes, Route, useLocation, Navigate } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import { Toaster, toast } from 'react-hot-toast';
+import Preloader from './components/Preloader';
 import ScrollToTop from './components/ScrollToTop';
 import Navbar from './components/Navbar';
 import CartDrawer from './components/CartDrawer';
@@ -40,6 +41,7 @@ import { getAccessToken } from './utils/tokenStorage';
 const App = () => {
   const location = useLocation();
   const dispatch = useDispatch();
+  const [initialLoading, setInitialLoading] = useState(true);
 
   useEffect(() => {
     let scrollTimeout;
@@ -139,6 +141,12 @@ const App = () => {
 
   return (
     <>
+      {initialLoading && (
+        <Preloader
+          minimumDuration={1600}
+          onFinish={() => setInitialLoading(false)}
+        />
+      )}
       <ScrollToTop />
       <Navbar />
       {/* <CartDrawer /> */}

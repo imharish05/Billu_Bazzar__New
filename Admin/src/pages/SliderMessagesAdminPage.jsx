@@ -1,9 +1,23 @@
 import { useEffect, useState } from 'react';
 import { useSelector } from 'react-redux';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, X, Edit2, Trash2, MessageSquare, Sparkles, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Plus, X, Edit2, Trash2, MessageSquare, Sparkles } from 'lucide-react';
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  arrayMove,
+} from '@dnd-kit/sortable';
+import { restrictToVerticalAxis } from '@dnd-kit/modifiers';
 import AdminLayout from '../components/AdminLayout';
 import Switch from '../components/Switch';
+import SortableRow from '../components/SortableRow';
 import api from '../services/api';
 import toast from 'react-hot-toast';
 import { checkPermission } from '../utils/rbac';
@@ -14,14 +28,17 @@ const SliderMessagesAdminPage = () => {
   const canDeleteMessage = checkPermission(admin, 'delete_slider_message');
   const canShowActions = canAddMessage || canDeleteMessage;
 
-  const sliderHeaders = ['Position', 'Message Text', 'Status'];
-  if (canShowActions) sliderHeaders.push('Actions');
-
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
-  const [form, setForm] = useState({ message: '', position: 0, isActive: true });
+  const [form, setForm] = useState({ message: '', position: 1, isActive: true });
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 5 },
+    })
+  );
 
   const load = async () => {
     try {
@@ -38,6 +55,30 @@ const SliderMessagesAdminPage = () => {
   useEffect(() => {
     load();
   }, []);
+
+  const handleDragEnd = async (event) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = messages.findIndex((m) => m.id === active.id);
+    const newIndex = messages.findIndex((m) => m.id === over.id);
+    const reordered = arrayMove(messages, oldIndex, newIndex).map((m, idx) => ({
+      ...m,
+      position: idx + 1,
+    }));
+
+    setMessages(reordered);
+
+    try {
+      await api.patch('/marketing-messages/reorder', {
+        items: reordered.map((m, idx) => ({ id: m.id, position: idx + 1 })),
+      });
+      toast.success('Order updated!');
+    } catch (err) {
+      toast.error('Failed to save order');
+      load();
+    }
+  };
 
   const handleOpenAdd = () => {
     setEditingId(null);
@@ -73,16 +114,28 @@ const SliderMessagesAdminPage = () => {
   };
 
   const handleToggleActive = async (msg) => {
+    const previousState = msg.isActive;
+    const nextState = !previousState;
+
+    // 1. Optimistic UI update — instant transition with zero lag/flicker
+    setMessages((prev) =>
+      prev.map((m) => (m.id === msg.id ? { ...m, isActive: nextState } : m))
+    );
+
     try {
+      // 2. Silent background sync
       await api.put(`/marketing-messages/${msg.id}`, {
         message: msg.message,
         position: msg.position,
-        isActive: !msg.isActive,
+        isActive: nextState,
       });
-      toast.success('Status updated');
-      load();
+      toast.success(`Message marked as ${nextState ? 'Active' : 'Inactive'}`);
     } catch (err) {
-      toast.error('Failed to update status');
+      // 3. Rollback if network/server fails
+      setMessages((prev) =>
+        prev.map((m) => (m.id === msg.id ? { ...m, isActive: previousState } : m))
+      );
+      toast.error(err.response?.data?.message || 'Failed to update status');
     }
   };
 
@@ -127,10 +180,10 @@ const SliderMessagesAdminPage = () => {
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-xl font-bold text-brand-text flex items-center gap-2">
-            <Sparkles size={20} className="text-brand-gold" /> Header Slider Announcement Messages
+             Header Slider Announcement Messages
           </h1>
           <p className="text-xs text-brand-grey mt-1">
-            Manage revolving marquee text messages displayed at the very top bar of the storefront website.
+            Manage revolving marquee text messages displayed at the very top bar of the storefront website. Drag rows or edit position to reorder.
           </p>
         </div>
         {canAddMessage && (
@@ -146,79 +199,91 @@ const SliderMessagesAdminPage = () => {
 
       <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-brand-light">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left text-brand-text" aria-label="Slider messages table">
-            <thead>
-              <tr className="bg-brand-light/40 text-brand-grey border-b border-brand-light">
-                {sliderHeaders.map(h => (
-                  <th key={h} className="px-5 py-4 text-xs font-semibold uppercase tracking-wider">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                [...Array(3)].map((_, i) => (
-                  <tr key={i} className="border-b border-brand-light">
-                    {[...Array(sliderHeaders.length)].map((_, j) => (
-                      <td key={j} className="px-5 py-4"><div className="skeleton h-5 w-24 bg-brand-light" /></td>
-                    ))}
-                  </tr>
-                ))
-              ) : messages.length === 0 ? (
-                <tr>
-                  <td colSpan={sliderHeaders.length} className="px-5 py-12 text-center text-brand-grey font-medium">
-                    <MessageSquare size={36} className="mx-auto mb-3 opacity-30 text-brand-grey" />
-                    No slider messages found. Click 'Add Message' to configure.
-                  </td>
-                </tr>
-              ) : (
-                messages.map(msg => (
-                  <tr key={msg.id} className="border-b border-brand-light hover:bg-brand-light/20 transition-colors">
-                    <td className="px-5 py-4 font-mono text-brand-gold font-bold">{msg.position}</td>
-                    <td className="px-5 py-4 font-medium text-brand-text max-w-md truncate">{msg.message}</td>
-                    <td className="px-5 py-4">
-                      <div className="flex items-center gap-2">
-                        <Switch
-                          checked={msg.isActive}
-                          disabled={!canAddMessage}
-                          onChange={() => canAddMessage && handleToggleActive(msg)}
-                          id={`toggle-status-${msg.id}`}
-                        />
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${msg.isActive ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                          {msg.isActive ? 'Active' : 'Inactive'}
-                        </span>
-                      </div>
-                    </td>
+          {loading ? (
+            <div className="p-6 space-y-3">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="skeleton h-12 w-full rounded-lg bg-brand-light" />
+              ))}
+            </div>
+          ) : messages.length === 0 ? (
+            <div className="p-12 text-center text-brand-grey font-medium">
+              <MessageSquare size={36} className="mx-auto mb-3 opacity-30 text-brand-grey" />
+              No slider messages found. Click 'Add Message' to configure.
+            </div>
+          ) : (
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+              modifiers={[restrictToVerticalAxis]}
+            >
+              <table className="w-full text-sm text-left text-brand-text" aria-label="Slider messages table">
+                <thead>
+                  <tr className="bg-brand-light/40 text-brand-grey border-b border-brand-light">
+                    <th className="pl-3 pr-1 py-4 w-8"></th>
+                    <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wider w-24">Position</th>
+                    <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wider">Message Text</th>
+                    <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wider w-36">Status</th>
                     {canShowActions && (
-                      <td className="px-5 py-4">
-                        <div className="flex items-center gap-3">
-                          {canAddMessage && (
-                            <button
-                              onClick={() => handleOpenEdit(msg)}
-                              className="p-1.5 text-brand-grey hover:text-brand-gold hover:bg-brand-light rounded transition-all"
-                              aria-label="Edit message"
-                              id={`edit-btn-${msg.id}`}
-                            >
-                              <Edit2 size={15} />
-                            </button>
-                          )}
-                          {canDeleteMessage && (
-                            <button
-                              onClick={() => handleDelete(msg.id)}
-                              className="p-1.5 text-brand-grey hover:text-red-500 hover:bg-brand-light rounded transition-all"
-                              aria-label="Delete message"
-                              id={`delete-btn-${msg.id}`}
-                            >
-                              <Trash2 size={15} />
-                            </button>
-                          )}
-                        </div>
-                      </td>
+                      <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wider w-28 text-right">Actions</th>
                     )}
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                </thead>
+                <SortableContext
+                  items={messages.map((m) => m.id)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  <tbody>
+                    {messages.map((msg) => (
+                      <SortableRow key={msg.id} id={msg.id}>
+                        <td className="px-5 py-4 font-mono text-brand-gold font-bold">{msg.position}</td>
+                        <td className="px-5 py-4 font-medium text-brand-text max-w-md truncate">{msg.message}</td>
+                        <td className="px-5 py-4">
+                          <div className="flex items-center gap-2">
+                            <Switch
+                              checked={msg.isActive}
+                              disabled={!canAddMessage}
+                              onChange={() => canAddMessage && handleToggleActive(msg)}
+                              id={`toggle-status-${msg.id}`}
+                            />
+                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${msg.isActive ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                              {msg.isActive ? 'Active' : 'Inactive'}
+                            </span>
+                          </div>
+                        </td>
+                        {canShowActions && (
+                          <td className="px-5 py-4 text-right">
+                            <div className="flex items-center justify-end gap-3">
+                              {canAddMessage && (
+                                <button
+                                  onClick={() => handleOpenEdit(msg)}
+                                  className="p-1.5 text-brand-grey hover:text-brand-gold hover:bg-brand-light rounded transition-all"
+                                  aria-label="Edit message"
+                                  id={`edit-btn-${msg.id}`}
+                                >
+                                  <Edit2 size={15} />
+                                </button>
+                              )}
+                              {canDeleteMessage && (
+                                <button
+                                  onClick={() => handleDelete(msg.id)}
+                                  className="p-1.5 text-brand-grey hover:text-red-500 hover:bg-brand-light rounded transition-all"
+                                  aria-label="Delete message"
+                                  id={`delete-btn-${msg.id}`}
+                                >
+                                  <Trash2 size={15} />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        )}
+                      </SortableRow>
+                    ))}
+                  </tbody>
+                </SortableContext>
+              </table>
+            </DndContext>
+          )}
         </div>
       </div>
 
@@ -226,7 +291,7 @@ const SliderMessagesAdminPage = () => {
         {modalOpen && (
           <div
             className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
-            onClick={e => e.target === e.currentTarget && setModalOpen(false)}
+            onClick={(e) => e.target === e.currentTarget && setModalOpen(false)}
           >
             <motion.div
               initial={{ opacity: 0, scale: 0.96 }}
@@ -236,7 +301,7 @@ const SliderMessagesAdminPage = () => {
             >
               <div className="flex items-center justify-between px-6 py-4 border-b border-brand-light">
                 <h2 className="font-playfair text-lg font-semibold text-brand-text flex items-center gap-2">
-                  <Sparkles size={18} className="text-brand-gold" />
+                  {/* <Sparkles size={18} className="text-brand-gold" /> */}
                   {editingId ? 'Edit Slider Message' : 'Add Slider Message'}
                 </h2>
                 <button
@@ -254,7 +319,7 @@ const SliderMessagesAdminPage = () => {
                   <textarea
                     id="msg-text"
                     value={form.message}
-                    onChange={e => setForm(p => ({ ...p, message: e.target.value }))}
+                    onChange={(e) => setForm((p) => ({ ...p, message: e.target.value }))}
                     required
                     rows={3}
                     className="w-full border border-brand-light bg-white px-3 py-2 text-sm text-brand-text placeholder-brand-grey focus:outline-none focus:border-brand-gold transition-colors rounded-lg font-sans"
@@ -270,18 +335,21 @@ const SliderMessagesAdminPage = () => {
                       id="msg-pos"
                       type="number"
                       value={form.position}
-                      onChange={e => setForm(p => ({ ...p, position: parseInt(e.target.value) || 0 }))}
+                      onChange={(e) => setForm((p) => ({ ...p, position: parseInt(e.target.value, 10) || 1 }))}
                       required
-                      min={0}
+                      min={1}
                       className="w-full border border-brand-light bg-white px-3 py-2 text-sm text-brand-text focus:outline-none focus:border-brand-gold transition-colors rounded-lg font-mono"
                     />
+                    <p className="text-[11px] text-brand-grey mt-1">
+                      Existing items at this position will automatically shift down.
+                    </p>
                   </div>
-                  <div className="flex flex-col justify-end pb-2">
+                  <div className="flex flex-col justify-start pt-6">
                     <label className="flex items-center gap-2 cursor-pointer text-sm text-brand-text select-none" htmlFor="sm-active">
                       <Switch
                         id="sm-active"
                         checked={form.isActive}
-                        onChange={e => setForm(p => ({ ...p, isActive: e.target.checked }))}
+                        onChange={(e) => setForm((p) => ({ ...p, isActive: e.target.checked }))}
                       />
                       <span>Active Message</span>
                     </label>

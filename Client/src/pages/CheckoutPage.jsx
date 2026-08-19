@@ -165,12 +165,12 @@ const CheckoutPage = () => {
     setOtp('');
     setOtpLoading(true);
     try {
-      await api.post('/auth/send-checkout-otp', {
+      const res = await api.post('/auth/send-checkout-otp', {
         email: targetEmail,
         name: billingAddress.fullName || customer?.name || 'Customer'
       });
       setOtpSent(true);
-      toast.success(`Verification OTP sent to ${targetEmail}`);
+      toast.success(res.data?.message || `Verification OTP sent to ${targetEmail}`);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to send verification email. Please try again.');
     } finally {
@@ -234,6 +234,7 @@ const CheckoutPage = () => {
   const [deliverySameAsBilling, setDeliverySameAsBilling] = useState(false); // Default to false
   const [address, setAddress] = useState({ ...emptyAddr, country: 'India' });
   const [paymentMethod, setPaymentMethod] = useState('Razorpay Secure Online');
+  const [geoCountry, setGeoCountry] = useState('IN');
   const [geoBlocked, setGeoBlocked] = useState(false);
   const [geoMessage, setGeoMessage] = useState('');
 
@@ -248,6 +249,13 @@ const CheckoutPage = () => {
             setGeoMessage(res.data.message || 'Payments and order placement are accepted strictly from UAE and India only.');
           } else {
             setGeoBlocked(false);
+            const detectedCountry = res.data.countryCode || 'IN';
+            setGeoCountry(detectedCountry);
+            if (detectedCountry === 'AE') {
+              setPaymentMethod('Telr Secure Online');
+            } else {
+              setPaymentMethod('Razorpay Secure Online');
+            }
             if (res.data.currency) {
               dispatch(setCurrency(res.data.currency));
             }
@@ -661,19 +669,27 @@ const CheckoutPage = () => {
       const isWrap = Boolean(location.state?.giftWrap);
       const wrapPrice = isWrap ? Number(location.state?.giftWrapPrice || 99) : 0;
 
+      const isCod = paymentMethod === 'Cash on Delivery (COD)';
+      const isUaeRegion = geoCountry === 'AE';
+      const effectivePaymentMethod = isCod 
+        ? 'Cash on Delivery (COD)' 
+        : (isUaeRegion ? 'Telr Secure Online' : 'Razorpay Secure Online');
+
       // 2. Proceed with order placement using server-side cart database truth
       const referralCode = localStorage.getItem('bb_referral') || undefined;
       const order = await dispatch(placeOrder({
         shippingAddress: deliverySameAsBilling ? billingAddress : address,
         billingAddress: billingAddress,
-        paymentMethod, referralCode,
+        paymentMethod: effectivePaymentMethod,
+        referralCode,
         couponCode: activeDiscountType === 'COUPON' && activeCouponObj ? activeCouponObj.code : undefined,
         redeemPoints: activeDiscountType === 'LOYALTY',
         isGiftWrap: isWrap,
         giftWrapPrice: wrapPrice,
         giftMessage: location.state?.giftMessage || undefined,
         notes: location.state?.giftMessage || undefined,
-        requestedCurrency: currencyCode,   // geo-detected currency (AED or INR)
+        geoCountry: geoCountry || 'IN',
+        requestedCurrency: isUaeRegion ? 'AED' : 'INR',
         currencyRate: currencyRate,         // exchange rate (1 AED = X INR), default 26.06
       })).unwrap();
 
@@ -688,7 +704,6 @@ const CheckoutPage = () => {
       };
 
       // 3. COD: skip payment gateway entirely, go straight to confirmation
-      const isCod = paymentMethod === 'Cash on Delivery (COD)';
       if (isCod) {
         finishOrderClear();
         if (customer) toast.success('Reward points added for this order!');
@@ -1121,25 +1136,6 @@ const CheckoutPage = () => {
                             Enter pincode to calculate shipping charge
                           </p>
                         )}
-                        {pincodeZoneData && deliverySameAsBilling && billingAddress.pincode.trim().length >= 3 && (
-                          pincodeZoneData.deliverable ? (
-                            <p className="text-[12px] text-emerald-600 mt-1 font-semibold flex items-center gap-1">
-                              <MapPin size={13} className="shrink-0" /> Delivery Available ({pincodeZoneData.zoneName}) — {
-                                shipping === 0 ? (
-                                  pincodeZoneData.minOrderAmountForFreeDelivery !== null
-                                    ? `FREE Delivery (Order above ₹${pincodeZoneData.minOrderAmountForFreeDelivery})!`
-                                    : 'FREE Delivery!'
-                                ) : (
-                                  `Shipping Fee: ₹${shipping}${pincodeZoneData.minOrderAmountForFreeDelivery !== null ? ` (Free on orders above ₹${pincodeZoneData.minOrderAmountForFreeDelivery})` : ''}`
-                                )
-                              }
-                            </p>
-                          ) : (
-                            <p className="text-[12px] text-red-500 mt-1 font-semibold flex items-center gap-1">
-                              <AlertTriangle size={13} className="shrink-0" /> {pincodeZoneData.message || 'Delivery not available for this pincode'}
-                            </p>
-                          )
-                        )}
                       </div>
 
                       {/* Country */}
@@ -1155,6 +1151,32 @@ const CheckoutPage = () => {
                           className={`${inputCls} ${fieldErrors.country ? 'border-red-500 bg-red-50/20 focus:border-red-500 focus:ring-red-200' : ''}`} required />
                         {fieldErrors.country && <p className="text-[11px] text-red-500 mt-1 font-medium">{fieldErrors.country}</p>}
                       </div>
+
+                      {/* Delivery Availability Status (Single line, full width) */}
+                      {pincodeZoneData && deliverySameAsBilling && billingAddress.pincode.trim().length >= 3 && (
+                        <div className="sm:col-span-2 -mt-2">
+                          {pincodeZoneData.deliverable ? (
+                            <p className="text-[12px] text-emerald-600 font-semibold flex items-center gap-1.5 whitespace-nowrap">
+                              <MapPin size={13} className="shrink-0" />
+                              <span>
+                                Delivery Available ({pincodeZoneData.zoneName}) — {
+                                  shipping === 0 ? (
+                                    pincodeZoneData.minOrderAmountForFreeDelivery !== null
+                                      ? `FREE Delivery (Order above ₹${pincodeZoneData.minOrderAmountForFreeDelivery})`
+                                      : 'FREE Delivery'
+                                  ) : (
+                                    `Shipping Fee: ₹${shipping}${pincodeZoneData.minOrderAmountForFreeDelivery !== null ? ` (Free on orders above ₹${pincodeZoneData.minOrderAmountForFreeDelivery})` : ''}`
+                                  )
+                                }
+                              </span>
+                            </p>
+                          ) : (
+                            <p className="text-[12px] text-red-500 font-semibold flex items-center gap-1.5">
+                              <AlertTriangle size={13} className="shrink-0" /> {pincodeZoneData.message || 'Delivery not available for this pincode'}
+                            </p>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     {/* Same delivery toggle */}
@@ -1217,25 +1239,6 @@ const CheckoutPage = () => {
                                   Enter 6-digit Indian pincode to calculate shipping charge
                                 </p>
                               )}
-                              {pincodeZoneData && !deliverySameAsBilling && address.pincode.trim().length === 6 && (
-                                pincodeZoneData.deliverable ? (
-                                  <p className="text-[12px] text-emerald-600 mt-1 font-semibold flex items-center gap-1">
-                                    <MapPin size={13} className="shrink-0" /> Delivery Available ({pincodeZoneData.zoneName}) — {
-                                      shipping === 0 ? (
-                                        pincodeZoneData.minOrderAmountForFreeDelivery !== null
-                                          ? `FREE Delivery (Order above ₹${pincodeZoneData.minOrderAmountForFreeDelivery})!`
-                                          : 'FREE Delivery!'
-                                      ) : (
-                                        `Shipping Fee: ₹${shipping}${pincodeZoneData.minOrderAmountForFreeDelivery !== null ? ` (Free on orders above ₹${pincodeZoneData.minOrderAmountForFreeDelivery})` : ''}`
-                                      )
-                                    }
-                                  </p>
-                                ) : (
-                                  <p className="text-[12px] text-red-500 mt-1 font-semibold flex items-center gap-1">
-                                    <AlertTriangle size={13} className="shrink-0" /> {pincodeZoneData.message || 'Delivery not available for this pincode'}
-                                  </p>
-                                )
-                              )}
                             </div>
                             <div>
                               <label className={labelCls} htmlFor="d-country">Delivery Country *</label>
@@ -1247,6 +1250,32 @@ const CheckoutPage = () => {
                                 </span> */}
                               </div>
                             </div>
+
+                            {/* Delivery Availability Status (Single line, full width) */}
+                            {pincodeZoneData && !deliverySameAsBilling && address.pincode.trim().length === 6 && (
+                              <div className="sm:col-span-2 -mt-2">
+                                {pincodeZoneData.deliverable ? (
+                                  <p className="text-[12px] text-emerald-600 font-semibold flex items-center gap-1.5 whitespace-nowrap">
+                                    <MapPin size={13} className="shrink-0" />
+                                    <span>
+                                      Delivery Available ({pincodeZoneData.zoneName}) — {
+                                        shipping === 0 ? (
+                                          pincodeZoneData.minOrderAmountForFreeDelivery !== null
+                                            ? `FREE Delivery (Order above ₹${pincodeZoneData.minOrderAmountForFreeDelivery})!`
+                                            : 'FREE Delivery!'
+                                        ) : (
+                                          `Shipping Fee: ₹${shipping}${pincodeZoneData.minOrderAmountForFreeDelivery !== null ? ` (Free on orders above ₹${pincodeZoneData.minOrderAmountForFreeDelivery})` : ''}`
+                                        )
+                                      }
+                                    </span>
+                                  </p>
+                                ) : (
+                                  <p className="text-[12px] text-red-500 font-semibold flex items-center gap-1.5">
+                                    <AlertTriangle size={13} className="shrink-0" /> {pincodeZoneData.message || 'Delivery not available for this pincode'}
+                                  </p>
+                                )}
+                              </div>
+                            )}
                           </div>
 
                         </motion.div>
@@ -1480,13 +1509,13 @@ const CheckoutPage = () => {
             <div className="space-y-2.5 text-sm">
               <div className="flex justify-between"><span className="text-brand-grey">Subtotal ({items.length} items)</span><span>{fmt(subtotal)}</span></div>
               {activeDiscountType === 'COUPON' && couponDiscount > 0 && (
-                <div className="flex justify-between text-green-600 font-medium">
+                <div className="flex justify-between text-green-600">
                   <span className="flex items-center gap-1"><Tag size={12} /> Coupon ({activeCouponObj?.code})</span>
                   <span>-{fmt(couponDiscount)}</span>
                 </div>
               )}
               {activeDiscountType === 'LOYALTY' && loyaltyDiscountVal > 0 && (
-                <div className="flex justify-between text-green-600 font-medium">
+                <div className="flex justify-between text-green-600">
                   <span className="flex items-center gap-1"><Award size={13} className="text-brand-gold" /> Loyalty Discount</span>
                   <span>-{fmt(loyaltyDiscountVal)}</span>
                 </div>

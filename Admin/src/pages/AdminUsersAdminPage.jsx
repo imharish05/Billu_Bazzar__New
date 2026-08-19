@@ -154,14 +154,21 @@ const AdminUsersAdminPage = () => {
   };
 
   const handleToggleStatus = async (u) => {
+    const previousStatus = u.isActive;
+    const newStatus = !previousStatus;
+
+    // 1. Optimistic UI update
+    setUsers((prev) => prev.map((usr) => (usr.id === u.id ? { ...usr, isActive: newStatus } : usr)));
+
     try {
-      const newStatus = !u.isActive;
+      // 2. Silent backend sync
       const res = await api.put(`/admin-users/${u.id}`, { isActive: newStatus });
       if (res.data.success) {
         toast.success(`User status updated to ${newStatus ? 'Active' : 'Inactive'}`);
-        setUsers(prev => prev.map(usr => usr.id === u.id ? { ...usr, isActive: newStatus } : usr));
       }
     } catch (err) {
+      // 3. Rollback on error
+      setUsers((prev) => prev.map((usr) => (usr.id === u.id ? { ...usr, isActive: previousStatus } : usr)));
       toast.error(err.response?.data?.message || 'Failed to toggle status');
     }
   };

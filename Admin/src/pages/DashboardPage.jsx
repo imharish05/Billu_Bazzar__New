@@ -373,7 +373,7 @@ const DashboardPage = () => {
             <table className="w-full text-sm" aria-label="Recent orders">
               <thead>
                 <tr className="bg-brand-light/50 text-left">
-                  {['Order #', 'Customer', 'Amount', 'Payment', 'Status', 'Date', 'Actions'].map(h => (
+                  {['Order', 'Customer', 'Amount', 'Payment', 'Status', 'Date', 'Actions'].map(h => (
                     <th key={h} className="px-4 py-3 text-xs font-semibold text-brand-grey uppercase tracking-wider">{h}</th>
                   ))}
                 </tr>

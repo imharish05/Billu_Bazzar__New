@@ -260,7 +260,7 @@ const VendorsAdminPage = () => {
                       </td>
                       <td className="px-5 py-4 font-medium text-brand-text">
                         <div className="flex items-center gap-1.5 text-xs">
-                          <UserCheck size={14} className="text-brand-gold flex-shrink-0" />
+                          {/* <UserCheck size={14} className="text-brand-gold flex-shrink-0" /> */}
                           <span>{v.contactPerson || '—'}</span>
                         </div>
                       </td>
@@ -373,7 +373,7 @@ const VendorsAdminPage = () => {
                 {/* Address Details Section */}
                 <div className="border-t border-brand-light pt-4">
                   <h3 className="text-xs font-bold uppercase tracking-wider text-brand-gold mb-3 flex items-center gap-1">
-                    <MapPin size={13} /> Address Details
+                    Address Details
                   </h3>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="col-span-2">
