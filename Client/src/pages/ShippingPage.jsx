@@ -37,7 +37,7 @@ const ShippingPage = () => {
           >
             <span className="text-xs font-semibold text-brand-gold tracking-widest uppercase block">Global Logistics</span>
             <h2 className="font-playfair text-3xl font-bold text-brand-text">Delivering Elegance Safely</h2>
-            <p className="text-brand-grey text-sm md:text-base leading-relaxed text-justify">
+            <p className="text-brand-grey text-sm md:text-base leading-relaxed text-left">
               We understand that the anticipation of receiving your luxury items is part of the experience. Whether you ordered the latest smart home devices, premium designer outerwear, or organic beauty essentials, every item is wrapped in custom eco-friendly packaging and dispatched via premium courier networks.
             </p>
           </motion.div>
@@ -68,21 +68,21 @@ const ShippingPage = () => {
           <div className="space-y-8">
             <section className="space-y-3">
               <h3 className="font-playfair text-xl font-semibold text-brand-text">1. Processing Timelines</h3>
-              <p className="text-brand-grey text-xs md:text-sm leading-relaxed text-justify">
+              <p className="text-brand-grey text-xs md:text-sm leading-relaxed text-left">
                 Standard catalog products are dispatched from our warehouses within 24 to 48 hours of payment confirmation. Custom apparel items, pre-ordered electronics, or special decor orders may require longer processing times, which will be highlighted on the product page and during checkout.
               </p>
             </section>
 
             <section className="space-y-3">
               <h3 className="font-playfair text-xl font-semibold text-brand-text">2. Shipping Charges</h3>
-              <p className="text-brand-grey text-xs md:text-sm leading-relaxed text-justify">
+              <p className="text-brand-grey text-xs md:text-sm leading-relaxed text-left">
                 For domestic orders within India below ₹1,499, a flat shipping fee of ₹99 is added at checkout. International shipping charges are calculated dynamically based on package weight and destination country. Duty tariffs and customs fees, if applicable, are to be borne by the recipient.
               </p>
             </section>
 
             <section className="space-y-3">
               <h3 className="font-playfair text-xl font-semibold text-brand-text">3. Transit Care & Insurance</h3>
-              <p className="text-brand-grey text-xs md:text-sm leading-relaxed text-justify">
+              <p className="text-brand-grey text-xs md:text-sm leading-relaxed text-left">
                 All high-value orders (specifically jewelry and electronics) are fully insured in transit by Billu Bazaar. A signature is required upon delivery to ensure that the luxury package is received safely by the rightful owner.
               </p>
             </section>

@@ -874,7 +874,7 @@ const Navbar = () => {
           {/* Mobile / Tablet layout */}
           <div className="lg:hidden">
             {/* Top row: logo + actions */}
-            <div className="flex items-center justify-between h-16 px-3">
+            <div className="flex items-center justify-between h-16 px-4">
               <Link to="/" aria-label="Billu Bazaar — Home">
                 <Logo size="sm" />
               </Link>
@@ -939,7 +939,7 @@ const Navbar = () => {
               </div>
             </div>
             {/* Search row — always visible under the top row on mobile */}
-            <div ref={searchRef} className="relative h-14 flex items-center px-3 border-t border-neutral-800/10 w-full">
+            <div ref={searchRef} className="relative h-14 flex items-center px-4 border-t border-neutral-800/10 w-full">
               <form onSubmit={handleSearchSubmit} role="search" className="relative w-full">
                 <input
                   type="search"

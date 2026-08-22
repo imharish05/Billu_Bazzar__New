@@ -24,6 +24,7 @@ import LoyaltyPage from './pages/account/LoyaltyPage';
 import PersonalShopperPage from './pages/account/PersonalShopperPage';
 import SupportPage from './pages/account/SupportPage';
 import MyReviewsPage from './pages/account/MyReviewsPage';
+import ReturnsRefundsPage from './pages/account/ReturnsRefundsPage';
 import NotFoundPage from './pages/NotFoundPage';
 import LoaderPreviewPage from './pages/LoaderPreviewPage';
 import ContactPage from './pages/ContactPage';
@@ -183,6 +184,7 @@ const App = () => {
             <Route index element={<ProfilePage />} />
             <Route path="orders" element={<OrdersPage />} />
             <Route path="orders/:id" element={<OrderDetailPage />} />
+            <Route path="returns" element={<ReturnsRefundsPage />} />
             <Route path="wishlist" element={<WishlistPage />} />
             <Route path="loyalty" element={<LoyaltyPage />} />
             <Route path="personal-shopper" element={<PersonalShopperPage />} />

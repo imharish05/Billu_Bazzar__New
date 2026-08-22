@@ -20,4 +20,13 @@ const toAbsoluteUrl = (path, req = null) => {
   return path;
 };
 
-module.exports = { toAbsoluteUrl };
+const toRelativeUrl = (url) => {
+  if (!url || typeof url !== 'string') return url;
+  const idx = url.indexOf('/uploads/');
+  if (idx !== -1) {
+    return url.substring(idx);
+  }
+  return url;
+};
+
+module.exports = { toAbsoluteUrl, toRelativeUrl };

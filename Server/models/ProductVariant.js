@@ -48,4 +48,33 @@ const ProductVariant = sequelize.define('ProductVariant', {
   ]
 });
 
+ProductVariant.beforeValidate(async (variant) => {
+  const { Op } = require('sequelize');
+
+  if (!variant.sku || variant.sku.trim() === '') {
+    const comboStr = variant.attributes ? (typeof variant.attributes === 'string' ? JSON.parse(variant.attributes) : variant.attributes) : {};
+    const comboLabel = typeof comboStr === 'object' && comboStr ? Object.values(comboStr).filter(Boolean).join('-').toUpperCase().replace(/[^A-Z0-9-]/g, '').replace(/-+/g, '-').replace(/^-|-$/g, '') : '';
+    const uniqueTag = Math.random().toString(36).substring(2, 6).toUpperCase();
+    variant.sku = comboLabel ? `SKU-PRD${variant.productId || 'V'}-${comboLabel}-${uniqueTag}` : `SKU-PRD${variant.productId || 'V'}-VAR-${uniqueTag}`;
+  }
+
+  if (variant.sku) {
+    let finalSku = variant.sku.trim().toUpperCase();
+    let count = 1;
+    const baseSku = finalSku;
+    while (true) {
+      const whereClause = { sku: finalSku };
+      if (variant.id) {
+        whereClause.id = { [Op.ne]: variant.id };
+      }
+      const existing = await ProductVariant.findOne({ where: whereClause });
+      if (!existing) break;
+      finalSku = `${baseSku}-${count}`;
+      count++;
+    }
+    variant.sku = finalSku;
+  }
+});
+
 module.exports = ProductVariant;
+

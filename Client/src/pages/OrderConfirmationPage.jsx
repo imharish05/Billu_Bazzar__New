@@ -265,14 +265,14 @@ const OrderConfirmationPage = () => {
         </div>
 
         {/* Mock tracking map placeholder */}
-        <div className="bg-brand-light h-44 flex items-center justify-center mb-6 relative overflow-hidden rounded-xl border border-brand-light">
+        {/* <div className="bg-brand-light h-44 flex items-center justify-center mb-6 relative overflow-hidden rounded-xl border border-brand-light">
           <div className="absolute inset-0 bg-gradient-to-br from-amber-50/40 to-amber-100/30 opacity-60" />
           <div className="relative text-center p-4">
             <MapPin size={28} className="text-brand-gold mx-auto mb-2" />
             <p className="text-sm font-semibold text-brand-text">Shipment Tracking Active</p>
             <p className="text-xs text-brand-grey mt-0.5">Estimated Delivery: 2–4 Business Days via Billu Express Logistics</p>
           </div>
-        </div>
+        </div> */}
 
         {/* Actions */}
         <div className="flex flex-col sm:flex-row gap-3">

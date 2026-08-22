@@ -124,7 +124,7 @@ const OrdersPage = () => {
                   return (
                     <div className="flex items-center gap-3 py-3 my-2 border-y border-neutral-100">
                       <img
-                        src={getImageUrl(firstItem.productImage || firstItem.image) || getPlaceholderSvg(firstItem.productName || firstItem.name || 'Product')}
+                        src={getImageUrl(firstItem.displayImage || firstItem.variantImage || firstItem.variant?.image || firstItem.image || firstItem.productImage || firstItem.product?.defaultProductImage) || getPlaceholderSvg(firstItem.productName || firstItem.name || 'Product')}
                         alt={firstItem.productName || firstItem.name || 'Product'}
                         className="w-12 h-12 object-cover rounded border border-neutral-100 flex-shrink-0"
                         onError={(e) => { e.target.onerror = null; e.target.src = getPlaceholderSvg(firstItem.productName || firstItem.name || 'Product'); }}

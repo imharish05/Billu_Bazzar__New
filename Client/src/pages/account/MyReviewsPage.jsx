@@ -4,6 +4,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Star, Edit3, Trash2, Eye, Package, MessageSquare, CheckCircle, AlertCircle, X, Loader2, ExternalLink, Check } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { fetchMyDeliveredItems, createReview, updateReview, deleteReview } from '../../redux/slices/reviewsSlice';
+import { getImageUrl } from '../../utils/imageUrl';
+import { getPlaceholderSvg } from '../../utils/placeholder';
 import toast from 'react-hot-toast';
 
 const StarPicker = ({ value, onChange }) => (
@@ -62,9 +64,10 @@ const EditReviewModal = ({ item, onClose, onSave, submitting }) => {
 
         <div className="flex items-center gap-3 mb-5">
           <img
-            src={item.productImage || '/placeholder.jpg'}
+            src={getImageUrl(item.variantImage || item.variant?.image || item.productImage) || getPlaceholderSvg(item.productName || 'Product')}
             alt={item.productName}
             className="w-12 h-14 object-cover rounded-lg border border-neutral-100"
+            onError={(e) => { e.target.onerror = null; e.target.src = getPlaceholderSvg(item.productName || 'Product'); }}
           />
           <div>
             <h3 className="font-semibold text-neutral-900 text-sm">{item.productName}</h3>
@@ -129,18 +132,19 @@ const MyReviewsPage = () => {
   const handleSaveReview = async ({ rating, title, body }) => {
     if (!editingItem) return;
     try {
+      const resolvedProdId = editingItem.productId || editingItem.product?.id || editingItem.id;
       if (editingItem.existingReview) {
         await dispatch(updateReview({
           id: editingItem.existingReview.id,
           rating,
           title,
           body,
-          productId: editingItem.productId,
+          productId: resolvedProdId,
         })).unwrap();
         toast.success('Review updated successfully!');
       } else {
         await dispatch(createReview({
-          productId: editingItem.productId,
+          productId: resolvedProdId,
           orderId: editingItem.orderId,
           rating,
           title,
@@ -157,7 +161,6 @@ const MyReviewsPage = () => {
   };
 
   const handleDelete = async (item) => {
-    if (!window.confirm('Delete your review for this product?')) return;
     try {
       await dispatch(deleteReview({ id: item.existingReview.id, productId: item.productId })).unwrap();
       toast.success('Review deleted.');
@@ -258,35 +261,36 @@ const MyReviewsPage = () => {
                 <div className="flex items-start gap-3.5 sm:gap-4">
                   <Link to={item.productSlug ? `/products/${item.productSlug}` : '#'}>
                     <img
-                      src={item.productImage || '/placeholder.jpg'}
+                      src={getImageUrl(item.variantImage || item.variant?.image || item.productImage) || getPlaceholderSvg(item.productName || 'Product')}
                       alt={item.productName}
                       className="w-16 h-20 sm:w-20 sm:h-24 object-cover rounded-xl border border-neutral-100 flex-shrink-0 hover:opacity-90 transition-opacity shadow-xs"
+                      onError={(e) => { e.target.onerror = null; e.target.src = getPlaceholderSvg(item.productName || 'Product'); }}
                     />
                   </Link>
 
                   <div className="flex-1 min-w-0">
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 sm:gap-2">
-                      <div>
+                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+                      <div className="flex-1 min-w-0">
                         <Link
                           to={item.productSlug ? `/products/${item.productSlug}` : '#'}
-                          className="font-semibold text-neutral-900 hover:text-amber-600 transition-colors text-sm sm:text-base flex items-center gap-1.5 leading-snug"
+                          className="font-semibold text-neutral-900 hover:text-amber-600 transition-colors text-sm sm:text-base inline-flex items-center gap-1.5 max-w-full leading-snug"
                         >
                           <span className="truncate">{item.productName}</span>
                           <ExternalLink size={13} className="text-neutral-400 flex-shrink-0" />
                         </Link>
-                        <p className="text-[11px] sm:text-xs text-neutral-400 mt-0.5">
+                        <p className="text-[11px] sm:text-xs text-neutral-400 mt-0.5 truncate">
                           Order {item.orderNumber} · {new Date(item.deliveredAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
                         </p>
                       </div>
 
                       {/* Status Badge */}
-                      <div className="mt-0.5 sm:mt-0">
+                      <div className="flex-shrink-0 mt-0.5 sm:mt-0">
                         {item.existingReview ? (
-                          <span className="inline-flex items-center gap-1 text-[10px] sm:text-xs font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200/80">
+                          <span className="inline-flex items-center gap-1 text-[10px] sm:text-xs font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200/80 whitespace-nowrap">
                             <Check size={12} /> Reviewed
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 text-[10px] sm:text-xs font-bold px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200/80">
+                          <span className="inline-flex items-center gap-1 text-[10px] sm:text-xs font-bold px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200/80 whitespace-nowrap">
                             Awaiting Review
                           </span>
                         )}

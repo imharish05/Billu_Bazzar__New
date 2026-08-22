@@ -5,7 +5,7 @@ const { Product, ProductVariant, Warehouse, WarehouseStock, InventoryMovementLog
 // Helper to generate a unique SKU if not provided
 const generateSku = (productId, attributes) => {
   const comboStr = attributes ? (typeof attributes === 'string' ? JSON.parse(attributes) : attributes) : {};
-  const comboLabel = typeof comboStr === 'object' && comboStr ? Object.values(comboStr).join('-').toUpperCase().replace(/[^A-Z0-9-]/g, '') : '';
+  const comboLabel = typeof comboStr === 'object' && comboStr ? Object.values(comboStr).filter(Boolean).join('-').toUpperCase().replace(/[^A-Z0-9-]/g, '').replace(/-+/g, '-').replace(/^-|-$/g, '') : '';
   const uniqueTag = Math.random().toString(36).substring(2, 6).toUpperCase();
   return comboLabel ? `SKU-PRD${productId}-${comboLabel}-${uniqueTag}` : `SKU-PRD${productId}-VAR-${uniqueTag}`;
 };

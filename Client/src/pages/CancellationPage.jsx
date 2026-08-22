@@ -37,7 +37,7 @@ const CancellationPage = () => {
           >
             <span className="text-xs font-semibold text-brand-gold tracking-widest uppercase block">Order Control</span>
             <h2 className="font-playfair text-3xl font-bold text-brand-text">Flexible Order Management</h2>
-            <p className="text-brand-grey text-sm md:text-base leading-relaxed text-justify">
+            <p className="text-brand-grey text-sm md:text-base leading-relaxed text-left">
               We are committed to providing a transparent and seamless order management experience. While we strive to process and dispatch all orders as quickly as possible, we understand that plans can change. Below is our formal policy outlining the conditions, procedures, and timelines governing order cancellations.
             </p>
           </motion.div>
@@ -69,28 +69,28 @@ const CancellationPage = () => {
           <div className="space-y-8">
             <section className="space-y-3">
               <h3 className="font-playfair text-xl font-semibold text-brand-text">1. Same-Day Cancellation Window</h3>
-              <p className="text-brand-grey text-xs md:text-sm leading-relaxed text-justify">
+              <p className="text-brand-grey text-xs md:text-sm leading-relaxed text-left">
                 Orders may only be cancelled on the same day they are placed, entirely free of charge. Once an order progresses to the packing stage or has been dispatched to our courier services, cancellations are strictly prohibited. In such scenarios, customers may refuse delivery at their doorstep or request a standard return post-delivery in accordance with our return guidelines.
               </p>
             </section>
 
             <section className="space-y-3">
               <h3 className="font-playfair text-xl font-semibold text-brand-text">2. Submission & Validation Process</h3>
-              <p className="text-brand-grey text-xs md:text-sm leading-relaxed font-light text-justify">
+              <p className="text-brand-grey text-xs md:text-sm leading-relaxed font-light text-left">
                 To cancel an order, customers must raise a request directly through their account dashboard on our website or contact our support team within the cancellation window. All requests must contain a valid, clear reason for cancellation. If the reason provided is determined to be invalid, the cancellation request will be formally rejected, and the order will proceed to shipment.
               </p>
             </section>
 
             <section className="space-y-3">
               <h3 className="font-playfair text-xl font-semibold text-brand-text">3. Cancellations by Billu Bazaar</h3>
-              <p className="text-brand-grey text-xs md:text-sm leading-relaxed text-justify">
+              <p className="text-brand-grey text-xs md:text-sm leading-relaxed text-left">
                 In the rare event that Billu Bazaar must cancel an order due to stock unavailability, quality control failures, or any other internal operational constraint, a full refund will be automatically issued back to the original payment method. The refunded amount will typically reflect in your account within 5 to 7 business days, depending on your bank's processing cycles.
               </p>
             </section>
 
             <section className="space-y-3">
               <h3 className="font-playfair text-xl font-semibold text-brand-text">4. Promotional & Sale Orders</h3>
-              <p className="text-brand-grey text-xs md:text-sm leading-relaxed text-justify">
+              <p className="text-brand-grey text-xs md:text-sm leading-relaxed text-left">
                 Orders placed during seasonal sales, promotional events, or flash campaigns are subject to accelerated processing. As a result, these transactions may feature a significantly shorter cancellation window or may not be eligible for cancellation at all. We encourage you to review your order details thoroughly before finalizing your purchase during promotional events.
               </p>
             </section>

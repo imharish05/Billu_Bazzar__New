@@ -198,16 +198,32 @@ const QuickViewModal = () => {
     : ['https://images.unsplash.com/photo-1469334031218-e382a71b716b?w=600'];
 
   const galleryImages = useMemo(() => {
-    if (selectedVariant && selectedVariant.image) {
-      if (!rawGallery.includes(selectedVariant.image)) {
-        return [selectedVariant.image, ...rawGallery];
-      } else {
-        const filtered = rawGallery.filter(img => img !== selectedVariant.image);
-        return [selectedVariant.image, ...filtered];
+    if (selectedVariant) {
+      let vImgs = selectedVariant.images;
+      if (typeof vImgs === 'string') {
+        try { vImgs = JSON.parse(vImgs); } catch (e) { vImgs = []; }
+      }
+      const list = [];
+      if (selectedVariant.image && typeof selectedVariant.image === 'string' && selectedVariant.image.trim() !== '') {
+        list.push(selectedVariant.image);
+      }
+      if (Array.isArray(vImgs)) {
+        vImgs.forEach(img => {
+          if (img && typeof img === 'string' && img.trim() !== '' && !list.includes(img)) {
+            list.push(img);
+          }
+        });
+      }
+      if (list.length > 0) {
+        return list.slice(0, 5);
       }
     }
     return rawGallery;
   }, [selectedVariant, rawGallery]);
+
+  useEffect(() => {
+    setActiveImgIndex(0);
+  }, [selectedVariant?.id]);
 
   if (!product) return null;
 
@@ -611,8 +627,11 @@ const QuickViewModal = () => {
                                       aria-label={`Select color ${val}`}
                                     >
                                       <span
-                                        className="w-6 h-6 rounded-full border border-white/60 shadow-xs inline-block flex items-center justify-center relative overflow-hidden"
-                                        style={{ backgroundColor: resolveColor(val) }}
+                                        className="w-6 h-6 rounded-full inline-block flex items-center justify-center relative overflow-hidden"
+                                        style={{
+                                          backgroundColor: resolveColor(val),
+                                          boxShadow: 'inset 0 0 0 1.5px rgba(0,0,0,0.18), 0 1px 3px rgba(0,0,0,0.12)'
+                                        }}
                                       >
                                         {isOutOfStock && (
                                           <span className="absolute inset-0 bg-neutral-900/50 flex items-center justify-center">

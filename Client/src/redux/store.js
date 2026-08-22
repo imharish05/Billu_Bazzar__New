@@ -11,6 +11,7 @@ import currencyReducer from './slices/currencySlice';
 import searchReducer from './slices/searchSlice';
 
 import reviewsReducer from './slices/reviewsSlice';
+import returnsReducer from './slices/returnsSlice';
 
 const store = configureStore({
   reducer: {
@@ -25,6 +26,7 @@ const store = configureStore({
     currency: currencyReducer,
     search: searchReducer,
     reviews: reviewsReducer,
+    returns: returnsReducer,
   },
 });
 

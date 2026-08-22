@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { NavLink, Outlet, useSearchParams, useLocation, useNavigate } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
-import { User, Package, Heart, Star, Gift, Headphones, LogOut, Lock, Mail, Eye, EyeOff, Phone, ArrowLeft, CheckCircle, RefreshCw, MessageSquare } from 'lucide-react';
+import { User, Package, Heart, Star, Gift, Headphones, LogOut, Lock, Mail, Eye, EyeOff, Phone, ArrowLeft, CheckCircle, RefreshCw, MessageSquare, RotateCcw } from 'lucide-react';
 import Footer from '../../components/Footer';
 import { loginCustomer, registerCustomer, logout, clearError, fetchProfile } from '../../redux/slices/authSlice';
 import toast from 'react-hot-toast';
@@ -11,6 +11,7 @@ import api from '../../services/api';
 const NAV_ITEMS = [
   { to: '/account', label: 'Profile', icon: User, end: true },
   { to: '/account/orders', label: 'My Orders', icon: Package },
+  { to: '/account/returns', label: 'Returns & Refunds', icon: RotateCcw },
   { to: '/account/wishlist', label: 'Wishlist', icon: Heart },
   { to: '/account/reviews', label: 'My Reviews', icon: MessageSquare },
   { to: '/account/loyalty', label: 'Loyalty & Cashback', icon: Star },
@@ -84,6 +85,7 @@ const AccountLayout = () => {
     }
     if (tabParam) {
       if (tabParam === 'orders') navigate('/account/orders', { replace: true });
+      else if (tabParam === 'returns' || tabParam === 'refunds') navigate('/account/returns', { replace: true });
       else if (tabParam === 'wishlist') navigate('/account/wishlist', { replace: true });
       else if (tabParam === 'reviews') navigate('/account/reviews', { replace: true });
       else if (tabParam === 'loyalty') navigate('/account/loyalty', { replace: true });

@@ -160,6 +160,23 @@ const PersonalShopperRequest = require('./PersonalShopperRequest');
 Customer.hasMany(PersonalShopperRequest, { foreignKey: 'customerId', as: 'personalShopperRequests' });
 PersonalShopperRequest.belongsTo(Customer, { foreignKey: 'customerId', as: 'customer' });
 
+// ReturnRequest ↔ Customer / Order / OrderItem / Product / ProductVariant
+const ReturnRequest = require('./ReturnRequest');
+Customer.hasMany(ReturnRequest, { foreignKey: 'customerId', as: 'returnRequests' });
+ReturnRequest.belongsTo(Customer, { foreignKey: 'customerId', as: 'customer' });
+
+Order.hasMany(ReturnRequest, { foreignKey: 'orderId', as: 'returnRequests' });
+ReturnRequest.belongsTo(Order, { foreignKey: 'orderId', as: 'order' });
+
+OrderItem.hasMany(ReturnRequest, { foreignKey: 'orderItemId', as: 'returnRequests' });
+ReturnRequest.belongsTo(OrderItem, { foreignKey: 'orderItemId', as: 'orderItem' });
+
+Product.hasMany(ReturnRequest, { foreignKey: 'productId', constraints: false, as: 'returnRequests' });
+ReturnRequest.belongsTo(Product, { foreignKey: 'productId', constraints: false, as: 'product' });
+
+ProductVariant.hasMany(ReturnRequest, { foreignKey: 'variantId', constraints: false, as: 'returnRequests' });
+ReturnRequest.belongsTo(ProductVariant, { foreignKey: 'variantId', constraints: false, as: 'variant' });
+
 // ── Exports ───────────────────────────────────────────────────────────────────
 const DeliveryZone     = require('./DeliveryZone');
 const ContactEnquiry   = require('./ContactEnquiry');
@@ -178,5 +195,6 @@ module.exports = {
   DeliveryZone,
   ContactEnquiry,
   PersonalShopperRequest,
+  ReturnRequest,
 };
 

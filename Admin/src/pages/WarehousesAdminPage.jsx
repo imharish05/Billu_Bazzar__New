@@ -152,6 +152,20 @@ const WarehousesAdminPage = () => {
   // Save warehouse (Create / Update)
   const handleSaveWarehouse = async (e) => {
     e.preventDefault();
+    if (
+      !warehouseForm.name?.trim() ||
+      !warehouseForm.code?.trim() ||
+      !warehouseForm.contactName?.trim() ||
+      !warehouseForm.contactPhone?.trim() ||
+      !warehouseForm.streetAddress?.trim() ||
+      !warehouseForm.city?.trim() ||
+      !warehouseForm.state?.trim() ||
+      !warehouseForm.pincode?.trim() ||
+      !warehouseForm.country?.trim()
+    ) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
     if (warehouseForm.contactPhone) {
       const phoneCheck = validatePhone(warehouseForm.contactPhone);
       if (!phoneCheck.isValid) {
@@ -683,9 +697,10 @@ const WarehousesAdminPage = () => {
 
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-[11px] uppercase tracking-wider font-semibold text-brand-grey mb-1">Contact Person</label>
+                    <label className="block text-[11px] uppercase tracking-wider font-semibold text-brand-grey mb-1">Contact Person *</label>
                     <input
                       type="text"
+                      required
                       value={warehouseForm.contactName}
                       onChange={e => setWarehouseForm(f => ({ ...f, contactName: e.target.value }))}
                       className="w-full border border-brand-light px-3 py-2 text-xs focus:outline-none focus:border-brand-gold rounded-none"
@@ -693,9 +708,10 @@ const WarehousesAdminPage = () => {
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] uppercase tracking-wider font-semibold text-brand-grey mb-1">Contact Phone</label>
+                    <label className="block text-[11px] uppercase tracking-wider font-semibold text-brand-grey mb-1">Contact Phone *</label>
                     <input
                       type="tel"
+                      required
                       value={warehouseForm.contactPhone}
                       onChange={e => setWarehouseForm(f => ({ ...f, contactPhone: e.target.value }))}
                       className="w-full border border-brand-light px-3 py-2 text-xs focus:outline-none focus:border-brand-gold rounded-none"
@@ -709,9 +725,10 @@ const WarehousesAdminPage = () => {
 
                 {/* Street Address */}
                 <div>
-                  <label className="block text-[11px] uppercase tracking-wider font-semibold text-brand-grey mb-1">Street Address</label>
+                  <label className="block text-[11px] uppercase tracking-wider font-semibold text-brand-grey mb-1">Street Address *</label>
                   <input
                     type="text"
+                    required
                     value={warehouseForm.streetAddress}
                     onChange={e => setWarehouseForm(f => ({ ...f, streetAddress: e.target.value }))}
                     className="w-full border border-brand-light px-3 py-2 text-xs focus:outline-none focus:border-brand-gold rounded-none"
@@ -721,9 +738,10 @@ const WarehousesAdminPage = () => {
 
                 <div className="grid sm:grid-cols-3 gap-3">
                   <div>
-                    <label className="block text-[11px] uppercase tracking-wider font-semibold text-brand-grey mb-1">City</label>
+                    <label className="block text-[11px] uppercase tracking-wider font-semibold text-brand-grey mb-1">City *</label>
                     <input
                       type="text"
+                      required
                       value={warehouseForm.city}
                       onChange={e => setWarehouseForm(f => ({ ...f, city: e.target.value }))}
                       className="w-full border border-brand-light px-3 py-2 text-xs focus:outline-none focus:border-brand-gold rounded-none"
@@ -731,9 +749,10 @@ const WarehousesAdminPage = () => {
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] uppercase tracking-wider font-semibold text-brand-grey mb-1">State</label>
+                    <label className="block text-[11px] uppercase tracking-wider font-semibold text-brand-grey mb-1">State *</label>
                     <input
                       type="text"
+                      required
                       value={warehouseForm.state}
                       onChange={e => setWarehouseForm(f => ({ ...f, state: e.target.value }))}
                       className="w-full border border-brand-light px-3 py-2 text-xs focus:outline-none focus:border-brand-gold rounded-none"
@@ -741,9 +760,10 @@ const WarehousesAdminPage = () => {
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] uppercase tracking-wider font-semibold text-brand-grey mb-1">Pincode</label>
+                    <label className="block text-[11px] uppercase tracking-wider font-semibold text-brand-grey mb-1">Pincode *</label>
                     <input
                       type="text"
+                      required
                       value={warehouseForm.pincode}
                       onChange={e => setWarehouseForm(f => ({ ...f, pincode: e.target.value }))}
                       className="w-full border border-brand-light px-3 py-2 text-xs focus:outline-none focus:border-brand-gold rounded-none font-mono"
@@ -753,9 +773,10 @@ const WarehousesAdminPage = () => {
                 </div>
 
                 <div>
-                  <label className="block text-[11px] uppercase tracking-wider font-semibold text-brand-grey mb-1">Country</label>
+                  <label className="block text-[11px] uppercase tracking-wider font-semibold text-brand-grey mb-1">Country *</label>
                   <input
                     type="text"
+                    required
                     value={warehouseForm.country}
                     onChange={e => setWarehouseForm(f => ({ ...f, country: e.target.value }))}
                     className="w-full border border-brand-light px-3 py-2 text-xs focus:outline-none focus:border-brand-gold rounded-none"

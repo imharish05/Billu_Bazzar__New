@@ -17,6 +17,8 @@ const storage = multer.diskStorage({
       subfolder = 'settings';
     } else if (url.includes('/affiliates')) {
       subfolder = 'affiliates';
+    } else if (url.includes('/returns')) {
+      subfolder = 'returns';
     }
 
     const dest = path.join(__dirname, '..', 'uploads', subfolder);
@@ -35,12 +37,12 @@ const storage = multer.diskStorage({
 });
 
 const fileFilter = (req, file, cb) => {
-  const allowed = /jpeg|jpg|png|webp|gif|pdf|glb|gltf|mp4|webm|mov|avi|mkv/;
+  const allowed = /jpeg|jpg|png|webp|gif|pdf|glb|gltf|mp4|webm|mov|avi|mkv|quicktime|m4v/;
   const ext = allowed.test(path.extname(file.originalname).toLowerCase());
   const mime = allowed.test(file.mimetype) || file.mimetype.includes('model') || file.mimetype.includes('video') || file.mimetype.includes('pdf');
   cb(null, ext || mime);
 };
 
-const upload = multer({ storage, fileFilter, limits: { fileSize: 10 * 1024 * 1024 } });
+const upload = multer({ storage, fileFilter, limits: { fileSize: 50 * 1024 * 1024 } });
 
 module.exports = upload;

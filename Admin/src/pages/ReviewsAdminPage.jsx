@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useSelector } from 'react-redux';
-import { motion } from 'framer-motion';
-import { Star, CheckCircle, XCircle, Trash2, Search, RefreshCw, MessageSquare, ShieldCheck, Filter } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Star, CheckCircle, XCircle, Trash2, Search, RefreshCw, MessageSquare, ShieldCheck, Filter, Eye, X } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
 import { PaginationTop, PaginationBottom } from '../components/Pagination';
 import api from '../services/api';
 import toast from 'react-hot-toast';
 import { checkPermission } from '../utils/rbac';
+import { getImageUrl } from '../utils/imageUrl';
 
 const ReviewsAdminPage = () => {
   const { admin } = useSelector((s) => s.auth);
@@ -16,6 +17,7 @@ const ReviewsAdminPage = () => {
   const [statusFilter, setStatusFilter] = useState('all'); // 'all', 'approved', 'pending'
   const [searchQuery, setSearchQuery] = useState('');
   const [updatingId, setUpdatingId] = useState(null);
+  const [viewingReview, setViewingReview] = useState(null);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
   const [total, setTotal] = useState(0);
@@ -248,7 +250,7 @@ const ReviewsAdminPage = () => {
                     <th className="py-3 px-4">Review Content</th>
                     <th className="py-3 px-4">Date</th>
                     <th className="py-3 px-4">Status</th>
-                    {canDeleteReview && <th className="py-3 px-4 text-right">Actions</th>}
+                    <th className="py-3 px-4 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-neutral-100 text-xs">
@@ -258,9 +260,10 @@ const ReviewsAdminPage = () => {
                       <td className="py-4 px-4 min-w-[200px]">
                         <div className="flex items-center gap-3">
                           <img
-                            src={r.productImage || '/placeholder.jpg'}
+                            src={getImageUrl(r.productImage) || '/placeholder.jpg'}
                             alt={r.productName}
                             className="w-10 h-12 object-cover rounded border border-neutral-100 flex-shrink-0"
+                            onError={(e) => { e.target.onerror = null; e.target.src = '/placeholder.jpg'; }}
                           />
                           <div>
                             <p className="font-semibold text-neutral-900 line-clamp-1">{r.productName}</p>
@@ -309,37 +312,45 @@ const ReviewsAdminPage = () => {
                       </td>
 
                       {/* Actions */}
-                      {canDeleteReview && (
-                        <td className="py-4 px-4 text-right whitespace-nowrap">
-                          <div className="flex items-center justify-end gap-2">
-                            <button
-                              onClick={() => handleToggleStatus(r.id, r.isApproved)}
-                              disabled={updatingId === r.id}
-                              className={`px-3 py-1.5 text-xs font-semibold rounded flex items-center gap-1 transition-colors ${r.isApproved ? 'bg-amber-50 text-amber-700 hover:bg-amber-100' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}`}
-                              title={r.isApproved ? 'Unapprove / Reject Review' : 'Approve Review'}
-                            >
-                              {r.isApproved ? (
-                                <>
-                                  <XCircle size={14} /> Reject
-                                </>
-                              ) : (
-                                <>
-                                  <CheckCircle size={14} /> Approve
-                                </>
-                              )}
-                            </button>
+                      <td className="py-4 px-4 text-right whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => setViewingReview(r)}
+                            className="p-1.5 text-neutral-500 hover:text-brand-gold hover:bg-amber-50 border border-neutral-200 rounded transition-colors"
+                            title="View Full Details"
+                          >
+                            <Eye size={15} />
+                          </button>
 
+                          <button
+                            onClick={() => handleToggleStatus(r.id, r.isApproved)}
+                            disabled={updatingId === r.id}
+                            className={`px-2.5 py-1.5 text-xs font-semibold rounded flex items-center gap-1 transition-colors ${r.isApproved ? 'bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200/80' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200/80'}`}
+                            title={r.isApproved ? 'Unapprove / Reject Review' : 'Approve Review'}
+                          >
+                            {r.isApproved ? (
+                              <>
+                                <XCircle size={14} /> Reject
+                              </>
+                            ) : (
+                              <>
+                                <CheckCircle size={14} /> Approve
+                              </>
+                            )}
+                          </button>
+
+                          {canDeleteReview && (
                             <button
                               onClick={() => handleDeleteReview(r.id)}
                               disabled={updatingId === r.id}
                               className="p-1.5 text-neutral-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
                               title="Delete Review"
                             >
-                              <Trash2 size={16} />
+                              <Trash2 size={15} />
                             </button>
-                          </div>
-                        </td>
-                      )}
+                          )}
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -353,6 +364,119 @@ const ReviewsAdminPage = () => {
             onPageChange={(p) => setPage(p)}
           />
         </div>
+
+        {/* View Full Review Details Modal */}
+        <AnimatePresence>
+          {viewingReview && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs" onClick={() => setViewingReview(null)}>
+              <motion.div
+                initial={{ opacity: 0, scale: 0.96 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.96 }}
+                className="bg-white rounded-2xl shadow-2xl w-full max-w-xl p-6 relative overflow-hidden"
+                onClick={e => e.stopPropagation()}
+              >
+                {/* Header */}
+                <div className="flex items-center justify-between pb-4 border-b border-neutral-100 mb-5">
+                  <div className="flex items-center gap-2">
+                    <MessageSquare className="text-brand-gold" size={20} />
+                    <h3 className="font-bold text-neutral-900 text-base sm:text-lg">Review Details</h3>
+                  </div>
+                  <button
+                    onClick={() => setViewingReview(null)}
+                    className="p-1.5 rounded-full hover:bg-neutral-100 text-neutral-400 hover:text-neutral-700 transition-colors"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+
+                {/* Body content */}
+                <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
+                  {/* Product Information */}
+                  <div className="flex items-center gap-4 bg-neutral-50 p-3.5 rounded-xl border border-neutral-100">
+                    <img
+                      src={getImageUrl(viewingReview.productImage) || '/placeholder.jpg'}
+                      alt={viewingReview.productName}
+                      className="w-14 h-16 object-cover rounded-lg border border-neutral-200 bg-white flex-shrink-0"
+                      onError={(e) => { e.target.onerror = null; e.target.src = '/placeholder.jpg'; }}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <span className="text-[10px] font-mono text-neutral-400 uppercase tracking-wider">Product Name</span>
+                      <h4 className="font-bold text-neutral-900 text-sm truncate">{viewingReview.productName}</h4>
+                      <p className="text-xs text-neutral-500 font-mono mt-0.5">Product ID: #{viewingReview.productId}</p>
+                    </div>
+                  </div>
+
+                  {/* Customer & Rating Info Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    <div className="bg-neutral-50 p-3.5 rounded-xl border border-neutral-100">
+                      <span className="text-[10px] font-mono text-neutral-400 uppercase tracking-wider">Customer Details</span>
+                      <p className="font-bold text-neutral-900 text-sm mt-1">{viewingReview.reviewerName || 'Anonymous'}</p>
+                      <p className="text-xs text-neutral-500 truncate">{viewingReview.reviewerEmail || 'No email'}</p>
+                      {viewingReview.isVerifiedPurchase && (
+                        <span className="inline-block text-[10px] bg-emerald-100 text-emerald-800 font-semibold px-2 py-0.5 rounded-full mt-2 border border-emerald-200">
+                          ✓ Verified Buyer
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="bg-neutral-50 p-3.5 rounded-xl border border-neutral-100">
+                      <span className="text-[10px] font-mono text-neutral-400 uppercase tracking-wider">Rating & Submission</span>
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <div className="flex items-center gap-0.5">
+                          {[1, 2, 3, 4, 5].map(s => (
+                            <Star key={s} size={15} className={s <= viewingReview.rating ? 'fill-brand-gold text-brand-gold' : 'fill-neutral-200 text-neutral-200'} />
+                          ))}
+                        </div>
+                        <span className="font-bold text-neutral-900 text-xs">{viewingReview.rating}.0 / 5</span>
+                      </div>
+                      <p className="text-[11px] text-neutral-500 mt-2">
+                        {new Date(viewingReview.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Status */}
+                  <div className="flex items-center justify-between bg-neutral-50 p-3 rounded-xl border border-neutral-100">
+                    <span className="text-xs font-semibold text-neutral-600">Moderation Status:</span>
+                    <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border ${viewingReview.isApproved ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+                      {viewingReview.isApproved ? 'Approved' : 'Pending / Rejected'}
+                    </span>
+                  </div>
+
+                  {/* Full Review Content */}
+                  <div className="bg-neutral-50 p-4 rounded-xl border border-neutral-100 space-y-2">
+                    <span className="text-[10px] font-mono text-neutral-400 uppercase tracking-wider">Review Content</span>
+                    {viewingReview.title && (
+                      <h4 className="font-bold text-neutral-900 text-sm border-b border-neutral-200/60 pb-2">{viewingReview.title}</h4>
+                    )}
+                    <p className="text-xs sm:text-sm text-neutral-700 leading-relaxed whitespace-pre-wrap pt-1">{viewingReview.body}</p>
+                  </div>
+                </div>
+
+                {/* Footer Actions */}
+                <div className="flex items-center justify-between pt-4 mt-4 border-t border-neutral-100 gap-3">
+                  <button
+                    onClick={() => {
+                      handleToggleStatus(viewingReview.id, viewingReview.isApproved);
+                      setViewingReview(prev => prev ? { ...prev, isApproved: !prev.isApproved } : null);
+                    }}
+                    className={`px-4 py-2 text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-colors ${viewingReview.isApproved ? 'bg-amber-100 text-amber-800 hover:bg-amber-200' : 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm'}`}
+                  >
+                    {viewingReview.isApproved ? <><XCircle size={15} /> Reject Review</> : <><CheckCircle size={15} /> Approve Review</>}
+                  </button>
+
+                  <button
+                    onClick={() => setViewingReview(null)}
+                    className="px-5 py-2 text-xs font-semibold text-neutral-700 bg-neutral-100 hover:bg-neutral-200 rounded-xl transition-colors"
+                  >
+                    Close
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
       </motion.div>
     </AdminLayout>
   );

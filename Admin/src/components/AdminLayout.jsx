@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Package, Tag, ShoppingBag, Users, Image, Ticket,
   Warehouse, UserCheck, BarChart3, Settings, LogOut, Menu, X,
   Store, CreditCard, Gift, MessageSquare, Globe, Bell, ShoppingCart, Star, Trash2,
-  ChevronDown, ChevronRight, Truck, XCircle, MapPin, Mail, ShieldCheck
+  ChevronDown, ChevronRight, Truck, XCircle, MapPin, Mail, ShieldCheck, RotateCcw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Logo from './Logo';
@@ -169,6 +169,7 @@ const NAV_SECTIONS = [
       { to: '/stock-alerts', label: 'Restock Requests', icon: Bell },
       { to: '/reviews', label: 'Product Reviews', icon: Star },
       { label: 'Orders', icon: ShoppingBag, isAccordion: true },
+      { to: '/returns', label: 'Returns & Refunds', icon: RotateCcw },
     ],
   },
   {
@@ -498,6 +499,12 @@ const AdminLayout = ({ children, title = '' }) => {
     loadOrderCounts();
     checkNewOrders();
 
+    // Poll for new incoming orders every 10 seconds to play audio chime and update toasts/badges
+    const interval = setInterval(() => {
+      checkNewOrders();
+      loadOrderCounts();
+    }, 10000);
+
     const handleOrderStatusChange = () => {
       loadOrderCounts();
       checkNewOrders();
@@ -506,6 +513,7 @@ const AdminLayout = ({ children, title = '' }) => {
 
     window.addEventListener('adminOrderStatusChanged', handleOrderStatusChange);
     return () => {
+      clearInterval(interval);
       window.removeEventListener('adminOrderStatusChanged', handleOrderStatusChange);
     };
   }, [loadNotifications, loadOrderCounts, checkNewOrders]);

@@ -78,6 +78,9 @@ const ProductDetailsPage = () => {
   const [reviewTitle, setReviewTitle] = useState('');
   const [reviewBody, setReviewBody] = useState('');
   const [editingReviewId, setEditingReviewId] = useState(null);
+  const [reviewImage, setReviewImage] = useState(null);
+  const [reviewImagePreview, setReviewImagePreview] = useState(null);
+  const reviewImageRef = useRef(null);
 
   useEffect(() => {
     if (product && product.id) {
@@ -110,6 +113,8 @@ const ProductDetailsPage = () => {
       setReviewTitle('');
       setReviewBody('');
     }
+    setReviewImage(null);
+    setReviewImagePreview(null);
     setReviewModalOpen(true);
   };
 
@@ -118,7 +123,27 @@ const ProductDetailsPage = () => {
     setReviewRating(rev.rating || 5);
     setReviewTitle(rev.title || '');
     setReviewBody(rev.body || '');
+    setReviewImage(null);
+    setReviewImagePreview(null);
     setReviewModalOpen(true);
+  };
+
+  const handleReviewImageChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const MAX_SIZE_MB = 5;
+    if (file.size > MAX_SIZE_MB * 1024 * 1024) {
+      toast.error(`Image too large. Please upload an image under ${MAX_SIZE_MB}MB.`);
+      e.target.value = '';
+      return;
+    }
+    if (!file.type.startsWith('image/')) {
+      toast.error('Only image files are allowed (JPG, PNG, WEBP, etc.)');
+      e.target.value = '';
+      return;
+    }
+    setReviewImage(file);
+    setReviewImagePreview(URL.createObjectURL(file));
   };
 
   const handleSubmitReview = async (e) => {
@@ -165,7 +190,6 @@ const ProductDetailsPage = () => {
   };
 
   const handleDeleteReview = async (reviewId) => {
-    if (!window.confirm('Are you sure you want to delete your review?')) return;
     try {
       const res = await dispatch(deleteReview({ id: reviewId, productId: product.id }));
       if (deleteReview.fulfilled.match(res)) {
@@ -366,26 +390,25 @@ const ProductDetailsPage = () => {
   const images = useMemo(() => {
     if (!product) return [];
 
-    let variantImageList = [];
     if (selectedVariant) {
       let vImgs = selectedVariant.images;
       if (typeof vImgs === 'string') {
         try { vImgs = JSON.parse(vImgs); } catch (e) { vImgs = []; }
       }
-      if (Array.isArray(vImgs) && vImgs.length > 0) {
-        variantImageList = vImgs.filter(img => typeof img === 'string' && img.length > 2);
+      const list = [];
+      if (selectedVariant.image && typeof selectedVariant.image === 'string' && selectedVariant.image.trim() !== '') {
+        list.push(selectedVariant.image);
       }
-      if (selectedVariant.image && !variantImageList.includes(selectedVariant.image)) {
-        variantImageList.unshift(selectedVariant.image);
+      if (Array.isArray(vImgs)) {
+        vImgs.forEach(img => {
+          if (img && typeof img === 'string' && img.trim() !== '' && !list.includes(img)) {
+            list.push(img);
+          }
+        });
       }
-    }
-
-    if (variantImageList.length > 0) {
-      const combined = [...variantImageList];
-      baseImages.forEach(img => {
-        if (!combined.includes(img)) combined.push(img);
-      });
-      return combined;
+      if (list.length > 0) {
+        return list.slice(0, 5);
+      }
     }
 
     return baseImages;
@@ -835,7 +858,10 @@ const ProductDetailsPage = () => {
                                 className={`w-full h-full rounded-full flex items-center justify-center shadow-md relative overflow-hidden ${
                                   isOutOfStock && !isSelected ? 'opacity-40' : ''
                                 }`}
-                                style={isGradient ? { background: cssColor } : { backgroundColor: cssColor }}
+                                style={isGradient
+                                  ? { background: cssColor, boxShadow: 'inset 0 0 0 1.5px rgba(0,0,0,0.18), 0 1px 3px rgba(0,0,0,0.12)' }
+                                  : { backgroundColor: cssColor, boxShadow: 'inset 0 0 0 1.5px rgba(0,0,0,0.18), 0 1px 3px rgba(0,0,0,0.12)' }
+                                }
                               >
                                 {isOutOfStock && (
                                   <span className="absolute inset-0 rounded-full overflow-hidden">
@@ -1317,6 +1343,52 @@ const ProductDetailsPage = () => {
                       className="w-full px-3 py-2 border border-neutral-200 rounded text-sm focus:border-brand-gold focus:outline-none resize-none"
                       required
                     />
+                  </div>
+
+                  {/* Photo Upload (Optional, max 5MB) */}
+                  <div>
+                    <label className="block text-xs font-semibold text-neutral-700 mb-1 uppercase tracking-wider">
+                      Add a Photo <span className="font-normal text-neutral-400 normal-case">(Optional · Max 5MB · JPG / PNG / WEBP)</span>
+                    </label>
+                    {reviewImagePreview ? (
+                      <div className="relative inline-block">
+                        <img
+                          src={reviewImagePreview}
+                          alt="Review preview"
+                          className="w-24 h-24 object-cover rounded-lg border border-neutral-200 shadow-sm"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setReviewImage(null);
+                            setReviewImagePreview(null);
+                            if (reviewImageRef.current) reviewImageRef.current.value = '';
+                          }}
+                          className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors shadow"
+                          aria-label="Remove image"
+                        >
+                          <X size={11} />
+                        </button>
+                        <p className="text-[10px] text-neutral-400 mt-1">
+                          {reviewImage ? `${(reviewImage.size / (1024 * 1024)).toFixed(2)} MB` : ''}
+                        </p>
+                      </div>
+                    ) : (
+                      <label className="flex items-center gap-3 cursor-pointer w-full border border-dashed border-neutral-300 hover:border-brand-gold rounded-lg px-4 py-3 transition-colors bg-neutral-50 hover:bg-amber-50/30 group">
+                        <span className="text-2xl text-neutral-400 group-hover:text-brand-gold transition-colors">📷</span>
+                        <div>
+                          <p className="text-xs font-semibold text-neutral-600 group-hover:text-brand-gold transition-colors">Click to upload a photo</p>
+                          <p className="text-[10px] text-neutral-400 mt-0.5">Maximum file size: 5MB</p>
+                        </div>
+                        <input
+                          ref={reviewImageRef}
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={handleReviewImageChange}
+                        />
+                      </label>
+                    )}
                   </div>
 
                   <div className="flex justify-end gap-3 pt-2">

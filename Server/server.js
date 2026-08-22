@@ -207,6 +207,7 @@ const start = async () => {
     await safeAddColumn('ALTER TABLE Customers ADD COLUMN passwordResetExpiry DATETIME NULL DEFAULT NULL');
     await safeAddColumn("ALTER TABLE Orders ADD COLUMN taxRate DECIMAL(5, 2) NULL DEFAULT 0");
     await safeAddColumn("ALTER TABLE Orders ADD COLUMN statusTimeline JSON NULL");
+    await safeAddColumn("ALTER TABLE OrderItems ADD COLUMN gstRate VARCHAR(20) NULL DEFAULT '0%'");
 
     // Ensure Banners table columns exist and migrate legacy type
     try {

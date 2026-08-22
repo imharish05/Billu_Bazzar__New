@@ -72,6 +72,70 @@ export const validateImageFile = (file, options = {}) => {
 };
 
 /**
+ * Asynchronously validates an image file by checking type, extension, size (in MB),
+ * and image dimensions (1:1 square aspect ratio and min width/height).
+ *
+ * @param {File} file - The file to validate.
+ * @param {Object} options - Validation options.
+ * @param {number} [options.maxSizeMB=3] - Maximum size limit in MB.
+ * @param {number} [options.minWidth=400] - Minimum required width.
+ * @param {number} [options.minHeight=400] - Minimum required height.
+ * @param {boolean} [options.requireSquare=true] - Whether 1:1 aspect ratio is required.
+ * @returns {Promise<{ isValid: boolean, error: string | null }>}
+ */
+export const validateImageDimensionsAndSize = async (file, options = {}) => {
+  const {
+    maxSizeMB = 3,
+    minWidth = 400,
+    minHeight = 400,
+    requireSquare = true
+  } = options;
+
+  const basicVal = validateImageFile(file, { maxSizeMB });
+  if (!basicVal.isValid) {
+    return basicVal;
+  }
+
+  return new Promise((resolve) => {
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+    img.src = objectUrl;
+
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      const width = img.naturalWidth || img.width;
+      const height = img.naturalHeight || img.height;
+
+      if (requireSquare) {
+        const aspectRatio = width / height;
+        if (aspectRatio < 0.95 || aspectRatio > 1.05) {
+          resolve({
+            isValid: false,
+            error: `Image must have a 1:1 square aspect ratio. Uploaded dimensions: ${width}×${height} px.`
+          });
+          return;
+        }
+      }
+
+      if (width < minWidth || height < minHeight) {
+        resolve({
+          isValid: false,
+          error: `Image resolution too small (${width}×${height} px). Minimum required resolution is ${minWidth}×${minHeight} px.`
+        });
+        return;
+      }
+
+      resolve({ isValid: true, error: null });
+    };
+
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve({ isValid: false, error: 'Could not read image file. Please select a valid image.' });
+    };
+  });
+};
+
+/**
  * Validates a video file by checking its type, extension, and size.
  * @param {File} file - The video file object.
  * @param {Object} options - Validation options.

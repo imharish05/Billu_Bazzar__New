@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react';
-import { Search, Eye, X, ShoppingCart, Loader2, ArrowRight, Mail } from 'lucide-react';
+import { Search, Eye, X, ShoppingCart, Loader2, ArrowRight, Mail, Users, UserCheck, UserX, RefreshCw, Filter } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
 import api from '../services/api';
 import toast from 'react-hot-toast';
+import { getImageUrl } from '../utils/imageUrl';
 
 const AbandonedCartsAdminPage = () => {
   const [carts, setCarts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [typeFilter, setTypeFilter] = useState('ALL'); // 'ALL' | 'CUSTOMER' | 'GUEST'
   const [selectedCart, setSelectedCart] = useState(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [showEmailModal, setShowEmailModal] = useState(false);
@@ -78,6 +80,11 @@ const AbandonedCartsAdminPage = () => {
     fetchAbandonedCarts();
   }, []);
 
+  // Counts by cart type
+  const allCount = carts.length;
+  const customerCount = carts.filter(c => c.customer).length;
+  const guestCount = carts.filter(c => !c.customer).length;
+
   // Format currency helper
   const fmt = (value, currency = 'INR') => {
     const numeric = parseFloat(value) || 0;
@@ -89,6 +96,12 @@ const AbandonedCartsAdminPage = () => {
 
   // Filter carts
   const filteredCarts = carts.filter(cart => {
+    // Cart type filter
+    if (typeFilter === 'CUSTOMER' && !cart.customer) return false;
+    if (typeFilter === 'GUEST' && cart.customer) return false;
+
+    // Search query filter
+    if (!search.trim()) return true;
     const searchLower = search.toLowerCase();
     if (cart.customer) {
       return (
@@ -153,6 +166,42 @@ const AbandonedCartsAdminPage = () => {
         </div>
       </div>
 
+      {/* Cart Type Filter Tabs */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-2 mb-4 scrollbar-none">
+        {[
+          { id: 'ALL', label: 'All Carts', count: allCount, icon: Users },
+          { id: 'CUSTOMER', label: 'Registered Customers', count: customerCount, icon: UserCheck },
+          { id: 'GUEST', label: 'Guest Sessions', count: guestCount, icon: UserX },
+        ].map(tab => {
+          const Icon = tab.icon;
+          const isActive = typeFilter === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setTypeFilter(tab.id)}
+              className={`flex-shrink-0 px-4 py-2 text-xs font-medium rounded-lg transition-all flex items-center gap-2 border ${
+                isActive
+                  ? 'bg-brand-gold text-white border-brand-gold shadow-sm font-semibold'
+                  : 'bg-white text-brand-grey border-brand-light hover:bg-brand-light/30'
+              }`}
+              id={`filter-tab-${tab.id.toLowerCase()}`}
+            >
+              <Icon size={14} className={isActive ? 'text-white' : 'text-brand-grey'} />
+              <span>{tab.label}</span>
+              <span
+                className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${
+                  isActive
+                    ? 'bg-white/20 text-white'
+                    : 'bg-neutral-100 text-neutral-600'
+                }`}
+              >
+                {tab.count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
       {/* Filters & Actions */}
       <div className="flex flex-col sm:flex-row gap-3 mb-6 items-center justify-between">
         <div className="relative flex-1 max-w-md w-full">
@@ -162,15 +211,17 @@ const AbandonedCartsAdminPage = () => {
             placeholder="Search by customer, email, or session ID..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2.5 border border-brand-light text-sm focus:outline-none focus:border-brand-gold bg-white"
+            className="w-full pl-9 pr-4 py-2.5 border border-brand-light text-sm focus:outline-none focus:border-brand-gold bg-white rounded-lg"
             id="carts-search"
             aria-label="Search carts"
           />
         </div>
         <button
           onClick={fetchAbandonedCarts}
-          className="btn-outline py-2 px-4 text-xs font-semibold flex items-center gap-2 self-stretch sm:self-auto"
+          className="btn-outline py-2.5 px-4 text-xs font-semibold flex items-center gap-2 self-stretch sm:self-auto rounded-lg"
+          id="refresh-carts-btn"
         >
+          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
           Refresh Data
         </button>
       </div>
@@ -337,7 +388,7 @@ const AbandonedCartsAdminPage = () => {
               <h4 className="font-playfair font-bold text-brand-text mb-3">Items in Cart</h4>
               <div className="space-y-4">
                 {selectedCart.items?.map(item => {
-                  const image = item.product?.images?.[0];
+                  const image = item.variant?.image || item.product?.defaultProductImage || (Array.isArray(item.product?.images) ? item.product?.images?.[0] : item.product?.images) || item.product?.image;
                   const hasVariant = item.variant;
                   const price = parseFloat(item.variant?.price || item.priceAtAdd || 0);
                   const currency = item.product?.currency || 'INR';
@@ -347,9 +398,13 @@ const AbandonedCartsAdminPage = () => {
                       <div className="w-16 h-16 bg-neutral-100 border border-brand-light rounded overflow-hidden flex-shrink-0">
                         {image ? (
                           <img
-                            src={image.startsWith('http') ? image : `/uploads/${image}`}
-                            alt={item.product?.name}
+                            src={getImageUrl(image)}
+                            alt={item.product?.name || 'Product'}
                             className="w-full h-full object-cover"
+                            onError={(e) => {
+                              e.target.onerror = null;
+                              e.target.src = '/placeholder.jpg';
+                            }}
                           />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-neutral-400">
@@ -488,6 +543,23 @@ const AbandonedCartsAdminPage = () => {
                   <option value="abandoned_cart">Abandoned Cart Recovery only</option>
                   <option value="push_notification">Push Notification Performance only</option>
                 </select>
+                <div className="mt-1.5 p-2.5 rounded bg-neutral-50 border border-neutral-200 text-xs text-neutral-600">
+                  {emailForm.reportType === 'abandoned_cart' && (
+                    <p>
+                      <strong className="text-amber-700 font-semibold">Cart Recovery:</strong> Dispatches high-urgency cart reservation notice, complete product list with name/pricing, recovery coupon, and direct 1-click checkout button.
+                    </p>
+                  )}
+                  {emailForm.reportType === 'push_notification' && (
+                    <p>
+                      <strong className="text-blue-700 font-semibold">Notification Update:</strong> Dispatches new updates with view catlog button highlighting the new products.
+                    </p>
+                  )}
+                  {emailForm.reportType === 'all' && (
+                    <p>
+                      <strong className="text-emerald-700 font-semibold"> Recovery & Updates:</strong> Comprehensive automation report summarizing abandoned cart items and new product updates.
+                    </p>
+                  )}
+                </div>
               </div>
 
               <div>

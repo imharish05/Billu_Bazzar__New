@@ -18,20 +18,7 @@ const handleDBError = (err, res, type = 'item') => {
   return res.status(500).json({ success: false, message: err.message || 'Internal Server Error' });
 };
 
-// Helper to delete local file
-const deleteLocalFile = (imagePath) => {
-  if (imagePath && imagePath.startsWith('/uploads/')) {
-    const localPath = path.join(__dirname, '..', imagePath.substring(1)); // strip leading slash
-    try {
-      if (fs.existsSync(localPath)) {
-        fs.unlinkSync(localPath);
-        console.log(`[Upload] Deleted local file: ${localPath}`);
-      }
-    } catch (err) {
-      console.error(`[Upload] Error deleting local file: ${err.message}`);
-    }
-  }
-};
+const { deleteLocalFile } = require('../utils/fileHelper');
 
 // Clean incoming payload data
 const prepareBannerData = (rawData) => {

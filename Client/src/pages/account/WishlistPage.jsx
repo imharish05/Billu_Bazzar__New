@@ -6,6 +6,8 @@ import toast from 'react-hot-toast';
 import { toggleItem } from '../../redux/slices/wishlistSlice';
 import { formatPrice } from '../../utils/currency';
 import { addLocal, openCart } from '../../redux/slices/cartSlice';
+import { getImageUrl } from '../../utils/imageUrl';
+import { getPlaceholderSvg } from '../../utils/placeholder';
 
 const WishlistPage = () => {
   const dispatch = useDispatch();
@@ -104,10 +106,11 @@ const WishlistPage = () => {
                 {/* Image Wrap - "group" class here so hover trigger is isolated to the image */}
                 <div className="group block relative overflow-hidden aspect-[3/4] bg-brand-light">
                   <img
-                    src={item.image}
+                    src={getImageUrl(item.image) || getPlaceholderSvg(item.name || 'Product')}
                     alt={item.name}
                     className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                     loading="lazy"
+                    onError={(e) => { e.target.onerror = null; e.target.src = getPlaceholderSvg(item.name || 'Product'); }}
                   />
 
                   {/* Badges */}

@@ -124,6 +124,8 @@ const Product = sequelize.define('Product', {
 });
 
 Product.beforeValidate(async (product) => {
+  const { Op } = require('sequelize');
+
   if (product.name && (!product.slug || product.slug.trim() === '')) {
     product.slug = product.name
       .toLowerCase()
@@ -135,7 +137,6 @@ Product.beforeValidate(async (product) => {
   if (product.slug) {
     let finalSlug = product.slug;
     let count = 1;
-    const { Op } = require('sequelize');
     while (true) {
       const whereClause = { slug: finalSlug };
       if (product.id) {
@@ -147,6 +148,28 @@ Product.beforeValidate(async (product) => {
       count++;
     }
     product.slug = finalSlug;
+  }
+
+  if (!product.sku || product.sku.trim() === '') {
+    const cleanCode = product.name ? product.name.toUpperCase().trim().replace(/[^A-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) : '';
+    product.sku = cleanCode ? `SKU-${cleanCode}` : `SKU-PROD-${Date.now()}`;
+  }
+
+  if (product.sku) {
+    let finalSku = product.sku.trim().toUpperCase();
+    let count = 1;
+    const baseSku = finalSku;
+    while (true) {
+      const whereClause = { sku: finalSku };
+      if (product.id) {
+        whereClause.id = { [Op.ne]: product.id };
+      }
+      const existing = await Product.findOne({ where: whereClause });
+      if (!existing) break;
+      finalSku = `${baseSku}-${count}`;
+      count++;
+    }
+    product.sku = finalSku;
   }
 });
 

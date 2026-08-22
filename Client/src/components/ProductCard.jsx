@@ -63,7 +63,7 @@ const ProductCard = ({ product, index = 0 }) => {
         variantId: v.id,
         price: v.price !== null && v.price !== undefined ? parseFloat(v.price) : parseFloat(prod.price),
         mrp: v.mrp !== null && v.mrp !== undefined ? parseFloat(v.mrp) : (prod.comparePrice ? parseFloat(prod.comparePrice) : null),
-        image: v.image || prod.defaultProductImage || prod.images?.[0] || '',
+        image: prod.defaultProductImage || prod.images?.[0] || v.image || '',
         stock: v.stock !== undefined ? parseInt(v.stock, 10) : (prod.stock || 0),
         attributes: attrs
       };
@@ -96,7 +96,7 @@ const ProductCard = ({ product, index = 0 }) => {
   };
 
   const resolvedDefault = resolveDefaultVariant(product);
-  const currentCardImage = hoverImage || resolvedDefault.image || product.defaultProductImage || product.images?.[0] || '';
+  const currentCardImage = hoverImage || product?.defaultProductImage || product?.images?.[0] || resolvedDefault.image || '';
 
   const isWishlisted = wishlist.some(item => {
     const sameProd = Number(item.productId || item.id) === Number(product.id);

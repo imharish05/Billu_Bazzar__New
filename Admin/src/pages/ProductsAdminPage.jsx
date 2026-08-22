@@ -10,7 +10,7 @@ import currencyJs from 'currency.js';
 import toast from 'react-hot-toast';
 import api from '../services/api';
 import { checkPermission } from '../utils/rbac';
-import { validateImageFile, validateVideoFile, validateVideoUrl } from '../utils/fileValidation';
+import { validateImageFile, validateImageDimensionsAndSize, validateVideoFile, validateVideoUrl } from '../utils/fileValidation';
 
 const fmt = (v) => currencyJs(v, { symbol: '₹', precision: 0 }).format();
 
@@ -280,6 +280,16 @@ const EMPTY_FORM = {
   has360View: false, hasVideo: false, videoUrl: '', defaultProductImage: null,
 };
 
+const getFullImageUrl = (src) => {
+  if (!src) return '';
+  if (typeof src !== 'string') return src;
+  if (src.startsWith('http://') || src.startsWith('https://') || src.startsWith('blob:') || src.startsWith('data:')) {
+    return src;
+  }
+  const serverUrl = (import.meta.env.VITE_SERVER_URL || 'http://localhost:5000').replace(/\/$/, '');
+  return `${serverUrl}${src.startsWith('/') ? '' : '/'}${src}`;
+};
+
 // ── Interactive 360 Spin Preview Box Component ──────────────────────────────
 const SpinViewerPreview = ({ images }) => {
   const [frameIndex, setFrameIndex] = useState(0);
@@ -345,7 +355,7 @@ const SpinViewerPreview = ({ images }) => {
         className="relative aspect-square max-h-64 mx-auto bg-neutral-950 rounded overflow-hidden cursor-grab active:cursor-grabbing border border-neutral-800 flex items-center justify-center select-none"
       >
         <img
-          src={images[frameIndex]}
+          src={getFullImageUrl(images[frameIndex])}
           alt={`360 Frame ${frameIndex + 1}`}
           className="w-full h-full object-contain pointer-events-none"
         />
@@ -622,11 +632,22 @@ const ProductModal = ({ product, onClose, onSave }) => {
   });
 
   const generateAutoVariantSku = useCallback((baseSku, productName, combo, idx = 0) => {
-    const comboLabel = combo ? Object.values(combo).join('-').toUpperCase().replace(/[^A-Z0-9-]/g, '') : '';
-    const prefix = baseSku?.trim()
-      ? baseSku.trim().toUpperCase()
-      : (productName?.trim() ? productName.trim().substring(0, 8).toUpperCase().replace(/[^A-Z0-9]/g, '') : 'SKU');
-    return comboLabel ? `SKU-${prefix}-${comboLabel}` : `SKU-${prefix}-VAR-${idx + 1}`;
+    const comboLabel = combo
+      ? Object.values(combo)
+          .filter(Boolean)
+          .join('-')
+          .toUpperCase()
+          .replace(/[^A-Z0-9-]/g, '')
+          .replace(/-+/g, '-')
+          .replace(/^-|-$/g, '')
+      : '';
+    let prefix = baseSku?.trim() || '';
+    if (!prefix && productName?.trim()) {
+      prefix = productName.toUpperCase().trim().replace(/[^A-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+    }
+    if (!prefix) prefix = 'PROD';
+    const cleanPrefix = prefix.toUpperCase().replace(/^SKU-/, '');
+    return comboLabel ? `SKU-${cleanPrefix}-${comboLabel}` : `SKU-${cleanPrefix}-VAR-${idx + 1}`;
   }, []);
 
   // Product Variants Matrix State (Single Base Variant Focus)
@@ -777,11 +798,11 @@ const ProductModal = ({ product, onClose, onSave }) => {
     });
   };
 
-  const handleVariantRowFilesSelect = (variantId, e) => {
+  const handleVariantRowFilesSelect = async (variantId, e) => {
     const rawFiles = Array.from(e.target.files || []);
     const validFiles = [];
     for (const file of rawFiles) {
-      const val = validateImageFile(file, { maxSizeMB: 5 });
+      const val = await validateImageDimensionsAndSize(file, { maxSizeMB: 3, minWidth: 400, minHeight: 400, requireSquare: true });
       if (!val.isValid) {
         toast.error(val.error);
       } else {
@@ -899,7 +920,7 @@ const ProductModal = ({ product, onClose, onSave }) => {
       const isSkuAuto = !p.sku || p.sku.startsWith('SKU-') || p.sku.startsWith('PROD-');
       let newSku = p.sku;
       if (isSkuAuto) {
-        const cleanCode = nameVal.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
+        const cleanCode = nameVal.toUpperCase().trim().replace(/[^A-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
         newSku = cleanCode ? `SKU-${cleanCode}` : '';
       }
       return { ...p, name: nameVal, sku: newSku };
@@ -1052,10 +1073,10 @@ const ProductModal = ({ product, onClose, onSave }) => {
   };
 
   // Image Selection Handlers
-  const handleDefaultImageSelect = (e) => {
+  const handleDefaultImageSelect = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const val = validateImageFile(file, { maxSizeMB: 5 });
+    const val = await validateImageDimensionsAndSize(file, { maxSizeMB: 3, minWidth: 400, minHeight: 400, requireSquare: true });
     if (!val.isValid) {
       toast.error(val.error);
       e.target.value = '';
@@ -1067,11 +1088,11 @@ const ProductModal = ({ product, onClose, onSave }) => {
     reader.readAsDataURL(file);
   };
 
-  const handleVariantImagesSelect = (e) => {
+  const handleVariantImagesSelect = async (e) => {
     const rawFiles = Array.from(e.target.files || []);
     const validFiles = [];
     for (const file of rawFiles) {
-      const val = validateImageFile(file, { maxSizeMB: 5 });
+      const val = await validateImageDimensionsAndSize(file, { maxSizeMB: 3, minWidth: 400, minHeight: 400, requireSquare: true });
       if (!val.isValid) {
         toast.error(val.error);
       } else {
@@ -1188,8 +1209,8 @@ const ProductModal = ({ product, onClose, onSave }) => {
     }
     let finalProductSku = form.sku ? form.sku.trim() : '';
     if (!finalProductSku && form.name) {
-      const cleanCode = form.name.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
-      finalProductSku = cleanCode ? `SKU-${cleanCode}` : `PROD-${Date.now()}`;
+      const cleanCode = form.name.toUpperCase().trim().replace(/[^A-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+      finalProductSku = cleanCode ? `SKU-${cleanCode}` : `SKU-PROD-${Date.now()}`;
     }
     if (!finalProductSku) {
       toast.error('SKU is required');
@@ -1214,9 +1235,21 @@ const ProductModal = ({ product, onClose, onSave }) => {
       return;
     }
 
-    if (!defaultProductImageFile && !defaultProductImagePreview && existingVariantImages.length === 0 && newVariantImageFiles.length === 0) {
+    if (!defaultProductImageFile && !defaultProductImagePreview) {
       toast.error('Default Product Listing Image is required');
       return;
+    }
+
+    if (productVariants.length > 0) {
+      for (let i = 0; i < productVariants.length; i++) {
+        const v = productVariants[i];
+        const hasMain = Boolean(v.mainImageFile || (v.mainImagePreview && String(v.mainImagePreview).trim()) || (v.existingImages && v.existingImages.length > 0));
+        if (!hasMain) {
+          const nameStr = v.attributes ? Object.values(v.attributes).join(' / ') : `Variant ${i + 1}`;
+          toast.error(`Main Variant Image is required for variant (${nameStr})`);
+          return;
+        }
+      }
     }
 
     if (form.has360View && existingSpinImages.length === 0 && newSpinImageFiles.length === 0) {
@@ -1273,18 +1306,20 @@ const ProductModal = ({ product, onClose, onSave }) => {
 
     if (defaultProductImageFile) {
       fd.append('defaultProductImage', defaultProductImageFile);
+    } else if (defaultProductImagePreview && typeof defaultProductImagePreview === 'string' && !defaultProductImagePreview.startsWith('blob:')) {
+      fd.append('defaultProductImage', defaultProductImagePreview);
     }
     if (videoFile) {
       fd.append('video', videoFile);
     }
 
     if (productVariants.length > 0) {
-      fd.append('variants', JSON.stringify(productVariants.map(v => {
+      fd.append('variants', JSON.stringify(productVariants.map((v, vIdx) => {
         const rawId = Number(v.id);
         const isValidDbId = Boolean(v.id && !isNaN(rawId) && rawId > 0 && rawId < 1000000000000);
         const autoVariantSku = (v.sku && v.sku.trim() !== '')
           ? v.sku.trim()
-          : generateAutoVariantSku(form.sku, form.name, v.attributes, 0);
+          : generateAutoVariantSku(finalProductSku, form.name, v.attributes, vIdx);
 
         return {
           id: isValidDbId ? rawId : null,
@@ -1314,7 +1349,11 @@ const ProductModal = ({ product, onClose, onSave }) => {
     }
 
     fd.append('isSingleVariantEdit', 'true');
-    fd.append('existingImages', JSON.stringify(existingVariantImages));
+    const preservedImages = [
+      ...existingVariantImages,
+      ...(defaultProductImagePreview && typeof defaultProductImagePreview === 'string' && !defaultProductImagePreview.startsWith('blob:') && !existingVariantImages.includes(defaultProductImagePreview) ? [defaultProductImagePreview] : [])
+    ];
+    fd.append('existingImages', JSON.stringify(preservedImages));
     newVariantImageFiles.forEach(file => {
       fd.append('variantImages', file);
     });
@@ -1508,6 +1547,28 @@ const ProductModal = ({ product, onClose, onSave }) => {
                   ))}
                 </select>
               </div>
+
+              {/* GST Rate (%) */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-semibold text-neutral-700">GST Rate (%) *</label>
+                  <span className="text-[10px] text-neutral-400 font-medium">(Inclusive)</span>
+                </div>
+                <select
+                  value={form.gstRate || '0%'}
+                  onChange={e => {
+                    const val = e.target.value;
+                    set('gstRate', val);
+                    setProductVariants(prev => prev.map(v => ({ ...v, gstRate: val })));
+                  }}
+                  className="w-full border border-brand-light bg-white px-3 py-2 text-sm focus:outline-none focus:border-brand-gold rounded-sm font-medium text-neutral-800"
+                >
+                  <option value="0%">0%</option>
+                  <option value="5%">5%</option>
+                  <option value="18%">18%</option>
+                  <option value="40%">40%</option>
+                </select>
+              </div>
             </div>
           </div>
 
@@ -1604,7 +1665,7 @@ const ProductModal = ({ product, onClose, onSave }) => {
 
             <div className="space-y-1.5">
               <label className="block text-xs font-semibold text-neutral-700">
-                Default Listing Image • Recommended 400×400px (1:1) • Max: 3MB
+                Default Listing Image * • Recommended 400×400px (1:1) • Max: 3MB
               </label>
 
               {defaultProductImagePreview ? (
@@ -1886,7 +1947,7 @@ const ProductModal = ({ product, onClose, onSave }) => {
                       {/* Main Variant Image (PDP / Cart / Checkout Display) */}
                       <div className="space-y-1.5 pt-2 border-t border-neutral-100">
                         <label className="block text-[10px] font-bold uppercase tracking-wider text-neutral-600">
-                          Main Variant Image (PDP / Cart / Checkout Display)
+                          Main Variant Image * (PDP / Cart / Checkout Display) • Recommended 400×400px (1:1) • Max: 3MB
                         </label>
                         {v.mainImagePreview ? (
                           <div className="relative w-24 h-24 border border-neutral-300 rounded-xl overflow-hidden shadow-md bg-neutral-900">
@@ -1911,10 +1972,10 @@ const ProductModal = ({ product, onClose, onSave }) => {
                             <input
                               type="file"
                               accept="image/jpeg,image/png,image/webp"
-                              onChange={e => {
+                              onChange={async e => {
                                 const file = e.target.files?.[0];
                                 if (file) {
-                                  const val = validateImageFile(file, { maxSizeMB: 5 });
+                                  const val = await validateImageDimensionsAndSize(file, { maxSizeMB: 3, minWidth: 400, minHeight: 400, requireSquare: true });
                                   if (!val.isValid) {
                                     toast.error(val.error);
                                     e.target.value = '';
@@ -2005,7 +2066,7 @@ const ProductModal = ({ product, onClose, onSave }) => {
                 {form.has360View && (
                   <div className="pt-2 border-t border-neutral-200 space-y-3">
                     <label className="block text-[11px] font-semibold text-neutral-700">Upload 360° Frames ({combinedSpinPreviews.length} frames)</label>
-                    <input type="file" multiple accept="image/*" onChange={handleSpinFileSelect} className="text-xs text-neutral-500" />
+                    <input type="file" multiple accept="image/jpeg,image/png,image/webp" onChange={handleSpinFileSelect} className="text-xs text-neutral-500" />
 
                     {/* Frame Reordering Grid (Drag and Drop enabled) */}
                     {combinedSpinPreviews.length > 0 && (
@@ -2023,7 +2084,7 @@ const ProductModal = ({ product, onClose, onSave }) => {
                               onDrop={(e) => handleSpinDrop(e, i)}
                               className="relative aspect-square border border-neutral-300 rounded overflow-hidden bg-white group cursor-grab active:cursor-grabbing hover:border-brand-gold transition-colors"
                             >
-                              <img src={src} alt={`Spin ${i}`} className="w-full h-full object-cover pointer-events-none" />
+                              <img src={getFullImageUrl(src)} alt={`Spin ${i}`} className="w-full h-full object-cover pointer-events-none" />
                               <span className="absolute top-0.5 left-0.5 bg-black/70 text-white text-[8px] px-1 rounded font-bold">#{i + 1}</span>
                               <button type="button" onClick={() => removeSpinFrame(i, false)} className="absolute top-0.5 right-0.5 bg-red-600 text-white p-0.5 rounded-full"><X size={8} /></button>
                             </div>

@@ -1,7 +1,7 @@
 'use strict';
 
 const crypto = require('crypto');
-const { sequelize, Order, OrderItem, Product, ProductVariant, InventoryMovementLog, Customer, Warehouse, WarehouseStock } = require('../models');
+const { sequelize, Order, OrderItem, Product, ProductVariant, InventoryMovementLog, Customer, Warehouse, WarehouseStock, Cart, CartItem } = require('../models');
 const { Op } = require('sequelize');
 const resolver = require('../services/paymentGatewayResolver');
 const { sendOrderStatusNotification } = require('../services/emailService');
@@ -315,6 +315,15 @@ const processConfirmedPayment = async ({ orderQuery, gatewayPaymentId, signature
         statusTimeline: updatedTimeline
       }, { transaction });
 
+      // Clear server-side cart items upon online payment confirmation
+      const cartWhere = order.customerId ? { customerId: order.customerId } : (order.sessionId ? { sessionId: order.sessionId } : null);
+      if (cartWhere) {
+        const userCart = await Cart.findOne({ where: cartWhere, transaction });
+        if (userCart) {
+          await CartItem.destroy({ where: { cartId: userCart.id }, transaction });
+        }
+      }
+
       // Credit earned loyalty points to customer account ONLY after payment confirmation
       if (order.customerId) {
         const { LoyaltyLedger, SiteSetting } = require('../models');
@@ -363,7 +372,18 @@ const processConfirmedPayment = async ({ orderQuery, gatewayPaymentId, signature
       }
 
       checkAndNotifyLowStock(sortedItems).catch(console.error);
-      sendOrderStatusNotification(order, 'PAID').catch(err => console.error('[paymentController] Error sending order paid email:', err.message));
+
+      // Send confirmed order & payment receipt notification email to customer
+      Order.findByPk(order.id, {
+        include: [
+          { model: OrderItem, as: 'items' },
+          { model: Customer, as: 'customer', attributes: ['id', 'name', 'email'] }
+        ]
+      }).then(fullOrder => {
+        if (fullOrder) {
+          sendOrderStatusNotification(fullOrder, 'PAID').catch(err => console.error('[paymentController] Error sending order paid email:', err.message));
+        }
+      }).catch(err => console.error('[paymentController] Error fetching full order for email notification:', err.message));
 
       return res.json({ success: true, status: 'PAID' });
     } else {

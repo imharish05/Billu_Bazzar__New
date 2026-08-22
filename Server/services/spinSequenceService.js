@@ -114,8 +114,11 @@ function deleteSpinSequence(productId) {
 
 /** Map a stored "/uploads/..." URL back to its file on disk. */
 function resolveLocalPath(relativeUrl) {
-  if (!relativeUrl || !relativeUrl.startsWith('/uploads/')) return null;
-  return path.join(__dirname, '..', relativeUrl.substring(1));
+  if (!relativeUrl || typeof relativeUrl !== 'string') return null;
+  const idx = relativeUrl.indexOf('/uploads/');
+  if (idx === -1) return null;
+  const cleanPath = relativeUrl.substring(idx + 1);
+  return path.join(__dirname, '..', cleanPath);
 }
 
 /** Extract a lowercase extension (no dot) from a URL/path, or null. */

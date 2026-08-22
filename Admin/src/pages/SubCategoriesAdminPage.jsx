@@ -119,6 +119,8 @@ const SubCategoriesAdminPage = () => {
   const handleSave = async (e) => {
     e.preventDefault();
     if (!form.categoryId) { setUploadError('Please select a root category'); return; }
+    if (!form.name.trim()) { setUploadError('Parent category name is required'); return; }
+    if (!form.slug.trim()) { setUploadError('Slug is required'); return; }
     setSaving(true);
     setUploadError(null);
 
@@ -327,8 +329,8 @@ const SubCategoriesAdminPage = () => {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-brand-grey mb-1.5" htmlFor="sub-slug">Slug</label>
-                  <input id="sub-slug" type="text" value={form.slug} onChange={e => setForm(p => ({ ...p, slug: e.target.value }))} className="w-full border border-brand-light bg-neutral-50 px-3 py-2 text-sm focus:outline-none focus:border-brand-gold transition-colors" placeholder="lehenga-sets" />
+                  <label className="block text-xs font-medium text-brand-grey mb-1.5" htmlFor="sub-slug">Slug *</label>
+                  <input id="sub-slug" type="text" value={form.slug} onChange={e => setForm(p => ({ ...p, slug: e.target.value }))} required className="w-full border border-brand-light bg-neutral-50 px-3 py-2 text-sm focus:outline-none focus:border-brand-gold transition-colors" placeholder="lehenga-sets" />
                 </div>
 
 

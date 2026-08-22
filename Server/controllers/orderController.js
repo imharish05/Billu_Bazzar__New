@@ -6,13 +6,77 @@ const { sendOrderStatusNotification } = require('../services/emailService');
 const currencyRateService = require('../services/currencyRateService');
 const { toAbsoluteUrl } = require('../utils/imageUrl');
 
+const orderItemInclude = {
+  model: OrderItem,
+  as: 'items',
+  required: false,
+  include: [
+    {
+      model: ProductVariant,
+      as: 'variant',
+      attributes: ['id', 'sku', 'image', 'attributes', 'gstRate'],
+      required: false
+    },
+    {
+      model: Product,
+      as: 'product',
+      attributes: ['id', 'name', 'sku', 'images', 'defaultProductImage', 'slug', 'categoryId', 'gstRate'],
+      required: false,
+      include: [
+        { model: Category, as: 'category', attributes: ['id', 'name'], required: false },
+        { model: ProductVariant, as: 'variants', attributes: ['id', 'sku', 'image', 'attributes', 'gstRate'], required: false }
+      ]
+    }
+  ]
+};
+
 const formatOrder = (order, req) => {
   if (!order) return order;
   const json = typeof order.toJSON === 'function' ? order.toJSON() : { ...order };
   if (Array.isArray(json.items)) {
     json.items = json.items.map(item => {
+      // Resolve proper GST rate for item
+      item.gstRate = item.gstRate || item.variant?.gstRate || item.product?.gstRate || (json.taxRate !== undefined && json.taxRate !== null ? `${json.taxRate}%` : '0%');
+
+      // Prioritize variant-specific image
+      let variantImg = item.variant?.image || item.variantImage || null;
+
+      // Fallback: If variant not directly attached but product has variants, match by variantId or selectedVariant
+      if (!variantImg && item.product?.variants && Array.isArray(item.product.variants)) {
+        const found = item.product.variants.find(v => {
+          if (item.variantId && v.id === item.variantId) return true;
+          if (v.image && item.selectedVariant && typeof item.selectedVariant === 'object') {
+            try {
+              const sv = typeof v.attributes === 'string' ? JSON.parse(v.attributes) : v.attributes;
+              return JSON.stringify(sv) === JSON.stringify(item.selectedVariant);
+            } catch (e) {
+              return false;
+            }
+          }
+          return false;
+        });
+        if (found?.image) variantImg = found.image;
+        if (!item.gstRate && found?.gstRate) item.gstRate = found.gstRate;
+      }
+
+      // Default product fallback image
+      const productImg = item.productImage || item.image || item.product?.defaultProductImage || (Array.isArray(item.product?.images) ? item.product.images[0] : null);
+
+      const resolvedDisplayImg = variantImg || productImg || '';
+
+      if (item.variant?.image) item.variant.image = toAbsoluteUrl(item.variant.image, req);
+      if (item.variantImage) item.variantImage = toAbsoluteUrl(item.variantImage, req);
       if (item.productImage) item.productImage = toAbsoluteUrl(item.productImage, req);
       if (item.image) item.image = toAbsoluteUrl(item.image, req);
+
+      item.displayImage = toAbsoluteUrl(resolvedDisplayImg, req);
+
+      if (variantImg) {
+        item.variantImage = toAbsoluteUrl(variantImg, req);
+        item.image = toAbsoluteUrl(variantImg, req);
+        item.productImage = toAbsoluteUrl(variantImg, req);
+      }
+
       return item;
     });
   }
@@ -58,20 +122,7 @@ const getAll = async (req, res) => {
       order: [['createdAt', 'DESC']],
       include: [
         { model: Customer, as: 'customer', attributes: ['id', 'name', 'email', 'phone'], required: false },
-        { 
-          model: OrderItem, 
-          as: 'items',
-          required: false,
-          include: [
-            { 
-              model: Product, 
-              as: 'product', 
-              attributes: ['id', 'name', 'categoryId'],
-              required: false,
-              include: [{ model: Category, as: 'category', attributes: ['id', 'name'], required: false }] 
-            }
-          ]
-        },
+        orderItemInclude,
       ],
     });
     const p = Math.max(1, parseInt(page, 10));
@@ -94,7 +145,7 @@ const getMyOrders = async (req, res) => {
         status: { [Op.ne]: 'EXPIRED' },
       },
       order: [['createdAt', 'DESC']],
-      include: [{ model: OrderItem, as: 'items' }],
+      include: [orderItemInclude],
     });
     const formattedOrders = orders.map(o => formatOrder(o, req));
     res.json({ success: true, orders: formattedOrders });
@@ -108,7 +159,7 @@ const getMyOrderById = async (req, res) => {
     const order = await Order.findOne({
       where: { id: req.params.id, customerId: req.customer.id },
       include: [
-        { model: OrderItem, as: 'items' },
+        orderItemInclude,
         { model: Coupon, as: 'coupon' },
       ],
     });
@@ -143,61 +194,21 @@ const cancelMyOrder = async (req, res) => {
     }
 
     if (order.inventoryProcessed) {
-      const { resolveWarehouseIdForItem, syncStorefrontStock } = require('./warehouseController');
-      for (const item of order.items || []) {
-        const whId = await resolveWarehouseIdForItem(item.productId, item.variantId, transaction);
-        let currentStock = 0;
-        if (item.variantId) {
-          const variant = await ProductVariant.findOne({ where: { id: item.variantId }, lock: transaction.LOCK.UPDATE, transaction });
-          if (variant) {
-            currentStock = parseInt(variant.stock, 10) || 0;
-            await variant.increment('stock', { by: item.quantity, transaction });
-          }
-        }
-        const product = await Product.findOne({ where: { id: item.productId }, lock: transaction.LOCK.UPDATE, transaction });
-        if (product) {
-          if (!item.variantId) currentStock = parseInt(product.stock, 10) || 0;
-          await product.increment('stock', { by: item.quantity, transaction });
-        }
-        if (whId) {
-          const [whStock] = await WarehouseStock.findOrCreate({
-            where: { warehouseId: whId, productId: item.productId, variantId: item.variantId || null },
-            defaults: { warehouseId: whId, productId: item.productId, variantId: item.variantId || null, quantity: currentStock, reservedQty: 0 },
-            transaction
-          });
-          await whStock.increment('quantity', { by: item.quantity, transaction });
-        }
-        await InventoryMovementLog.create({
-          productId: item.productId,
-          variantId: item.variantId || null,
-          warehouseId: whId,
-          orderId: order.id,
-          quantity: item.quantity,
-          type: 'ORDER_CANCEL_RESTOCK',
-          reason: `Customer cancelled order ${order.orderNumber}`
-        }, { transaction });
-      }
-    }
-
-    let currentTimeline = order.statusTimeline || {};
-    if (typeof currentTimeline === 'string') {
-      try { currentTimeline = JSON.parse(currentTimeline); } catch (e) { currentTimeline = {}; }
-    }
-    const updatedTimeline = {
-      ...currentTimeline,
-      CANCELLED: new Date().toISOString()
-    };
-
-    await order.update({ status: 'CANCELLED', inventoryProcessed: false, statusTimeline: updatedTimeline }, { transaction });
-    await transaction.commit();
-
-    if (order.items) {
-      const { syncStorefrontStock } = require('./warehouseController');
       for (const item of order.items) {
-        syncStorefrontStock(item.productId, item.variantId || null).catch(console.error);
+        if (item.variantId) {
+          const variant = await ProductVariant.findByPk(item.variantId, { transaction });
+          if (variant) await variant.increment('stock', { by: item.quantity, transaction });
+        } else if (item.productId) {
+          const product = await Product.findByPk(item.productId, { transaction });
+          if (product) await product.increment('stock', { by: item.quantity, transaction });
+        }
       }
     }
 
+    order.status = 'CANCELLED';
+    await order.save({ transaction });
+
+    await transaction.commit();
     res.json({ success: true, message: 'Order cancelled successfully', order });
   } catch (err) {
     await transaction.rollback();
@@ -211,7 +222,7 @@ const getOne = async (req, res) => {
       where: { id: req.params.id },
       include: [
         { model: Customer, as: 'customer', attributes: ['id', 'name', 'email', 'phone'] },
-        { model: OrderItem, as: 'items' },
+        orderItemInclude,
         { model: Coupon, as: 'coupon' },
       ],
     });
@@ -235,7 +246,7 @@ const trackOrder = async (req, res) => {
       where: whereClause,
       include: [
         { model: Customer, as: 'customer', attributes: ['id', 'name', 'email', 'phone'] },
-        { model: OrderItem, as: 'items' },
+        orderItemInclude,
         { model: Coupon, as: 'coupon' },
       ],
     });
@@ -323,7 +334,7 @@ const placeOrder = async (req, res) => {
       quantity: item.quantity,
       price: parseFloat(item.priceAtAdd),
       name: item.product?.name || 'Product',
-      image: item.product?.images?.[0] || '',
+      image: item.variant?.image || item.variantImage || item.image || item.product?.defaultProductImage || item.product?.images?.[0] || '',
       selectedVariant: item.selectedVariant || {} // carry full variant attribute snapshot from cart
     }));
 
@@ -350,6 +361,9 @@ const placeOrder = async (req, res) => {
         }
         currentStock = variant.stock;
         lockedStock[`v_${item.variantId}`] = variant;
+        if (variant.image) {
+          item.image = variant.image;
+        }
         // If cart item didn't carry variant attributes, fill from the locked variant record
         if (!item.selectedVariant || Object.keys(item.selectedVariant).length === 0) {
           item.selectedVariant = variant.attributes || {};
@@ -600,6 +614,9 @@ const placeOrder = async (req, res) => {
     const orderItemsPayload = itemsToLock.map(item => {
       const unitPrice = (orderCurrency === 'AED') ? toAed(item.price) : item.price;
       const totalPrice = Math.round((unitPrice * item.quantity) * 100) / 100;
+      const variantRec = item.variantId ? lockedStock[`v_${item.variantId}`] : null;
+      const productRec = lockedStock[`p_${item.productId}`];
+      const itemGst = item.gstRate || variantRec?.gstRate || productRec?.gstRate || '0%';
       return {
         orderId: order.id,
         productId: item.productId,
@@ -609,6 +626,7 @@ const placeOrder = async (req, res) => {
         quantity: item.quantity,
         unitPrice,
         totalPrice,
+        gstRate: itemGst,
         // Store clean variant attributes snapshot — DataTypes.JSON column, pass plain object directly
         selectedVariant: (() => {
           let sv = item.selectedVariant;
@@ -626,58 +644,64 @@ const placeOrder = async (req, res) => {
 
 const { syncStorefrontStock, resolveWarehouseIdForItem } = require('./warehouseController');
 
-    // 9. Process stock deduction immediately upon order placement for all orders
-    for (const item of itemsToLock) {
-      const whId = await resolveWarehouseIdForItem(item.productId, item.variantId, transaction);
-      let preDeductionStock = 0;
+    // 9. Process stock deduction immediately upon order placement ONLY for COD orders.
+    // Online orders (Razorpay/Telr) process stock deduction upon payment confirmation in paymentController.
+    if (isCod) {
+      for (const item of itemsToLock) {
+        const whId = await resolveWarehouseIdForItem(item.productId, item.variantId, transaction);
+        let preDeductionStock = 0;
 
-      if (item.variantId) {
-        // Decrement variant stock
-        const varObj = lockedStock[`v_${item.variantId}`];
-        if (varObj) {
-          preDeductionStock = parseInt(varObj.stock, 10) || 0;
-          await varObj.decrement('stock', { by: item.quantity, transaction });
+        if (item.variantId) {
+          // Decrement variant stock
+          const varObj = lockedStock[`v_${item.variantId}`];
+          if (varObj) {
+            preDeductionStock = parseInt(varObj.stock, 10) || 0;
+            await varObj.decrement('stock', { by: item.quantity, transaction });
+          }
+          // Also decrement parent product aggregate stock (locked separately since
+          // lockedStock only has p_ entries for non-variant items)
+          const parentProduct = await Product.findOne({
+            where: { id: item.productId },
+            lock: transaction.LOCK.UPDATE,
+            transaction
+          });
+          if (parentProduct) {
+            await parentProduct.decrement('stock', { by: item.quantity, transaction });
+          }
+        } else {
+          const prodObj = lockedStock[`p_${item.productId}`];
+          if (prodObj) {
+            preDeductionStock = parseInt(prodObj.stock, 10) || 0;
+            await prodObj.decrement('stock', { by: item.quantity, transaction });
+          }
         }
-        // Also decrement parent product aggregate stock (locked separately since
-        // lockedStock only has p_ entries for non-variant items)
-        const parentProduct = await Product.findOne({
-          where: { id: item.productId },
-          lock: transaction.LOCK.UPDATE,
-          transaction
-        });
-        if (parentProduct) {
-          await parentProduct.decrement('stock', { by: item.quantity, transaction });
+
+        if (whId) {
+          const [whStock] = await WarehouseStock.findOrCreate({
+            where: { warehouseId: whId, productId: item.productId, variantId: item.variantId || null },
+            defaults: { warehouseId: whId, productId: item.productId, variantId: item.variantId || null, quantity: preDeductionStock, reservedQty: 0 },
+            transaction
+          });
+          await whStock.decrement('quantity', { by: item.quantity, transaction });
         }
-      } else {
-        const prodObj = lockedStock[`p_${item.productId}`];
-        if (prodObj) {
-          preDeductionStock = parseInt(prodObj.stock, 10) || 0;
-          await prodObj.decrement('stock', { by: item.quantity, transaction });
-        }
+
+        // Log movement
+        await InventoryMovementLog.create({
+          productId: item.productId,
+          variantId: item.variantId || null,
+          warehouseId: whId,
+          orderId: order.id,
+          quantity: -item.quantity,
+          type: 'ORDER_DEDUCTION',
+          reason: `COD Order placement: ${order.orderNumber}`
+        }, { transaction });
       }
 
-      if (whId) {
-        const [whStock] = await WarehouseStock.findOrCreate({
-          where: { warehouseId: whId, productId: item.productId, variantId: item.variantId || null },
-          defaults: { warehouseId: whId, productId: item.productId, variantId: item.variantId || null, quantity: preDeductionStock, reservedQty: 0 },
-          transaction
-        });
-        await whStock.decrement('quantity', { by: item.quantity, transaction });
-      }
+      await order.update({ inventoryProcessed: true }, { transaction });
 
-      // Log movement
-      await InventoryMovementLog.create({
-        productId: item.productId,
-        variantId: item.variantId || null,
-        warehouseId: whId,
-        orderId: order.id,
-        quantity: -item.quantity,
-        type: 'ORDER_DEDUCTION',
-        reason: `Order placement: ${order.orderNumber}`
-      }, { transaction });
+      // Clear server-side cartitems for COD orders
+      await CartItem.destroy({ where: { cartId: cart.id }, transaction });
     }
-
-    await order.update({ inventoryProcessed: true }, { transaction });
 
     // 10. Process Loyalty Ledger and Points Balance
     if (req.customer && req.customer.id) {
@@ -721,14 +745,27 @@ const { syncStorefrontStock, resolveWarehouseIdForItem } = require('./warehouseC
       }, { transaction });
     }
 
-    // 10. Clear server-side cartitems
-    await CartItem.destroy({ where: { cartId: cart.id }, transaction });
-
     await transaction.commit();
 
     // 11. Post-commit operations (Asynchronous)
-    for (const item of itemsToLock) {
-      syncStorefrontStock(item.productId, item.variantId || null).catch(console.error);
+    if (isCod) {
+      for (const item of itemsToLock) {
+        syncStorefrontStock(item.productId, item.variantId || null).catch(console.error);
+      }
+    }
+
+    // Send email notification for new order (only for COD orders; online payment orders receive confirmation email after payment completes)
+    if (isCod) {
+      Order.findByPk(order.id, {
+        include: [
+          { model: OrderItem, as: 'items' },
+          { model: Customer, as: 'customer', attributes: ['id', 'name', 'email'] }
+        ]
+      }).then(fullOrder => {
+        if (fullOrder) {
+          sendOrderStatusNotification(fullOrder, 'CONFIRMED').catch(err => console.error('[orderController] Error sending placeOrder notification email:', err.message));
+        }
+      }).catch(err => console.error('[orderController] Error fetching full order for email notification:', err.message));
     }
 
     res.status(201).json({

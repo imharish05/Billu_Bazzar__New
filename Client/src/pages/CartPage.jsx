@@ -73,13 +73,13 @@ const CartPage = () => {
 
   return (
     <main id="main-content">
-      <div className="max-w-site mx-auto px-6 md:px-8 py-12">
+      <div className="max-w-site mx-auto px-4 sm:px-6 md:px-8 py-8 sm:py-12">
         <h1 className="font-playfair text-h2 font-bold mb-2">Shopping Cart</h1>
         <p className="text-brand-grey mb-8">{items.length} {items.length === 1 ? 'item' : 'items'}</p>
 
 
 
-        <div className="grid lg:grid-cols-3 gap-8">
+        <div className="grid lg:grid-cols-3 gap-6 lg:gap-8">
           {/* Cart items */}
           <div className="lg:col-span-2 space-y-4">
             <AnimatePresence mode="popLayout">
@@ -87,7 +87,7 @@ const CartPage = () => {
                 const rawName = item.product?.name || item.productName || item.name;
                 const name = (rawName && String(rawName).trim()) ? String(rawName).trim() : `Product #${item.productId || item.id || idx + 1}`;
 
-                let img = item.image || item.productImage || item.product?.image || (item.product?.images && item.product.images[0]);
+                let img = item.variant?.image || item.variantImage || item.image || item.productImage || item.product?.defaultProductImage || (item.product?.images && item.product.images[0]);
                 if (!img || img === 'undefined') {
                   img = 'https://images.unsplash.com/photo-1469334031218-e382a71b716b?w=200';
                 } else {
@@ -103,21 +103,21 @@ const CartPage = () => {
                     initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                     exit={{ opacity: 0, x: 100, height: 0 }}
                     transition={{ duration: 0.3 }}
-                    className="bg-white shadow-sm flex gap-4 p-4 rounded-lg border border-neutral-100"
+                    className="bg-white shadow-sm flex gap-3 sm:gap-4 p-3 sm:p-4 rounded-lg border border-neutral-100"
                   >
                     <img
                       src={img}
                       alt={name}
-                      className="w-24 h-28 object-cover flex-shrink-0 rounded border border-neutral-200"
+                      className="w-20 h-24 sm:w-24 sm:h-28 object-cover flex-shrink-0 rounded border border-neutral-200"
                       onError={(e) => {
                         e.target.onerror = null;
                         e.target.src = 'https://images.unsplash.com/photo-1469334031218-e382a71b716b?w=200';
                       }}
                     />
-                    <div className="flex-1 flex flex-col">
-                      <div className="flex justify-between gap-2">
-                        <div>
-                          <p className="font-semibold text-neutral-900">{name}</p>
+                    <div className="flex-1 flex flex-col min-w-0">
+                      <div className="flex justify-between items-start gap-2">
+                        <div className="min-w-0 pr-1">
+                          <p className="font-semibold text-neutral-900 text-sm sm:text-base leading-tight">{name}</p>
                           {variantText && (
                             <p className="text-xs text-brand-gold font-medium mt-1">{variantText}</p>
                           )}
@@ -131,18 +131,19 @@ const CartPage = () => {
                           <Trash2 size={16} />
                         </button>
                       </div>
-                      <div className="flex items-center justify-between mt-auto pt-3">
+                      <div className="mt-auto pt-3">
+                        <p className="font-semibold text-brand-text text-sm sm:text-base mb-2">{fmt((item.priceAtAdd || item.price || 0) * item.quantity)}</p>
                         {(() => {
                           const availStock = item.variant?.stock ?? item.product?.stock ?? item.availableStock ?? 9999;
                           const isMax = item.quantity >= availStock;
                           return (
-                            <div className="flex items-center border border-brand-light">
+                            <div className="flex items-center border border-brand-light w-fit rounded-sm overflow-hidden">
                               <button
                                 onClick={() => item.quantity <= 1 ? dispatch(removeLocal({ productId: item.productId || item.id, variantId: item.variantId, selectedVariant: item.selectedVariant })) : dispatch(addLocal({ ...item, quantity: -1 }))}
-                                className="w-9 h-9 flex items-center justify-center hover:bg-brand-light transition-colors focus-visible:outline-brand-gold"
+                                className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center hover:bg-brand-light transition-colors focus-visible:outline-brand-gold text-sm"
                                 aria-label="Decrease"
                               >−</button>
-                              <span className="w-10 text-center text-sm font-medium">{item.quantity}</span>
+                              <span className="w-8 sm:w-10 text-center text-xs sm:text-sm font-medium">{item.quantity}</span>
                               <button
                                 onClick={() => {
                                   if (isMax) {
@@ -152,14 +153,13 @@ const CartPage = () => {
                                   }
                                 }}
                                 disabled={isMax}
-                                className={`w-9 h-9 flex items-center justify-center transition-colors focus-visible:outline-brand-gold ${isMax ? 'bg-neutral-100 text-neutral-300 cursor-not-allowed' : 'hover:bg-brand-light'}`}
+                                className={`w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center transition-colors focus-visible:outline-brand-gold text-sm ${isMax ? 'bg-neutral-100 text-neutral-300 cursor-not-allowed' : 'hover:bg-brand-light'}`}
                                 aria-label="Increase"
                                 title={isMax ? `Max stock available: ${availStock}` : 'Increase quantity'}
                               >+</button>
                             </div>
                           );
                         })()}
-                        <p className="font-semibold text-brand-text">{fmt((item.priceAtAdd || item.price || 0) * item.quantity)}</p>
                       </div>
                     </div>
                   </motion.div>
@@ -177,7 +177,7 @@ const CartPage = () => {
 
             {/* Gift wrapping option block */}
             {isGiftServiceActive && (
-              <div className="bg-white border border-brand-light p-6 shadow-sm space-y-4 mt-6">
+              <div className="bg-white border border-brand-light p-4 sm:p-6 shadow-sm space-y-4 mt-6 rounded-lg">
                 <h3 className="font-playfair text-base font-semibold flex items-center gap-2 text-brand-text">
                   <Gift size={18} className="text-brand-gold" /> Premium Gift Services
                 </h3>
@@ -233,7 +233,7 @@ const CartPage = () => {
 
           {/* Order Summary */}
           <div className="space-y-4">
-            <div className="bg-white shadow-sm p-6 border border-brand-light">
+            <div className="bg-white shadow-sm p-4 sm:p-6 border border-brand-light rounded-lg">
               <h2 className="font-playfair text-xl font-semibold mb-5">Order Summary</h2>
               <div className="space-y-3 text-sm">
                 <div className="flex justify-between"><span className="text-brand-grey">Subtotal</span><span className="font-medium text-brand-text">{fmt(subtotal)}</span></div>

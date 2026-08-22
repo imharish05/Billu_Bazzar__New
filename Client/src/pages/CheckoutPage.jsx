@@ -62,7 +62,14 @@ const CheckoutPage = () => {
   const [registerLoading, setRegisterLoading] = useState(false);
 
   // Checkout state
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem('bb_checkout_step');
+      return saved ? Number(JSON.parse(saved)) : 1;
+    } catch {
+      return 1;
+    }
+  });
   const [otp, setOtp] = useState('');
   const [otpSent, setOtpSent] = useState(false);
   const [otpLoading, setOtpLoading] = useState(false);
@@ -141,7 +148,7 @@ const CheckoutPage = () => {
     const name = item.product?.name || item.productName || item.name || 'Luxury Product';
 
     // Resolve image URL
-    let rawImg = item.image || item.productImage || item.product?.image || (item.product?.images && item.product.images[0]);
+    let rawImg = item.variant?.image || item.variantImage || item.image || item.productImage || item.product?.defaultProductImage || (item.product?.images && item.product.images[0]);
     if (!rawImg || rawImg === 'undefined') {
       rawImg = 'https://images.unsplash.com/photo-1469334031218-e382a71b716b?w=160';
     } else {
@@ -230,9 +237,64 @@ const CheckoutPage = () => {
     country: '',
   };
 
-  const [billingAddress, setBillingAddress] = useState({ ...emptyAddr });
-  const [deliverySameAsBilling, setDeliverySameAsBilling] = useState(false); // Default to false
-  const [address, setAddress] = useState({ ...emptyAddr, country: 'India' });
+  const [billingAddress, setBillingAddress] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem('bb_checkout_billing_address');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return { ...emptyAddr };
+  });
+
+  const [deliverySameAsBilling, setDeliverySameAsBilling] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem('bb_checkout_same_delivery');
+      if (saved !== null) return JSON.parse(saved);
+    } catch {}
+    return false;
+  });
+
+  const [address, setAddress] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem('bb_checkout_delivery_address');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return { ...emptyAddr, country: 'India' };
+  });
+
+  // Populate customer profile defaults if address fields are empty
+  useEffect(() => {
+    if (customer) {
+      setBillingAddress(prev => ({
+        ...prev,
+        fullName: prev.fullName || customer.name || '',
+        phone: prev.phone || customer.phone || '',
+        email: prev.email || customer.email || '',
+      }));
+    }
+  }, [customer]);
+
+  // Persist checkout step and addresses across browser refreshes
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('bb_checkout_step', JSON.stringify(step));
+      sessionStorage.setItem('bb_checkout_billing_address', JSON.stringify(billingAddress));
+      sessionStorage.setItem('bb_checkout_delivery_address', JSON.stringify(address));
+      sessionStorage.setItem('bb_checkout_same_delivery', JSON.stringify(deliverySameAsBilling));
+    } catch (err) {
+      console.warn('[Checkout] Failed to save draft state to sessionStorage:', err);
+    }
+  }, [step, billingAddress, address, deliverySameAsBilling]);
+
+  // Fallback: If on step 2 but required billing address fields are missing, return to step 1
+  useEffect(() => {
+    if (step === 2) {
+      const isComplete = billingAddress.fullName?.trim() && billingAddress.phone?.trim() && billingAddress.email?.trim() && billingAddress.flatHouse?.trim() && billingAddress.city?.trim() && billingAddress.state?.trim();
+      if (!isComplete) {
+        setStep(1);
+      }
+    }
+  }, [step, billingAddress]);
+
   const [paymentMethod, setPaymentMethod] = useState('Razorpay Secure Online');
   const [geoCountry, setGeoCountry] = useState('IN');
   const [geoBlocked, setGeoBlocked] = useState(false);
@@ -697,6 +759,10 @@ const CheckoutPage = () => {
         orderCompletedRef.current = true;
         localStorage.removeItem('bb_referral');
         localStorage.removeItem('bb_applied_coupon');
+        sessionStorage.removeItem('bb_checkout_step');
+        sessionStorage.removeItem('bb_checkout_billing_address');
+        sessionStorage.removeItem('bb_checkout_delivery_address');
+        sessionStorage.removeItem('bb_checkout_same_delivery');
         dispatch(clearBuyNowItem());
         dispatch(clearLocal());
         dispatch(fetchCart());

@@ -39,7 +39,7 @@ const Footer = () => {
   return (
     <footer className="bg-brand-text text-white" role="contentinfo">
       {/* Main Footer Grid */}
-      <div className="max-w-site mx-auto px-6 md:px-8 py-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-10">
+      <div className="max-w-site mx-auto px-4 sm:px-6 md:px-8 py-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-10">
         {/* Brand */}
         <div>
           <Logo size="lg" className="mb-4" />
@@ -108,7 +108,7 @@ const Footer = () => {
 
       {/* Bottom Bar */}
       <div className="border-t border-white/10">
-        <div className="max-w-site mx-auto px-6 md:px-8 py-5 flex flex-col sm:flex-row items-center justify-between gap-3 text-white/40 text-xs">
+        <div className="max-w-site mx-auto px-4 sm:px-6 md:px-8 py-5 flex flex-col sm:flex-row items-center justify-between gap-3 text-white/40 text-xs">
           <p>© {new Date().getFullYear()} Billu Bazaar. All rights reserved.</p>
         </div>
       </div>

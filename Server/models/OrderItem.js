@@ -13,6 +13,7 @@ const OrderItem = sequelize.define('OrderItem', {
   unitPrice: { type: DataTypes.DECIMAL(10, 2), allowNull: false },
   totalPrice: { type: DataTypes.DECIMAL(10, 2), allowNull: false },
   selectedVariant: { type: DataTypes.JSON, defaultValue: {} },
+  gstRate: { type: DataTypes.STRING(20), defaultValue: '0%', allowNull: true },
   returnStatus: { type: DataTypes.ENUM('NONE', 'REQUESTED', 'APPROVED', 'COMPLETED'), defaultValue: 'NONE' },
 }, {
   tableName: 'OrderItems',

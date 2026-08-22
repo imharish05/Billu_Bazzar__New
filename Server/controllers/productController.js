@@ -6,20 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const { materializeSpinSequence, deleteSpinSequence } = require('../services/spinSequenceService');
 
-// Helper to delete local file
-const deleteLocalFile = (imagePath) => {
-  if (imagePath && imagePath.startsWith('/uploads/')) {
-    const localPath = path.join(__dirname, '..', imagePath.substring(1)); // strip leading slash
-    try {
-      if (fs.existsSync(localPath)) {
-        fs.unlinkSync(localPath);
-        console.log(`[Upload] Deleted local product file: ${localPath}`);
-      }
-    } catch (err) {
-      console.error(`[Upload] Error deleting local product file: ${err.message}`);
-    }
-  }
-};
+const { deleteLocalFile } = require('../utils/fileHelper');
 
 // Helper to process FormData body & files
 const processProductData = (req) => {
@@ -92,6 +79,7 @@ const processProductData = (req) => {
       existingImages = typeof existingImages === 'string' ? [existingImages] : [];
     }
   }
+  existingImages = existingImages.map(img => toRelativeUrl(img));
 
   const newImages = [];
   const newSpinImages = [];
@@ -113,6 +101,13 @@ const processProductData = (req) => {
         data.hasVideo = true;
       }
     });
+  }
+
+  if (data.defaultProductImage) {
+    data.defaultProductImage = toRelativeUrl(data.defaultProductImage);
+  }
+  if (data.videoUrl) {
+    data.videoUrl = toRelativeUrl(data.videoUrl);
   }
 
   if (data.videoUrl && data.videoUrl.trim() !== '') {
@@ -144,6 +139,7 @@ const processProductData = (req) => {
       existingSpinImages = [];
     }
   }
+  existingSpinImages = existingSpinImages.map(img => toRelativeUrl(img));
 
   data.spin_images = [...existingSpinImages, ...newSpinImages];
   delete data.existingSpinImages;
@@ -151,7 +147,7 @@ const processProductData = (req) => {
   return { data, existingImages, existingSpinImages };
 };
 
-const { toAbsoluteUrl } = require('../utils/imageUrl');
+const { toAbsoluteUrl, toRelativeUrl } = require('../utils/imageUrl');
 
 const formatProduct = (product, req) => {
   if (!product) return product;
@@ -165,6 +161,9 @@ const formatProduct = (product, req) => {
   }
   if (Array.isArray(json.spin_images)) {
     json.spin_images = json.spin_images.map(img => toAbsoluteUrl(img, req));
+  }
+  if (json.spinImagePath) {
+    json.spinImagePath = toAbsoluteUrl(json.spinImagePath, req);
   }
   if (json.videoUrl) {
     json.videoUrl = toAbsoluteUrl(json.videoUrl, req);
@@ -225,10 +224,10 @@ const getAll = async (req, res) => {
     if (minDiscount || maxDiscount) {
       where[Op.and] = where[Op.and] || [];
       where[Op.and].push({
-        comparePrice: { [Op.gt]: Product.sequelize.col('price') }
+        comparePrice: { [Op.gt]: Product.sequelize.col('Product.price') }
       });
 
-      const discountFormula = Product.sequelize.literal('ROUND(((comparePrice - price) / comparePrice) * 100)');
+      const discountFormula = Product.sequelize.literal('ROUND(((`Product`.`comparePrice` - `Product`.`price`) / `Product`.`comparePrice`) * 100)');
 
       if (minDiscount) {
         where[Op.and].push(
@@ -243,7 +242,9 @@ const getAll = async (req, res) => {
     }
 
     const { count, rows } = await Product.findAndCountAll({
-      where, limit: parseInt(limit), offset: (parseInt(page) - 1) * parseInt(limit),
+      where,
+      distinct: true,
+      limit: parseInt(limit), offset: (parseInt(page) - 1) * parseInt(limit),
       order: [[sort, order]],
       include: [
         { model: Category, as: 'category', attributes: ['id', 'name', 'slug'] },
@@ -357,8 +358,8 @@ const create = async (req, res) => {
 
           const mainVarImg = vMainPath || v.image || newGalleryPaths[0] || product.defaultProductImage || product.images?.[0] || null;
 
-          const comboLabel = v.attributes ? Object.values(v.attributes).join('-').toUpperCase().replace(/[^A-Z0-9-]/g, '') : '';
-          const prodPrefix = product.sku ? product.sku.trim().toUpperCase() : (product.slug ? product.slug.substring(0, 8).toUpperCase().replace(/[^A-Z0-9]/g, '') : `PRD${product.id}`);
+          const comboLabel = v.attributes ? Object.values(v.attributes).filter(Boolean).join('-').toUpperCase().replace(/[^A-Z0-9-]/g, '').replace(/-+/g, '-').replace(/^-|-$/g, '') : '';
+          const prodPrefix = product.sku ? product.sku.trim().toUpperCase().replace(/^SKU-/, '') : (product.slug ? product.slug.toUpperCase().replace(/[^A-Z0-9]+/g, '-') : `PRD${product.id}`);
           const fallbackSku = comboLabel ? `SKU-${prodPrefix}-${comboLabel}` : `SKU-${prodPrefix}-VAR-${i + 1}`;
 
           const variant = await ProductVariant.create({
@@ -392,7 +393,7 @@ const create = async (req, res) => {
       ]
     });
 
-    res.status(201).json({ success: true, product: freshProduct });
+    res.status(201).json({ success: true, product: formatProduct(freshProduct, req) });
   } catch (err) {
     console.error('[Create Product Error]:', err);
     const detailMsg = err.errors && Array.isArray(err.errors) ? err.errors.map(e => e.message).join(', ') : err.message;
@@ -410,9 +411,14 @@ const update = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Warehouse Location is required' });
     }
 
-    // Identify and delete removed files
+    // Identify and delete removed files safely (preserve default product image & active images)
     const oldImages = product.images || [];
-    const removedImages = oldImages.filter(img => !existingImages.includes(img));
+    const activeImages = new Set([
+      ...(data.images || []),
+      ...(data.defaultProductImage ? [data.defaultProductImage] : []),
+      ...(product.defaultProductImage ? [product.defaultProductImage] : [])
+    ]);
+    const removedImages = oldImages.filter(img => img && !activeImages.has(img));
     removedImages.forEach(img => deleteLocalFile(img));
 
     // Identify and delete removed spin files
@@ -477,8 +483,8 @@ const update = async (req, res) => {
           const varLowStock = v.lowStockThreshold ? parseInt(v.lowStockThreshold, 10) : (product.lowStockThreshold || 10);
           const varGst = (v.gstRate !== undefined && v.gstRate !== null && v.gstRate !== '') ? v.gstRate : (product.gstRate || '0%');
 
-          const comboLabel = v.attributes ? Object.values(v.attributes).join('-').toUpperCase().replace(/[^A-Z0-9-]/g, '') : '';
-          const prodPrefix = product.sku ? product.sku.trim().toUpperCase() : (product.slug ? product.slug.substring(0, 8).toUpperCase().replace(/[^A-Z0-9]/g, '') : `PRD${product.id}`);
+          const comboLabel = v.attributes ? Object.values(v.attributes).filter(Boolean).join('-').toUpperCase().replace(/[^A-Z0-9-]/g, '').replace(/-+/g, '-').replace(/^-|-$/g, '') : '';
+          const prodPrefix = product.sku ? product.sku.trim().toUpperCase().replace(/^SKU-/, '') : (product.slug ? product.slug.toUpperCase().replace(/[^A-Z0-9]+/g, '-') : `PRD${product.id}`);
           const fallbackSku = comboLabel ? `SKU-${prodPrefix}-${comboLabel}` : `SKU-${prodPrefix}-VAR-${i + 1}`;
 
           if (existingVariant) {
@@ -565,7 +571,7 @@ const update = async (req, res) => {
       ]
     });
 
-    res.json({ success: true, product: freshProduct });
+    res.json({ success: true, product: formatProduct(freshProduct, req) });
   } catch (err) {
     console.error('[Update Product Error]:', err);
     const detailMsg = err.errors && Array.isArray(err.errors) ? err.errors.map(e => e.message).join(', ') : err.message;

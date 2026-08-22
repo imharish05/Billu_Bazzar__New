@@ -9,6 +9,7 @@ import CategoriesAdminPage from './pages/CategoriesAdminPage';
 import SubCategoriesAdminPage from './pages/SubCategoriesAdminPage';
 import SubSubCategoriesAdminPage from './pages/SubSubCategoriesAdminPage';
 import OrdersAdminPage from './pages/OrdersAdminPage';
+import ReturnsAdminPage from './pages/ReturnsAdminPage';
 import CustomersAdminPage from './pages/CustomersAdminPage';
 import AbandonedCartsAdminPage from './pages/AbandonedCartsAdminPage';
 import BannersAdminPage from './pages/BannersAdminPage';
@@ -89,6 +90,7 @@ const App = () => {
         <Route path="/sub-categories" element={<Protected><SubCategoriesAdminPage /></Protected>} />
         <Route path="/sub-sub-categories" element={<Protected><SubSubCategoriesAdminPage /></Protected>} />
         <Route path="/orders"      element={<Protected><OrdersAdminPage /></Protected>} />
+        <Route path="/returns"     element={<Protected><ReturnsAdminPage /></Protected>} />
         <Route path="/customers"   element={<Protected><CustomersAdminPage /></Protected>} />
         <Route path="/contact-enquiries" element={<Protected><ContactEnquiriesAdminPage /></Protected>} />
         <Route path="/personal-shopper"   element={<Protected><PersonalShopperAdminPage /></Protected>} />

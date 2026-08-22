@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useSearchParams } from 'react-router-dom';
-import { AlertTriangle, Eye } from 'lucide-react';
+import { AlertTriangle, Eye, Printer } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
 import AdminOrderDetailsModal from '../components/AdminOrderDetailsModal';
 import { PaginationTop, PaginationBottom } from '../components/Pagination';
@@ -9,7 +9,7 @@ import { fetchAdminOrders, updateOrderStatus } from '../redux/slices/ordersSlice
 import currencyJs from 'currency.js';
 import { toast } from 'react-hot-toast';
 import { checkPermission } from '../utils/rbac';
-
+import { printInvoice } from '../utils/invoiceGenerator';
 import api from '../services/api';
 
 const fmt = (v) => currencyJs(v, { symbol: '₹', precision: 0 }).format();
@@ -215,14 +215,27 @@ const OrdersAdminPage = () => {
                   )}
                   <td className="px-4 py-3 text-brand-grey text-xs">{new Date(order.createdAt).toLocaleDateString('en-IN')}</td>
                   <td className="px-4 py-3">
-                    <button
-                      onClick={() => setSelectedOrderModal(order)}
-                      className="p-1.5 bg-brand-gold/10 hover:bg-brand-gold hover:text-white text-brand-gold rounded-lg transition-all flex items-center gap-1 text-xs font-medium border border-brand-gold/20"
-                      title="View Order Details"
-                      id={`view-order-${order.id}`}
-                    >
-                      <Eye size={15} /> Details
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => setSelectedOrderModal(order)}
+                        className="p-1.5 bg-brand-gold/10 hover:bg-brand-gold hover:text-white text-brand-gold rounded-lg transition-all flex items-center gap-1 text-xs font-medium border border-brand-gold/20"
+                        title="View Order Details"
+                        id={`view-order-${order.id}`}
+                      >
+                        <Eye size={14} /> Details
+                      </button>
+                      <button
+                        onClick={() => {
+                          toast.success(`Opening Tax Invoice for Order ${order.orderNumber}...`);
+                          printInvoice(order);
+                        }}
+                        className="p-1.5 bg-neutral-100 hover:bg-neutral-900 hover:text-white text-neutral-700 rounded-lg transition-all flex items-center gap-1 text-xs font-medium border border-neutral-200"
+                        title="Print GST Tax Invoice"
+                        id={`print-order-${order.id}`}
+                      >
+                        <Printer size={14} /> Invoice
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

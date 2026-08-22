@@ -4,6 +4,7 @@ import { Bell, Search, RefreshCw, Mail, CheckCircle2, Clock, Package, Send, Aler
 import AdminLayout from '../components/AdminLayout';
 import api from '../services/api';
 import toast from 'react-hot-toast';
+import { getImageUrl } from '../utils/imageUrl';
 
 const StockAlertsAdminPage = () => {
   const [alerts, setAlerts] = useState([]);
@@ -221,7 +222,7 @@ const StockAlertsAdminPage = () => {
                           <div className="flex items-center gap-3">
                             {displayImage ? (
                               <img
-                                src={displayImage}
+                                src={getImageUrl(displayImage)}
                                 alt={prod.name}
                                 className="w-11 h-11 object-cover rounded-lg border border-neutral-200 shrink-0"
                               />

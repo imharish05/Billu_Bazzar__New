@@ -3,20 +3,7 @@ const { Affiliate, Order, Customer } = require('../models');
 const fs = require('fs');
 const path = require('path');
 
-// Helper to delete local file
-const deleteLocalFile = (imagePath) => {
-  if (imagePath && imagePath.startsWith('/uploads/')) {
-    const localPath = path.join(__dirname, '..', imagePath.substring(1)); // strip leading slash
-    try {
-      if (fs.existsSync(localPath)) {
-        fs.unlinkSync(localPath);
-        console.log(`[Upload] Deleted local affiliate file: ${localPath}`);
-      }
-    } catch (err) {
-      console.error(`[Upload] Error deleting local affiliate file: ${err.message}`);
-    }
-  }
-};
+const { deleteLocalFile } = require('../utils/fileHelper');
 
 const getAll = async (req, res) => {
   try {

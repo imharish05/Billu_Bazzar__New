@@ -60,10 +60,10 @@ const ScrollReveal = ({ children, delay = 0, className = '' }) => {
 /* ── Countdown Unit ──────────────────────────────────────────────────────── */
 const CountUnit = ({ value, label }) => (
   <div className="flex flex-col items-center">
-    <div className="w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16 lg:w-20 lg:h-20 bg-neutral-900 border border-white/10 flex items-center justify-center rounded-lg shadow-inner">
-      <span className="font-playfair text-base sm:text-xl md:text-2xl lg:text-3xl font-bold text-white">{String(value).padStart(2,'0')}</span>
+    <div className="w-12 h-12 sm:w-14 sm:h-14 md:w-14 md:h-14 lg:w-16 lg:h-16 xl:w-20 xl:h-20 bg-neutral-900 border border-white/10 flex items-center justify-center rounded-lg shadow-inner">
+      <span className="font-playfair text-base sm:text-lg md:text-xl lg:text-2xl xl:text-3xl font-bold text-white">{String(value).padStart(2,'0')}</span>
     </div>
-    <span className="text-[9px] sm:text-[11px] md:text-xs text-brand-grey mt-1.5 uppercase tracking-widest font-semibold">{label}</span>
+    <span className="text-[9px] sm:text-[10px] md:text-[11px] xl:text-xs text-brand-grey mt-1.5 uppercase tracking-widest font-semibold">{label}</span>
   </div>
 );
 
@@ -456,7 +456,7 @@ const HomePage = () => {
       {/* ── SECTION 3: Countdown / Deal of the Month Banner ────────────── */}
       {countdownBanner && !isExpired && (
         <section className="bg-gradient-to-r from-neutral-950 via-neutral-900 to-neutral-950 py-10 md:py-14 overflow-hidden border-y border-white/10" aria-label="Deal of the month countdown">
-          <div className="max-w-site mx-auto px-4 sm:px-6 md:px-8 grid grid-cols-1 lg:grid-cols-3 gap-8 items-center justify-items-center">
+          <div className="max-w-site mx-auto px-4 sm:px-6 md:px-8 grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-6 xl:gap-8 items-center justify-items-center">
             {/* Text & Action */}
             <div className="text-center lg:text-left flex flex-col items-center lg:items-start max-w-md">
               {countdownBanner.badgeText && (
@@ -486,7 +486,7 @@ const HomePage = () => {
             </div>
 
             {/* Product Preview (Visible on all devices including iPad Air/Mini & Mobile) */}
-            <div className="relative w-44 h-44 sm:w-56 sm:h-56 lg:w-64 lg:h-64 flex-shrink-0 rounded-2xl overflow-hidden shadow-2xl border border-white/20 bg-neutral-900 group">
+            <div className="relative w-44 h-44 sm:w-52 sm:h-52 md:w-56 md:h-56 lg:w-56 lg:h-56 xl:w-64 xl:h-64 flex-shrink-0 rounded-2xl overflow-hidden shadow-2xl border border-white/20 bg-neutral-900 group">
               <img
                 src={getImageUrl(countdownBanner.image)}
                 alt={countdownBanner.title || 'Deal of the week'}
@@ -500,13 +500,13 @@ const HomePage = () => {
               <p className="text-brand-gold text-[11px] sm:text-xs font-bold tracking-[0.2em] uppercase flex items-center gap-2">
                 <Clock size={14} className="animate-pulse text-brand-gold" /> Offer Ends In
               </p>
-              <div className="flex items-center gap-2 sm:gap-3 justify-center">
+              <div className="flex items-center gap-1.5 sm:gap-2.5 md:gap-2.5 xl:gap-3 justify-center">
                 <CountUnit value={countdown.d} label="Days" />
-                <span className="text-brand-gold text-xl sm:text-2xl font-bold mb-4">:</span>
+                <span className="text-brand-gold text-lg sm:text-xl md:text-xl lg:text-2xl font-bold mb-4">:</span>
                 <CountUnit value={countdown.h} label="Hours" />
-                <span className="text-brand-gold text-xl sm:text-2xl font-bold mb-4">:</span>
+                <span className="text-brand-gold text-lg sm:text-xl md:text-xl lg:text-2xl font-bold mb-4">:</span>
                 <CountUnit value={countdown.m} label="Min" />
-                <span className="text-brand-gold text-xl sm:text-2xl font-bold mb-4">:</span>
+                <span className="text-brand-gold text-lg sm:text-xl md:text-xl lg:text-2xl font-bold mb-4">:</span>
                 <CountUnit value={countdown.s} label="Sec" />
               </div>
             </div>

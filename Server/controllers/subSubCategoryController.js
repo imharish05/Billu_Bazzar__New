@@ -17,19 +17,7 @@ const handleDBError = (err, res, type = 'item') => {
   return res.status(500).json({ success: false, message: err.message });
 };
 
-const deleteLocalFile = (imagePath) => {
-  if (imagePath && imagePath.startsWith('/uploads/')) {
-    const localPath = path.join(__dirname, '..', imagePath.substring(1));
-    try {
-      if (fs.existsSync(localPath)) {
-        fs.unlinkSync(localPath);
-        console.log(`[Upload] Deleted local file: ${localPath}`);
-      }
-    } catch (err) {
-      console.error(`[Upload] Error deleting local file: ${err.message}`);
-    }
-  }
-};
+const { deleteLocalFile } = require('../utils/fileHelper');
 
 const getAll = async (req, res) => {
   try {

@@ -6,6 +6,16 @@ import Product360Fallback from './Product360Fallback';
  * Directs rendering to Product360Fallback, which provides high-fidelity,
  * fully customizable 360° spin controls and adjustable speeds.
  */
+const SERVER_URL = (import.meta.env.VITE_SERVER_URL || 'http://localhost:5000').replace(/\/$/, '');
+
+const getFullImageUrl = (url) => {
+  if (!url || typeof url !== 'string') return url;
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('blob:') || url.startsWith('data:')) {
+    return url;
+  }
+  return `${SERVER_URL}${url.startsWith('/') ? '' : '/'}${url}`;
+};
+
 const Product360Viewer = ({ product, onClose }) => {
   const spinImages = Array.isArray(product?.spin_images) ? product.spin_images : [];
   const count = product?.spinImageCount || 0;
@@ -38,7 +48,8 @@ const Product360Viewer = ({ product, onClose }) => {
     );
   }
 
-  const images = spinImages.length ? spinImages : buildFrameUrls(path, count, ext);
+  const rawImages = spinImages.length ? spinImages : buildFrameUrls(path, count, ext);
+  const images = rawImages.map(img => getFullImageUrl(img));
 
   return (
     <Product360Fallback

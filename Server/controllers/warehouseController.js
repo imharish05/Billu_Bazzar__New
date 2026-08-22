@@ -108,6 +108,15 @@ const getOne = async (req, res) => {
 const create = async (req, res) => {
   const transaction = await Warehouse.sequelize.transaction();
   try {
+    const { name, code, contactName, contactPhone, city, state, pincode, address } = req.body;
+    const streetAddress = address?.streetAddress;
+    const country = address?.country;
+
+    if (!name?.trim() || !code?.trim() || !contactName?.trim() || !contactPhone?.trim() || !city?.trim() || !state?.trim() || !pincode?.trim() || !streetAddress?.trim() || !country?.trim()) {
+      await transaction.rollback();
+      return res.status(400).json({ success: false, message: 'All warehouse fields (name, code, contact name, contact phone, street address, city, state, pincode, country) are required.' });
+    }
+
     if (req.body.contactPhone && req.body.contactPhone.trim()) {
       const cleanPhone = req.body.contactPhone.trim().replace(/^\+/, '').replace(/[\s\-()]/g, '');
       if (!/^\d{7,15}$/.test(cleanPhone)) {
@@ -144,6 +153,15 @@ const create = async (req, res) => {
 const update = async (req, res) => {
   const transaction = await Warehouse.sequelize.transaction();
   try {
+    const { name, code, contactName, contactPhone, city, state, pincode, address } = req.body;
+    const streetAddress = address?.streetAddress;
+    const country = address?.country;
+
+    if (!name?.trim() || !code?.trim() || !contactName?.trim() || !contactPhone?.trim() || !city?.trim() || !state?.trim() || !pincode?.trim() || !streetAddress?.trim() || !country?.trim()) {
+      await transaction.rollback();
+      return res.status(400).json({ success: false, message: 'All warehouse fields (name, code, contact name, contact phone, street address, city, state, pincode, country) are required.' });
+    }
+
     if (req.body.contactPhone && req.body.contactPhone.trim()) {
       const cleanPhone = req.body.contactPhone.trim().replace(/^\+/, '').replace(/[\s\-()]/g, '');
       if (!/^\d{7,15}$/.test(cleanPhone)) {
@@ -298,7 +316,7 @@ const getStock = async (req, res) => {
   try {
     const where = { warehouseId: req.params.id };
     if (req.query.lowStock === 'true') {
-      where.quantity = { [Op.lte]: WarehouseStock.sequelize.col('reorderLevel') };
+      where.quantity = { [Op.lte]: WarehouseStock.sequelize.col('WarehouseStock.reorderLevel') };
     }
     const stocks = await WarehouseStock.findAll({
       where,

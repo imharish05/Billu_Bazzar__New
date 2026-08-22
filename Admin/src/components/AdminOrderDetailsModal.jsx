@@ -1,9 +1,10 @@
 import { motion } from 'framer-motion';
-import { X, MapPin, CreditCard, Truck, FileText, Package, Check, Circle, Phone, Mail, Gift, Copy } from 'lucide-react';
+import { X, MapPin, CreditCard, Truck, FileText, Package, Check, Circle, Phone, Mail, Gift, Copy, Printer } from 'lucide-react';
 import currencyJs from 'currency.js';
 import toast from 'react-hot-toast';
 import { getImageUrl } from '../utils/imageUrl';
 import { getPlaceholderSvg } from '../utils/placeholder';
+import { printInvoice } from '../utils/invoiceGenerator';
 
 const fmt = (v, currency = 'INR') => {
   const sym = currency === 'USD' ? '$' : (currency === 'EUR' ? '€' : (currency === 'GBP' ? '£' : '₹'));
@@ -116,8 +117,8 @@ const AdminOrderDetailsModal = ({ order, onClose, onStatusUpdate }) => {
   const customerPhone = order.customer?.phone || billingObj.phone || shippingObj.phone || '';
 
   const handlePrintInvoice = () => {
-    toast.success(`Printing Tax Invoice for Order ${order.orderNumber}...`);
-    window.print();
+    toast.success(`Opening Tax Invoice for Order ${order.orderNumber}...`);
+    printInvoice(order);
   };
 
   return (
@@ -143,7 +144,16 @@ const AdminOrderDetailsModal = ({ order, onClose, onStatusUpdate }) => {
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
+            <button
+              onClick={handlePrintInvoice}
+              className="px-3.5 py-1.5 bg-brand-gold text-white hover:bg-amber-600 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm shadow-amber-500/20"
+              title="Print GST Tax Invoice"
+              id="btn-print-tax-invoice"
+            >
+              <Printer size={14} />
+              <span>Print Tax Invoice</span>
+            </button>
             <button
               onClick={onClose}
               className="p-1.5 text-neutral-400 hover:text-neutral-700 transition-colors rounded-full hover:bg-neutral-100"
@@ -367,6 +377,29 @@ const AdminOrderDetailsModal = ({ order, onClose, onStatusUpdate }) => {
             </div>
           </div>
 
+        </div>
+
+        {/* Modal Footer */}
+        <div className="sticky bottom-0 bg-neutral-50 px-6 py-3.5 border-t border-neutral-200 flex justify-between items-center rounded-b-xl z-20">
+          <div className="text-xs text-neutral-500 font-mono">
+            Invoice: <strong className="text-neutral-800">INV-{order.orderNumber}</strong>
+          </div>
+          <div className="flex items-center gap-2.5">
+            <button
+              onClick={handlePrintInvoice}
+              className="px-4 py-2 bg-neutral-900 hover:bg-neutral-800 text-white rounded-lg text-xs font-bold flex items-center gap-2 transition-all shadow-sm"
+              id="btn-footer-print-invoice"
+            >
+              <Printer size={14} className="text-brand-gold" />
+              <span>Print GST Invoice</span>
+            </button>
+            <button
+              onClick={onClose}
+              className="px-4 py-2 bg-white hover:bg-neutral-100 text-neutral-700 border border-neutral-300 rounded-lg text-xs font-semibold transition-all"
+            >
+              Close
+            </button>
+          </div>
         </div>
       </motion.div>
     </div>

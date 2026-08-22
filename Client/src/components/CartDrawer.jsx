@@ -85,7 +85,7 @@ const CartDrawer = () => {
                     >
                     {(() => {
                       const name = item.product?.name || item.productName || item.name || 'Product';
-                      let img = item.image || item.productImage || item.product?.image || (item.product?.images && item.product.images[0]);
+                      let img = item.variant?.image || item.variantImage || item.image || item.productImage || item.product?.defaultProductImage || (item.product?.images && item.product.images[0]);
                       if (!img || img === 'undefined') {
                         img = 'https://images.unsplash.com/photo-1469334031218-e382a71b716b?w=160';
                       } else {

@@ -1,6 +1,7 @@
 'use strict';
 const { Op } = require('sequelize');
 const { Review, Product, Customer, Order, OrderItem, SiteSetting, LoyaltyLedger } = require('../models');
+const { toAbsoluteUrl } = require('../utils/imageUrl');
 
 /**
  * Helper: Recalculates and updates average rating & review count for a product.
@@ -176,7 +177,7 @@ const getMyDeliveredItems = async (req, res) => {
           productId: item.productId,
           productName: item.productName || item.product?.name || 'Product',
           productSlug: item.product?.slug || '',
-          productImage: item.productImage || item.product?.defaultProductImage || item.product?.images?.[0] || '',
+          productImage: toAbsoluteUrl(item.productImage || item.product?.defaultProductImage || item.product?.images?.[0] || '', req),
           existingReview,
         });
       });
@@ -199,12 +200,38 @@ const getMyDeliveredItems = async (req, res) => {
 const createReview = async (req, res) => {
   try {
     const customerId = req.customer.id;
-    const { productId, orderId, rating, title, body } = req.body;
+    let { productId, orderId, rating, title, body } = req.body;
+
+    // Auto-resolve productId from order if productId is null/missing but orderId is provided
+    if ((!productId || isNaN(parseInt(productId, 10))) && orderId) {
+      const order = await Order.findOne({
+        where: { id: orderId, customerId },
+        include: [{ model: OrderItem, as: 'items' }]
+      });
+      if (order && order.items && order.items.length > 0) {
+        const itemWithProdId = order.items.find(i => i.productId);
+        if (itemWithProdId) {
+          productId = itemWithProdId.productId;
+        } else {
+          for (const item of order.items) {
+            if (item.variantId) {
+              const variant = await ProductVariant.findByPk(item.variantId);
+              if (variant && variant.productId) {
+                productId = variant.productId;
+                await item.update({ productId: variant.productId });
+                break;
+              }
+            }
+          }
+        }
+      }
+    }
 
     if (!productId || !rating || !body) {
       return res.status(400).json({ success: false, message: 'Product ID, rating (1-5), and review text are required.' });
     }
 
+    const numericProductId = parseInt(productId, 10);
     const numericRating = parseInt(rating, 10);
     if (numericRating < 1 || numericRating > 5) {
       return res.status(400).json({ success: false, message: 'Rating must be between 1 and 5.' });
@@ -219,7 +246,7 @@ const createReview = async (req, res) => {
           {
             model: OrderItem,
             as: 'items',
-            where: { productId },
+            where: { productId: numericProductId },
             required: true,
           },
         ],
@@ -235,29 +262,56 @@ const createReview = async (req, res) => {
           {
             model: OrderItem,
             as: 'items',
-            where: { productId },
-            required: true,
+            required: false,
           },
         ],
       });
       if (!targetOrder) {
         return res.status(403).json({ success: false, message: 'Order was not found or is not marked as Delivered.' });
       }
+
+      let matchesItem = false;
+      for (const item of (targetOrder.items || [])) {
+        if (Number(item.productId) === numericProductId) {
+          matchesItem = true;
+          break;
+        }
+        if (item.variantId) {
+          const variant = await ProductVariant.findByPk(item.variantId);
+          if (variant && Number(variant.productId) === numericProductId) {
+            matchesItem = true;
+            if (!item.productId) {
+              await item.update({ productId: numericProductId });
+            }
+            break;
+          }
+        }
+      }
+
+      if (!matchesItem && targetOrder.items && targetOrder.items.length === 1) {
+        matchesItem = true;
+        if (!targetOrder.items[0].productId) {
+          await targetOrder.items[0].update({ productId: numericProductId });
+        }
+      }
+
+      if (!matchesItem) {
+        return res.status(403).json({ success: false, message: 'This product is not part of the specified order.' });
+      }
     }
 
     // Check if user already reviewed this order item
     const existing = await Review.findOne({
-      where: { customerId, productId, orderId: validOrderId },
+      where: { customerId, productId: numericProductId, orderId: validOrderId },
     });
 
     if (existing) {
-      // Update existing review
       existing.rating = numericRating;
       existing.title = title || '';
       existing.body = body;
       await existing.save();
 
-      const updatedStats = await recalculateProductRating(productId);
+      const updatedStats = await recalculateProductRating(numericProductId);
 
       return res.json({
         success: true,
@@ -269,7 +323,7 @@ const createReview = async (req, res) => {
 
     // Create new review
     const review = await Review.create({
-      productId: Number(productId),
+      productId: numericProductId,
       customerId,
       orderId: Number(validOrderId),
       rating: numericRating,

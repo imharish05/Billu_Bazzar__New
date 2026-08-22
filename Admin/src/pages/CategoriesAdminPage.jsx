@@ -127,7 +127,7 @@ const CategoriesAdminPage = () => {
     processFile(file);
   };
 
-  const processFile = (file) => {
+  const processFile = async (file) => {
     setUploadError(null);
     const ALLOWED_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
     const MAX_SIZE = 5 * 1024 * 1024; // 5MB
@@ -148,6 +148,45 @@ const CategoriesAdminPage = () => {
       return;
     }
 
+    // Validate image dimensions (Square 1:1 aspect ratio, min 300x300 px)
+    const dims = await new Promise((resolve) => {
+      const img = new Image();
+      img.src = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(img.src);
+        resolve({ width: img.width, height: img.height });
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(img.src);
+        resolve(null);
+      };
+    });
+
+    if (!dims) {
+      const msg = 'Could not read image file. Please upload a valid image.';
+      setUploadError(msg);
+      toast.error(msg);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
+    const aspectRatio = dims.width / dims.height;
+    if (aspectRatio < 0.95 || aspectRatio > 1.05) {
+      const msg = `Invalid image dimensions! Category image must be square (1:1 aspect ratio). Uploaded dimensions: ${dims.width}×${dims.height} px.`;
+      setUploadError(msg);
+      toast.error(msg);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
+    if (dims.width < 300 || dims.height < 300) {
+      const msg = `Image resolution too small (${dims.width}×${dims.height} px). Minimum required resolution is 300×300 px.`;
+      setUploadError(msg);
+      toast.error(msg);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
     setImageFile(file);
     const reader = new FileReader();
     reader.onloadend = () => setImagePreview(reader.result);
@@ -156,8 +195,30 @@ const CategoriesAdminPage = () => {
 
   const handleSave = async (e) => {
     e.preventDefault();
-    setSaving(true);
     setUploadError(null);
+
+    if (!form.name.trim()) {
+      const msg = 'Root category name is required.';
+      setUploadError(msg);
+      toast.error(msg);
+      return;
+    }
+
+    if (!form.slug.trim()) {
+      const msg = 'Slug is required.';
+      setUploadError(msg);
+      toast.error(msg);
+      return;
+    }
+
+    if (!imagePreview) {
+      const msg = 'Root category image is required.';
+      setUploadError(msg);
+      toast.error(msg);
+      return;
+    }
+
+    setSaving(true);
 
     try {
       const fd = new FormData();
@@ -367,13 +428,13 @@ const CategoriesAdminPage = () => {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-brand-grey mb-1.5" htmlFor="cat-slug">Slug</label>
-                  <input id="cat-slug" type="text" value={form.slug} onChange={e => setForm(p => ({ ...p, slug: e.target.value }))} className="w-full border border-brand-light bg-neutral-50 px-3 py-2 text-sm focus:outline-none focus:border-brand-gold transition-colors" placeholder="party-wear" />
+                  <label className="block text-xs font-medium text-brand-grey mb-1.5" htmlFor="cat-slug">Slug *</label>
+                  <input id="cat-slug" type="text" value={form.slug} onChange={e => setForm(p => ({ ...p, slug: e.target.value }))} required className="w-full border border-brand-light bg-neutral-50 px-3 py-2 text-sm focus:outline-none focus:border-brand-gold transition-colors" placeholder="party-wear" />
                 </div>
 
                 {/* Categories Image upload zone */}
                 <div>
-                  <label className="block text-xs font-medium text-brand-grey mb-1.5">Root Category Image (Square 1:1 Aspect Ratio)</label>
+                  <label className="block text-xs font-medium text-brand-grey mb-1.5">Root Category Image (Square 1:1 Aspect Ratio) *</label>
                   <div
                     className={`border-2 border-dashed rounded-lg p-4 text-center transition-colors cursor-pointer ${
                       isDragging ? 'border-brand-gold bg-brand-gold/5' : 'border-brand-light hover:border-brand-gold'

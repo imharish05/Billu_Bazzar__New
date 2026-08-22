@@ -46,7 +46,7 @@ const getCart = async (req, res) => {
         as: 'items',
         include: [
           { model: Product, as: 'product', attributes: ['id', 'name', 'price', 'images', 'stock', 'slug', 'gstRate'] },
-          { model: ProductVariant, as: 'variant', attributes: ['id', 'sku', 'price', 'stock', 'attributes', 'gstRate'] }
+          { model: ProductVariant, as: 'variant', attributes: ['id', 'sku', 'price', 'stock', 'attributes', 'gstRate', 'image', 'images'] }
         ]
       }],
     });
@@ -473,7 +473,7 @@ const getAbandonedCarts = async (req, res) => {
           required: true, // Only fetch carts that currently contain items
           include: [
             { model: Product, as: 'product', attributes: ['id', 'name', 'price', 'images', 'currency', 'stock', 'gstRate'] },
-            { model: ProductVariant, as: 'variant', attributes: ['id', 'sku', 'price', 'stock', 'attributes', 'gstRate'] }
+            { model: ProductVariant, as: 'variant', attributes: ['id', 'sku', 'price', 'stock', 'attributes', 'gstRate', 'image', 'images'] }
           ]
         },
         {
@@ -507,7 +507,7 @@ const sendAbandonedCartEmail = async (req, res) => {
           as: 'items',
           include: [
             { model: Product, as: 'product', attributes: ['id', 'name', 'price', 'images', 'currency', 'stock', 'gstRate'] },
-            { model: ProductVariant, as: 'variant', attributes: ['id', 'sku', 'price', 'stock', 'attributes', 'gstRate'] }
+            { model: ProductVariant, as: 'variant', attributes: ['id', 'sku', 'price', 'stock', 'attributes', 'gstRate', 'image', 'images'] }
           ]
         },
         {

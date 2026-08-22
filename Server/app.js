@@ -47,6 +47,8 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
 
 // ── API Routes ────────────────────────────────────────────────────────────────
 app.use('/api/auth',       require('./routes/authRoutes'));
+app.use('/mob-api/auth',   require('./mob-api/Auth/authRoutes'));
+app.use('/api/mob/auth',   require('./mob-api/Auth/authRoutes'));
 app.use('/api/products',   require('./routes/productRoutes'));
 app.use('/api/variants',   require('./routes/variantRoutes'));
 app.use('/api/warehouses', require('./routes/warehouseRoutes'));
@@ -69,6 +71,7 @@ app.use('/api/site-settings', require('./routes/siteSettingRoutes'));
 app.use('/api/settings', require('./routes/siteSettingRoutes'));
 app.use('/api/gift-service',  require('./routes/giftServiceRoutes'));
 app.use('/api/reviews',       require('./routes/reviewRoutes'));
+app.use('/api/returns',       require('./routes/returnRoutes'));
 app.use('/api/loyalty',       require('./routes/loyaltyRoutes'));
 app.use('/api/stock-alerts',  require('./routes/stockAlertRoutes'));
 app.use('/api/delivery-zones', require('./routes/deliveryZoneRoutes'));

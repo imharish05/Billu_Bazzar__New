@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Check, Circle, MapPin, Truck, CreditCard, FileText, Phone, MessageSquare, RefreshCw, XCircle, Star, X } from 'lucide-react';
+import { ArrowLeft, Check, Circle, MapPin, Truck, CreditCard, FileText, Phone, MessageSquare, RefreshCw, XCircle, Star, X, AlertTriangle, RotateCcw, Video, Upload, ShieldAlert } from 'lucide-react';
 import { useSelector, useDispatch } from 'react-redux';
 import { fetchOrderById, cancelCustomerOrder } from '../../redux/slices/ordersSlice';
 import { createReview } from '../../redux/slices/reviewsSlice';
+import { createReturnRequest } from '../../redux/slices/returnsSlice';
 import { formatPrice, formatOrderAmount } from '../../utils/currency';
 import { printInvoice } from '../../utils/invoiceGenerator';
 import { getImageUrl } from '../../utils/imageUrl';
@@ -52,6 +53,22 @@ const OrderDetailPage = () => {
   const [reviewBody, setReviewBody] = useState('');
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
 
+  // Return item modal states
+  const [returnModalOpen, setReturnModalOpen] = useState(false);
+  const [targetReturnItem, setTargetReturnItem] = useState(null);
+  const [returnQty, setReturnQty] = useState(1);
+  const [returnReason, setReturnReason] = useState('DAMAGED_PRODUCT');
+  const [returnReasonDetails, setReturnReasonDetails] = useState('');
+  const [returnVideoType, setReturnVideoType] = useState('file'); // 'file' | 'link'
+  const [returnVideoFile, setReturnVideoFile] = useState(null);
+  const [returnVideoUrl, setReturnVideoUrl] = useState('');
+  const [returnImageFiles, setReturnImageFiles] = useState([]);
+  const [bankAccountName, setBankAccountName] = useState('');
+  const [bankAccountNumber, setBankAccountNumber] = useState('');
+  const [bankIfsc, setBankIfsc] = useState('');
+  const [bankUpi, setBankUpi] = useState('');
+  const [isSubmittingReturn, setIsSubmittingReturn] = useState(false);
+
   const handleOpenReviewModal = (item) => {
     setTargetItem(item);
     setReviewRating(5);
@@ -60,13 +77,88 @@ const OrderDetailPage = () => {
     setReviewModalOpen(true);
   };
 
+  const handleOpenReturnModal = (item) => {
+    setTargetReturnItem(item);
+    setReturnQty(1);
+    setReturnReason('DAMAGED_PRODUCT');
+    setReturnReasonDetails('');
+    setReturnVideoType('file');
+    setReturnVideoFile(null);
+    setReturnVideoUrl('');
+    setReturnImageFiles([]);
+    setBankAccountName('');
+    setBankAccountNumber('');
+    setBankIfsc('');
+    setBankUpi('');
+    setReturnModalOpen(true);
+  };
+
+  const handleReturnSubmit = async (e) => {
+    e.preventDefault();
+    if (!targetReturnItem) return;
+
+    if (returnVideoType === 'file' && !returnVideoFile) {
+      toast.error('Compulsory parcel opening/unboxing video file is required.');
+      return;
+    }
+    if (returnVideoType === 'link' && !returnVideoUrl.trim()) {
+      toast.error('Compulsory unboxing video link (Google Drive/YouTube/Cloud) is required.');
+      return;
+    }
+
+    setIsSubmittingReturn(true);
+    try {
+      const formData = new FormData();
+      formData.append('orderId', order.id);
+      formData.append('orderItemId', targetReturnItem.id);
+      formData.append('quantity', returnQty);
+      formData.append('reason', returnReason);
+      if (returnReasonDetails.trim()) {
+        formData.append('reasonDetails', returnReasonDetails.trim());
+      }
+      if (returnVideoType === 'file' && returnVideoFile) {
+        formData.append('video', returnVideoFile);
+      } else if (returnVideoType === 'link' && returnVideoUrl.trim()) {
+        formData.append('unboxingVideoUrl', returnVideoUrl.trim());
+      }
+
+      if (returnImageFiles && returnImageFiles.length > 0) {
+        for (let i = 0; i < returnImageFiles.length; i++) {
+          formData.append('images', returnImageFiles[i]);
+        }
+      }
+
+      if (bankAccountName || bankAccountNumber || bankIfsc || bankUpi) {
+        formData.append('bankDetails', JSON.stringify({
+          accountHolderName: bankAccountName.trim(),
+          accountNumber: bankAccountNumber.trim(),
+          ifscCode: bankIfsc.trim(),
+          upiId: bankUpi.trim(),
+        }));
+      }
+
+      const res = await dispatch(createReturnRequest(formData));
+      if (createReturnRequest.fulfilled.match(res)) {
+        toast.success('Return request submitted successfully with compulsory unboxing video!');
+        setReturnModalOpen(false);
+        dispatch(fetchOrderById(id));
+      } else {
+        toast.error(res.payload || 'Failed to submit return request');
+      }
+    } catch (err) {
+      toast.error('Failed to submit return request');
+    } finally {
+      setIsSubmittingReturn(false);
+    }
+  };
+
   const handleReviewSubmit = async (e) => {
     e.preventDefault();
     if (!reviewBody.trim() || !targetItem) return;
-    setIsSubmittingReview(true);
+    const resolvedProductId = targetItem.productId || targetItem.product?.id || targetItem.Product?.id || targetItem.id;
     try {
       const res = await dispatch(createReview({
-        productId: targetItem.productId,
+        productId: resolvedProductId,
         orderId: order.id,
         rating: reviewRating,
         title: reviewTitle,
@@ -92,8 +184,7 @@ const OrderDetailPage = () => {
     }
   }, [id, dispatch]);
 
-  const handleCancelOrder = async () => {
-    if (!window.confirm('Are you sure you want to cancel this order?')) return;
+  const executeCancelOrder = async () => {
     setIsCancelling(true);
     try {
       const result = await dispatch(cancelCustomerOrder(id));
@@ -107,6 +198,53 @@ const OrderDetailPage = () => {
     } finally {
       setIsCancelling(false);
     }
+  };
+
+  const handleCancelOrder = () => {
+    toast(
+      (t) => (
+        <div className="flex flex-col items-center text-center gap-3 py-2 px-1 min-w-[280px]">
+          <div className="p-2.5 bg-red-50 text-red-600 rounded-full shrink-0">
+            <AlertTriangle size={22} />
+          </div>
+          <div>
+            <p className="text-base font-semibold text-neutral-900">Cancel Order?</p>
+            <p className="text-xs text-neutral-500 mt-1 leading-relaxed max-w-xs">
+              Are you sure you want to cancel this order? This action cannot be undone.
+            </p>
+          </div>
+          <div className="flex items-center justify-center gap-3 pt-2 border-t border-neutral-100 w-full">
+            <button
+              onClick={() => toast.dismiss(t.id)}
+              className="flex-1 px-3 py-2 text-xs font-semibold text-neutral-600 hover:text-neutral-900 bg-neutral-100 hover:bg-neutral-200 rounded-md transition-colors"
+            >
+              Keep Order
+            </button>
+            <button
+              onClick={() => {
+                toast.dismiss(t.id);
+                executeCancelOrder();
+              }}
+              className="flex-1 px-3 py-2 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 rounded-md transition-colors shadow-sm"
+            >
+              Yes, Cancel Order
+            </button>
+          </div>
+        </div>
+      ),
+      {
+        duration: 8000,
+        position: 'top-center',
+        id: 'confirm-cancel-order',
+        style: {
+          background: '#ffffff',
+          borderRadius: '12px',
+          border: '1px solid #e5e7eb',
+          boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
+          maxWidth: '400px',
+        },
+      }
+    );
   };
 
   const handleDownloadInvoice = () => {
@@ -505,7 +643,7 @@ const OrderDetailPage = () => {
             return (
               <div key={item.id || idx} className="flex items-center gap-4 py-3 border-b border-neutral-100 last:border-0 flex-wrap sm:flex-nowrap">
                 <img
-                  src={getImageUrl(item.productImage || item.image) || getPlaceholderSvg(item.productName || item.name || 'Product')}
+                  src={getImageUrl(item.displayImage || item.variantImage || item.variant?.image || item.image || item.productImage || item.product?.defaultProductImage) || getPlaceholderSvg(item.productName || item.name || 'Product')}
                   alt={item.productName || item.name || 'Product'}
                   className="w-16 h-20 object-cover rounded border border-neutral-100 flex-shrink-0"
                   onError={(e) => { e.target.onerror = null; e.target.src = getPlaceholderSvg(item.productName || item.name || 'Product'); }}
@@ -524,12 +662,31 @@ const OrderDetailPage = () => {
                     {formatOrderAmount(item.totalPrice || (item.quantity * (item.unitPrice || item.price)), currency)}
                   </span>
                   {order.status === 'DELIVERED' && (
-                    <button
-                      onClick={() => handleOpenReviewModal(item)}
-                      className="px-3 py-1 bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200 text-xs font-semibold rounded-lg transition-colors flex items-center gap-1 cursor-pointer mt-1"
-                    >
-                      <Star size={12} /> Write Review
-                    </button>
+                    <div className="flex items-center gap-2 flex-wrap justify-end mt-1">
+                      {item.returnStatus && item.returnStatus !== 'NONE' ? (
+                        <Link
+                          to="/account/returns"
+                          className="px-2.5 py-1 bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 text-xs font-semibold rounded-lg transition-colors inline-flex items-center gap-1"
+                        >
+                          <RotateCcw size={12} /> Return {item.returnStatus === 'REQUESTED' ? 'Requested' : item.returnStatus === 'APPROVED' ? 'Approved' : item.returnStatus === 'REFUNDED' ? 'Refunded' : item.returnStatus}
+                        </Link>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleOpenReturnModal(item)}
+                          className="px-3 py-1 bg-neutral-100 hover:bg-neutral-200 text-neutral-800 border border-neutral-200 text-xs font-semibold rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
+                        >
+                          <RotateCcw size={12} /> Return Item
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleOpenReviewModal(item)}
+                        className="px-3 py-1 bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200 text-xs font-semibold rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
+                      >
+                        <Star size={12} /> Write Review
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>
@@ -678,6 +835,281 @@ const OrderDetailPage = () => {
                   className="btn-primary text-xs py-2 px-5 disabled:opacity-50"
                 >
                   {isSubmittingReview ? 'Submitting...' : 'Submit Review'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Return Item Request Modal Form */}
+      {returnModalOpen && targetReturnItem && (
+        <div
+          className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 overflow-y-auto"
+          onClick={() => setReturnModalOpen(false)}
+        >
+          <div
+            className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl relative my-8 max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setReturnModalOpen(false)}
+              className="absolute top-4 right-4 p-2 text-neutral-400 hover:text-neutral-700 transition-colors rounded-full"
+            >
+              <X size={18} />
+            </button>
+
+            <div className="flex items-center gap-2 mb-1">
+              <div className="p-2 bg-amber-50 text-brand-gold rounded-lg">
+                <RotateCcw size={18} />
+              </div>
+              <div>
+                <h3 className="font-playfair text-xl font-bold text-neutral-900">
+                  Request Item Return
+                </h3>
+                <p className="text-xs text-neutral-500">
+                  Order #{order.orderNumber || order.id} · Individual Product Return
+                </p>
+              </div>
+            </div>
+
+            {/* Target Item Snapshot */}
+            <div className="my-4 p-3 bg-neutral-50 rounded-xl border border-neutral-100 flex items-center gap-3">
+              <img
+                src={
+                  getImageUrl(
+                    targetReturnItem.displayImage ||
+                      targetReturnItem.variantImage ||
+                      targetReturnItem.variant?.image ||
+                      targetReturnItem.image ||
+                      targetReturnItem.productImage ||
+                      targetReturnItem.product?.defaultProductImage
+                  ) || getPlaceholderSvg(targetReturnItem.productName || targetReturnItem.name || 'Product')
+                }
+                alt={targetReturnItem.productName || targetReturnItem.name}
+                className="w-12 h-14 object-cover rounded border border-neutral-200 shrink-0 bg-white"
+                onError={(e) => {
+                  e.target.onerror = null;
+                  e.target.src = getPlaceholderSvg(targetReturnItem.productName || targetReturnItem.name || 'Product');
+                }}
+              />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-bold text-neutral-900 truncate">
+                  {targetReturnItem.productName || targetReturnItem.name}
+                </p>
+                <p className="text-[11px] text-neutral-500 mt-0.5">
+                  Ordered Quantity: {targetReturnItem.quantity} · Unit Price: {formatOrderAmount(targetReturnItem.unitPrice || targetReturnItem.price, currency)}
+                </p>
+              </div>
+            </div>
+
+            <form onSubmit={handleReturnSubmit} className="space-y-4 text-left">
+              {/* Return Quantity */}
+              {targetReturnItem.quantity > 1 && (
+                <div>
+                  <label className="block text-xs font-semibold text-neutral-700 mb-1 uppercase tracking-wider">
+                    Quantity to Return *
+                  </label>
+                  <select
+                    value={returnQty}
+                    onChange={(e) => setReturnQty(parseInt(e.target.value, 10))}
+                    className="w-full px-3 py-2 border border-neutral-200 rounded text-sm focus:border-brand-gold focus:outline-none"
+                    required
+                  >
+                    {Array.from({ length: targetReturnItem.quantity }, (_, i) => i + 1).map((qty) => (
+                      <option key={qty} value={qty}>
+                        {qty} {qty === 1 ? 'item' : 'items'}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Reason Dropdown */}
+              <div>
+                <label className="block text-xs font-semibold text-neutral-700 mb-1 uppercase tracking-wider">
+                  Reason for Return *
+                </label>
+                <select
+                  value={returnReason}
+                  onChange={(e) => setReturnReason(e.target.value)}
+                  className="w-full px-3 py-2 border border-neutral-200 rounded text-sm focus:border-brand-gold focus:outline-none"
+                  required
+                >
+                  <option value="DAMAGED_PRODUCT">Damaged / Broken item upon delivery</option>
+                  <option value="WRONG_ITEM_SENT">Wrong product / variant delivered</option>
+                  <option value="DEFECTIVE_OR_NOT_WORKING">Defective or malfunctioning product</option>
+                  <option value="MISMATCH_WITH_DESCRIPTION">Product mismatched website description</option>
+                  <option value="MISSING_PARTS_ACCESSORIES">Missing parts / accessories</option>
+                  <option value="OTHER">Other quality issue</option>
+                </select>
+              </div>
+
+              {/* Reason Details */}
+              <div>
+                <label className="block text-xs font-semibold text-neutral-700 mb-1 uppercase tracking-wider">
+                  Description of Issue (Optional)
+                </label>
+                <textarea
+                  rows={2}
+                  value={returnReasonDetails}
+                  onChange={(e) => setReturnReasonDetails(e.target.value)}
+                  placeholder="Please describe the issue in detail..."
+                  className="w-full px-3 py-2 border border-neutral-200 rounded text-sm focus:border-brand-gold focus:outline-none resize-none"
+                />
+              </div>
+
+              {/* COMPULSORY UNBOXING VIDEO SECTION */}
+              <div className="p-4 bg-amber-500/10 border-2 border-brand-gold/50 rounded-xl space-y-3">
+                <div className="flex items-start gap-2.5">
+                  <ShieldAlert className="text-brand-gold w-5 h-5 shrink-0 mt-0.5" />
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="bg-red-500 text-white text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded">
+                        Compulsory
+                      </span>
+                      <h4 className="text-xs font-bold text-neutral-900">
+                        Continuous Parcel Unboxing Video Proof *
+                      </h4>
+                    </div>
+                    <p className="text-[11px] text-neutral-600 mt-1 leading-relaxed">
+                      As per Billu Bazaar return policy, an uncut 360° parcel opening video from seal breaking to product inspection is strictly required for verification.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Video Option Selector */}
+                <div className="flex gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setReturnVideoType('file')}
+                    className={`flex-1 py-1.5 text-xs font-semibold rounded-lg border transition-all ${
+                      returnVideoType === 'file'
+                        ? 'bg-neutral-900 text-white border-neutral-900 shadow-xs'
+                        : 'bg-white text-neutral-600 border-neutral-200 hover:bg-neutral-50'
+                    }`}
+                  >
+                    Upload Video File
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setReturnVideoType('link')}
+                    className={`flex-1 py-1.5 text-xs font-semibold rounded-lg border transition-all ${
+                      returnVideoType === 'link'
+                        ? 'bg-neutral-900 text-white border-neutral-900 shadow-xs'
+                        : 'bg-white text-neutral-600 border-neutral-200 hover:bg-neutral-50'
+                    }`}
+                  >
+                    Provide Cloud Video Link
+                  </button>
+                </div>
+
+                {returnVideoType === 'file' ? (
+                  <div>
+                    <label className="flex flex-col items-center justify-center border-2 border-dashed border-neutral-300 hover:border-brand-gold bg-white p-4 rounded-lg cursor-pointer transition-colors text-center">
+                      <Upload size={20} className="text-brand-gold mb-1" />
+                      <span className="text-xs font-semibold text-neutral-800">
+                        {returnVideoFile ? returnVideoFile.name : 'Click to select unboxing video file'}
+                      </span>
+                      <span className="text-[10px] text-neutral-400 mt-0.5">
+                        MP4, WEBM, MOV up to 50MB
+                      </span>
+                      <input
+                        type="file"
+                        accept="video/*"
+                        onChange={(e) => setReturnVideoFile(e.target.files?.[0] || null)}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+                ) : (
+                  <div>
+                    <input
+                      type="url"
+                      value={returnVideoUrl}
+                      onChange={(e) => setReturnVideoUrl(e.target.value)}
+                      placeholder="e.g. https://drive.google.com/file/d/... or YouTube link"
+                      className="w-full px-3 py-2 border border-neutral-200 rounded text-sm bg-white focus:border-brand-gold focus:outline-none"
+                    />
+                    <p className="text-[10px] text-neutral-500 mt-1">
+                      Ensure link permissions are set to "Anyone with the link can view".
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Supplementary Photos */}
+              <div>
+                <label className="block text-xs font-semibold text-neutral-700 mb-1 uppercase tracking-wider">
+                  Supplementary Photos (Optional)
+                </label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={(e) => setReturnImageFiles(e.target.files ? Array.from(e.target.files) : [])}
+                  className="w-full text-xs text-neutral-500 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-neutral-100 file:text-neutral-700 hover:file:bg-neutral-200 cursor-pointer"
+                />
+              </div>
+
+              {/* Bank Details for COD Refunds */}
+              {(order.paymentMethod?.toLowerCase().includes('cod') ||
+                order.paymentMethod?.toLowerCase().includes('cash')) && (
+                <div className="p-3.5 bg-neutral-50 rounded-xl border border-neutral-200/80 space-y-2.5">
+                  <h4 className="text-xs font-bold text-neutral-900 uppercase tracking-wider">
+                    Bank / UPI Details for Refund
+                  </h4>
+                  <p className="text-[11px] text-neutral-500">
+                    Because this order was paid via Cash on Delivery, please provide your bank or UPI details for refund transfer.
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <input
+                      type="text"
+                      placeholder="Account Holder Name"
+                      value={bankAccountName}
+                      onChange={(e) => setBankAccountName(e.target.value)}
+                      className="px-3 py-1.5 border border-neutral-200 rounded text-xs focus:border-brand-gold focus:outline-none"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Account Number"
+                      value={bankAccountNumber}
+                      onChange={(e) => setBankAccountNumber(e.target.value)}
+                      className="px-3 py-1.5 border border-neutral-200 rounded text-xs focus:border-brand-gold focus:outline-none"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Bank IFSC Code"
+                      value={bankIfsc}
+                      onChange={(e) => setBankIfsc(e.target.value)}
+                      className="px-3 py-1.5 border border-neutral-200 rounded text-xs focus:border-brand-gold focus:outline-none"
+                    />
+                    <input
+                      type="text"
+                      placeholder="UPI ID (e.g. name@upi)"
+                      value={bankUpi}
+                      onChange={(e) => setBankUpi(e.target.value)}
+                      className="px-3 py-1.5 border border-neutral-200 rounded text-xs focus:border-brand-gold focus:outline-none"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-end gap-3 pt-3 border-t border-neutral-100">
+                <button
+                  type="button"
+                  onClick={() => setReturnModalOpen(false)}
+                  className="px-4 py-2 border border-neutral-200 text-neutral-600 text-xs font-semibold rounded hover:bg-neutral-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingReturn}
+                  className="btn-primary text-xs py-2 px-6 disabled:opacity-50 inline-flex items-center gap-1.5 shadow-xs"
+                >
+                  <RotateCcw size={14} />
+                  {isSubmittingReturn ? 'Submitting Return...' : 'Submit Return Request'}
                 </button>
               </div>
             </form>

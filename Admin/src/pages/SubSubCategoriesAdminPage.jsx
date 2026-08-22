@@ -139,6 +139,8 @@ const SubSubCategoriesAdminPage = () => {
   const handleSave = async (e) => {
     e.preventDefault();
     if (!form.subCategoryId) { setUploadError('Please select a parent category'); return; }
+    if (!form.name.trim()) { setUploadError('Child category name is required'); return; }
+    if (!form.slug.trim()) { setUploadError('Slug is required'); return; }
     setSaving(true);
     setUploadError(null);
     try {
@@ -374,9 +376,9 @@ const SubSubCategoriesAdminPage = () => {
 
                 {/* Slug */}
                 <div>
-                  <label className="block text-xs font-medium text-brand-grey mb-1.5" htmlFor="ssc-slug">Slug</label>
+                  <label className="block text-xs font-medium text-brand-grey mb-1.5" htmlFor="ssc-slug">Slug *</label>
                   <input id="ssc-slug" type="text" value={form.slug}
-                    onChange={e => setForm(p => ({ ...p, slug: e.target.value }))}
+                    onChange={e => setForm(p => ({ ...p, slug: e.target.value }))} required
                     className="w-full border border-brand-light bg-neutral-50 px-3 py-2 text-sm focus:outline-none focus:border-brand-gold"
                     placeholder="perfume-combos" />
                 </div>

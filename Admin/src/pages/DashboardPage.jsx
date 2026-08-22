@@ -81,7 +81,7 @@ const DashboardPage = () => {
 
   const fetchDashboardData = async () => {
     dispatch(fetchStats());
-    dispatch(fetchAdminOrders({ limit: 10 }));
+    dispatch(fetchAdminOrders({ limit: 100 }));
     try {
       const res = await api.get('/warehouses/alerts/low-stock');
       if (res.data.success && res.data.alerts) {
@@ -136,7 +136,7 @@ const DashboardPage = () => {
   const chartData = useMemo(() => {
     const today = new Date();
     const curr = (revenueCurrency || 'INR').toUpperCase();
-    const filteredOrders = orders.filter(o => (o.currency || 'INR').toUpperCase() === curr);
+    const filteredOrders = orders.filter(o => (o.currency || 'INR').toUpperCase() === curr && o.status !== 'CANCELLED');
 
     const getLocalDateStr = (dateObj) => {
       const dt = new Date(dateObj);
@@ -171,12 +171,13 @@ const DashboardPage = () => {
     if (revenueRange === '30_days') {
       const weeksMap = { 'Week 1': 0, 'Week 2': 0, 'Week 3': 0, 'Week 4': 0 };
       filteredOrders.forEach(o => {
+        if (!o.createdAt) return;
         const amt = parseFloat(o.totalAmount || 0);
         const diffDays = Math.floor((today - new Date(o.createdAt)) / (1000 * 60 * 60 * 24));
-        if (diffDays <= 7) weeksMap['Week 4'] += amt;
-        else if (diffDays <= 14) weeksMap['Week 3'] += amt;
-        else if (diffDays <= 21) weeksMap['Week 2'] += amt;
-        else if (diffDays <= 30) weeksMap['Week 1'] += amt;
+        if (diffDays >= 0 && diffDays <= 7) weeksMap['Week 4'] += amt;
+        else if (diffDays > 7 && diffDays <= 14) weeksMap['Week 3'] += amt;
+        else if (diffDays > 14 && diffDays <= 21) weeksMap['Week 2'] += amt;
+        else if (diffDays > 21 && diffDays <= 30) weeksMap['Week 1'] += amt;
       });
       return Object.entries(weeksMap).map(([day, revenue]) => ({ day, revenue: Math.round(revenue) }));
     }
@@ -184,14 +185,20 @@ const DashboardPage = () => {
     if (revenueRange === 'this_month') {
       const monthDays = {};
       const currentMonth = today.getMonth();
+      const currentYear = today.getFullYear();
       for (let day = 1; day <= 28; day += 5) {
         monthDays[`Day ${day}`] = 0;
       }
       filteredOrders.forEach(o => {
+        if (!o.createdAt) return;
         const d = new Date(o.createdAt);
-        if (d.getMonth() === currentMonth) {
-          const key = `Day ${Math.min(28, Math.ceil(d.getDate() / 5) * 5)}`;
-          if (monthDays[key] !== undefined) monthDays[key] += parseFloat(o.totalAmount || 0);
+        if (d.getMonth() === currentMonth && d.getFullYear() === currentYear) {
+          const dayNum = d.getDate();
+          const bucketStart = Math.min(26, Math.floor((dayNum - 1) / 5) * 5 + 1);
+          const key = `Day ${bucketStart}`;
+          if (monthDays[key] !== undefined) {
+            monthDays[key] += parseFloat(o.totalAmount || 0);
+          }
         }
       });
       return Object.entries(monthDays).map(([day, revenue]) => ({ day, revenue: Math.round(revenue) }));
@@ -201,8 +208,11 @@ const DashboardPage = () => {
     const monthsMap = { Jan: 0, Feb: 0, Mar: 0, Apr: 0, May: 0, Jun: 0, Jul: 0, Aug: 0, Sep: 0, Oct: 0, Nov: 0, Dec: 0 };
     filteredOrders.forEach(o => {
       if (o.createdAt) {
-        const m = new Date(o.createdAt).toLocaleDateString('en-US', { month: 'short' });
-        if (monthsMap[m] !== undefined) monthsMap[m] += parseFloat(o.totalAmount || 0);
+        const d = new Date(o.createdAt);
+        if (d.getFullYear() === today.getFullYear()) {
+          const m = d.toLocaleDateString('en-US', { month: 'short' });
+          if (monthsMap[m] !== undefined) monthsMap[m] += parseFloat(o.totalAmount || 0);
+        }
       }
     });
     return Object.entries(monthsMap).map(([day, revenue]) => ({ day, revenue: Math.round(revenue) }));

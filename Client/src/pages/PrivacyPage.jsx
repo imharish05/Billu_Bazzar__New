@@ -37,7 +37,7 @@ const PrivacyPage = () => {
           >
             <span className="text-xs font-semibold text-brand-gold tracking-widest uppercase block">Trust & Protection</span>
             <h2 className="font-playfair text-3xl font-bold text-brand-text">Security of Your Personal Space</h2>
-            <p className="text-brand-grey text-sm md:text-base leading-relaxed text-justify">
+            <p className="text-brand-grey text-sm md:text-base leading-relaxed text-left">
               We believe that a secure and premium shopping experience is built on a foundation of absolute trust and transparency. We are deeply committed to protecting your privacy, securing your personal data, and giving you full control over how your information is handled. This comprehensive Privacy Policy details the exact mechanisms we use to collect, process, manage, and safeguard your personal information when you interact with our platform.
             </p>
           </motion.div>
@@ -69,35 +69,35 @@ const PrivacyPage = () => {
           <div className="space-y-8">
             <section className="space-y-3">
               <h3 className="font-playfair text-xl font-semibold text-brand-text">1. What We Collect</h3>
-              <p className="text-brand-grey text-xs md:text-sm leading-relaxed text-justify">
+              <p className="text-brand-grey text-xs md:text-sm leading-relaxed text-left">
                 We only collect information that is essential for providing our services. This includes personal identifiers (such as your full name, email address, and telephone number), transactional details (including billing and shipping addresses, alongside secure payment parameters), and technical usage data (such as browser cookies and site navigation patterns) to enhance platform functionality.
               </p>
             </section>
 
             <section className="space-y-3">
               <h3 className="font-playfair text-xl font-semibold text-brand-text">2. How We Use It</h3>
-              <p className="text-brand-grey text-xs md:text-sm leading-relaxed font-light text-justify">
+              <p className="text-brand-grey text-xs md:text-sm leading-relaxed font-light text-left">
                 Your information is used solely to facilitate your user journey. Key purposes include processing and delivering your orders, sending real-time shipping updates and notifications, optimizing our website design and performance based on user metrics, and dispatching curated marketing offers, which you will only receive if you have actively opted in.
               </p>
             </section>
 
             <section className="space-y-3">
               <h3 className="font-playfair text-xl font-semibold text-brand-text">3. Data Sharing</h3>
-              <p className="text-brand-grey text-xs md:text-sm leading-relaxed text-justify">
+              <p className="text-brand-grey text-xs md:text-sm leading-relaxed text-left">
                 We strictly adhere to a zero-selling policy: we do not sell, rent, or trade your personal data with third-party advertisers. We share your information exclusively with our trusted payment processing networks and logistics/delivery partners, and only to the minimal extent necessary to complete order fulfillment.
               </p>
             </section>
 
             <section className="space-y-3">
               <h3 className="font-playfair text-xl font-semibold text-brand-text">4. Data Storage</h3>
-              <p className="text-brand-grey text-xs md:text-sm leading-relaxed text-justify">
+              <p className="text-brand-grey text-xs md:text-sm leading-relaxed text-left">
                 Your personal data is housed securely on enterprise-grade, encrypted cloud servers. We implement robust logical and physical access control restrictions, continuous system monitoring, and routine security audits to protect all stored user data in full alignment with international security standards.
               </p>
             </section>
 
             <section className="space-y-3">
               <h3 className="font-playfair text-xl font-semibold text-brand-text">5. Customer Rights</h3>
-              <p className="text-brand-grey text-xs md:text-sm leading-relaxed text-justify">
+              <p className="text-brand-grey text-xs md:text-sm leading-relaxed text-left">
                 You possess full ownership and control over your personal records. At any time, you have the right to request comprehensive access to the data we hold, request corrections to out-of-date or inaccurate information, or request the permanent deletion of your account and associated personal history by contacting our support team.
               </p>
             </section>
@@ -105,7 +105,7 @@ const PrivacyPage = () => {
 
           <div className="p-6 bg-brand-light/10 border border-brand-light">
             <h4 className="font-playfair text-sm font-semibold text-brand-text mb-2">Privacy Support Desk</h4>
-            <p className="text-brand-grey text-xs leading-relaxed text-justify">
+            <p className="text-brand-grey text-xs leading-relaxed text-left">
               If you have any questions or concerns regarding this Privacy Policy, your statutory data rights, or if you wish to request data deletion, please contact our dedicated privacy support desk directly at <a href="mailto:privacy@example.com" className="text-brand-gold hover:underline">privacy@example.com</a> or reach out through our support helpline.
             </p>
           </div>

@@ -8,7 +8,7 @@ import toast from 'react-hot-toast';
 import api from '../services/api';
 import { checkPermission } from '../utils/rbac';
 import { getImageUrl } from '../utils/imageUrl';
-import { validateImageFile } from '../utils/fileValidation';
+import { validateImageFile, validateImageDimensionsAndSize } from '../utils/fileValidation';
 
 const fmt = (v) => currencyJs(v, { symbol: '₹', precision: 0 }).format();
 
@@ -327,17 +327,18 @@ const VariantModal = ({ variant, onClose, onSave, products, warehouses }) => {
       });
       setAttributes(nextAttrs);
       if (selectedProduct?.sku) {
-        setSku(`${selectedProduct.sku}-VAR-${Date.now().toString().slice(-4)}`);
+        const cleanBase = selectedProduct.sku.toUpperCase().replace(/^SKU-/, '');
+        setSku(`SKU-${cleanBase}-VAR-${Date.now().toString().slice(-4)}`);
       }
     }
   }, [selectedProductId, isEdit, optionKeys, selectedProduct]);
 
   useEffect(() => {
     if (!isEdit && selectedProduct && attributes) {
-      const attrValues = Object.values(attributes).filter(Boolean).join('-').toUpperCase().replace(/\s+/g, '');
+      const attrValues = Object.values(attributes).filter(Boolean).join('-').toUpperCase().replace(/[^A-Z0-9-]/g, '').replace(/-+/g, '-').replace(/^-|-$/g, '');
       if (attrValues) {
-        const baseSku = selectedProduct.sku || `PROD-${selectedProductId}`;
-        setSku(`${baseSku}-${attrValues}`);
+        const baseSku = (selectedProduct.sku || `PROD-${selectedProductId}`).toUpperCase().replace(/^SKU-/, '');
+        setSku(`SKU-${baseSku}-${attrValues}`);
       }
     }
   }, [attributes, selectedProduct, isEdit, selectedProductId]);
@@ -349,10 +350,10 @@ const VariantModal = ({ variant, onClose, onSave, products, warehouses }) => {
     }));
   };
 
-  const handleMainImageChange = (e) => {
+  const handleMainImageChange = async (e) => {
     const file = e.target.files?.[0];
     if (file) {
-      const val = validateImageFile(file, { maxSizeMB: 5 });
+      const val = await validateImageDimensionsAndSize(file, { maxSizeMB: 3, minWidth: 400, minHeight: 400, requireSquare: true });
       if (!val.isValid) {
         toast.error(val.error);
         e.target.value = '';
@@ -363,11 +364,11 @@ const VariantModal = ({ variant, onClose, onSave, products, warehouses }) => {
     }
   };
 
-  const handleMultipleFilesSelect = (e) => {
+  const handleMultipleFilesSelect = async (e) => {
     const rawFiles = Array.from(e.target.files || []);
     const validFiles = [];
     for (const file of rawFiles) {
-      const val = validateImageFile(file, { maxSizeMB: 5 });
+      const val = await validateImageDimensionsAndSize(file, { maxSizeMB: 3, minWidth: 400, minHeight: 400, requireSquare: true });
       if (!val.isValid) {
         toast.error(val.error);
       } else {
@@ -429,12 +430,17 @@ const VariantModal = ({ variant, onClose, onSave, products, warehouses }) => {
 
     let finalSku = sku ? sku.trim() : '';
     if (!finalSku && selectedProduct) {
-      const attrValues = Object.values(attributes).filter(Boolean).join('-').toUpperCase().replace(/[^A-Z0-9-]/g, '');
-      const baseSku = selectedProduct.sku || `PROD-${selectedProductId}`;
+      const attrValues = Object.values(attributes).filter(Boolean).join('-').toUpperCase().replace(/[^A-Z0-9-]/g, '').replace(/-+/g, '-').replace(/^-|-$/g, '');
+      const baseSku = (selectedProduct.sku || `PROD-${selectedProductId}`).toUpperCase().replace(/^SKU-/, '');
       finalSku = attrValues ? `SKU-${baseSku}-${attrValues}` : `SKU-${baseSku}-VAR-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
     }
     if (!finalSku) {
       finalSku = `SKU-PV-${Date.now().toString().slice(-6)}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+    }
+
+    if (!mainImageFile && !mainImagePreview) {
+      toast.error('Main Variant Image is required');
+      return;
     }
 
     const fd = new FormData();
@@ -638,7 +644,7 @@ const VariantModal = ({ variant, onClose, onSave, products, warehouses }) => {
             {/* Main Variant Image Input (Dashed Dropzone & Rounded Preview Card) */}
             <div className="pt-2 border-t border-neutral-200 space-y-1.5">
               <label className="block text-xs font-semibold text-neutral-700">
-                Main Variant Image • Recommended 400×400px (1:1) • Max: 3MB
+                Main Variant Image * • Recommended 400×400px (1:1) • Max: 3MB
               </label>
 
               {mainImagePreview ? (
