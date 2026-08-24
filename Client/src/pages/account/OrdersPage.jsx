@@ -100,7 +100,12 @@ const OrdersPage = () => {
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {((order.returnRequests && order.returnRequests.length > 0) || (order.items && order.items.some(i => i.returnStatus && i.returnStatus !== 'NONE'))) && (
+                      <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
+                        Return / Refund
+                      </span>
+                    )}
                     <span className={`text-xs font-semibold px-3 py-1 rounded-full ${STATUS_COLORS[order.status] || 'bg-gray-100 text-gray-700'}`}>
                       {STATUS_LABELS[order.status] || order.status}
                     </span>

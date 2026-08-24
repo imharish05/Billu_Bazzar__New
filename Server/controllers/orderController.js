@@ -1,5 +1,5 @@
 'use strict';
-const { sequelize, Order, OrderItem, Product, ProductVariant, Customer, Coupon, Affiliate, Cart, CartItem, InventoryMovementLog, Warehouse, WarehouseStock, SiteSetting, LoyaltyLedger, DeliveryZone, Category } = require('../models');
+const { sequelize, Order, OrderItem, Product, ProductVariant, Customer, Coupon, Affiliate, Cart, CartItem, InventoryMovementLog, Warehouse, WarehouseStock, SiteSetting, LoyaltyLedger, DeliveryZone, Category, ReturnRequest } = require('../models');
 const { Op } = require('sequelize');
 const { v4: uuidv4 } = require('uuid');
 const { sendOrderStatusNotification } = require('../services/emailService');
@@ -26,6 +26,11 @@ const orderItemInclude = {
         { model: Category, as: 'category', attributes: ['id', 'name'], required: false },
         { model: ProductVariant, as: 'variants', attributes: ['id', 'sku', 'image', 'attributes', 'gstRate'], required: false }
       ]
+    },
+    {
+      model: ReturnRequest,
+      as: 'returnRequests',
+      required: false
     }
   ]
 };
@@ -77,9 +82,38 @@ const formatOrder = (order, req) => {
         item.productImage = toAbsoluteUrl(variantImg, req);
       }
 
+      if (Array.isArray(item.returnRequests)) {
+        item.returnRequests = item.returnRequests.map(ret => {
+          const r = typeof ret.toJSON === 'function' ? ret.toJSON() : { ...ret };
+          if (r.productImage) r.productImage = toAbsoluteUrl(r.productImage, req);
+          if (r.unboxingVideoUrl && !r.unboxingVideoUrl.startsWith('http')) {
+            r.unboxingVideoUrl = toAbsoluteUrl(r.unboxingVideoUrl, req);
+          }
+          if (Array.isArray(r.images)) {
+            r.images = r.images.map(img => (img.startsWith('http') ? img : toAbsoluteUrl(img, req)));
+          }
+          return r;
+        });
+      }
+
       return item;
     });
   }
+
+  if (Array.isArray(json.returnRequests)) {
+    json.returnRequests = json.returnRequests.map(ret => {
+      const r = typeof ret.toJSON === 'function' ? ret.toJSON() : { ...ret };
+      if (r.productImage) r.productImage = toAbsoluteUrl(r.productImage, req);
+      if (r.unboxingVideoUrl && !r.unboxingVideoUrl.startsWith('http')) {
+        r.unboxingVideoUrl = toAbsoluteUrl(r.unboxingVideoUrl, req);
+      }
+      if (Array.isArray(r.images)) {
+        r.images = r.images.map(img => (img.startsWith('http') ? img : toAbsoluteUrl(img, req)));
+      }
+      return r;
+    });
+  }
+
   return json;
 };
 
@@ -123,6 +157,7 @@ const getAll = async (req, res) => {
       include: [
         { model: Customer, as: 'customer', attributes: ['id', 'name', 'email', 'phone'], required: false },
         orderItemInclude,
+        { model: ReturnRequest, as: 'returnRequests', required: false },
       ],
     });
     const p = Math.max(1, parseInt(page, 10));
@@ -145,7 +180,10 @@ const getMyOrders = async (req, res) => {
         status: { [Op.ne]: 'EXPIRED' },
       },
       order: [['createdAt', 'DESC']],
-      include: [orderItemInclude],
+      include: [
+        orderItemInclude,
+        { model: ReturnRequest, as: 'returnRequests', required: false },
+      ],
     });
     const formattedOrders = orders.map(o => formatOrder(o, req));
     res.json({ success: true, orders: formattedOrders });
@@ -160,6 +198,7 @@ const getMyOrderById = async (req, res) => {
       where: { id: req.params.id, customerId: req.customer.id },
       include: [
         orderItemInclude,
+        { model: ReturnRequest, as: 'returnRequests', required: false },
         { model: Coupon, as: 'coupon' },
       ],
     });
@@ -223,6 +262,7 @@ const getOne = async (req, res) => {
       include: [
         { model: Customer, as: 'customer', attributes: ['id', 'name', 'email', 'phone'] },
         orderItemInclude,
+        { model: ReturnRequest, as: 'returnRequests', required: false },
         { model: Coupon, as: 'coupon' },
       ],
     });
@@ -247,6 +287,7 @@ const trackOrder = async (req, res) => {
       include: [
         { model: Customer, as: 'customer', attributes: ['id', 'name', 'email', 'phone'] },
         orderItemInclude,
+        { model: ReturnRequest, as: 'returnRequests', required: false },
         { model: Coupon, as: 'coupon' },
       ],
     });

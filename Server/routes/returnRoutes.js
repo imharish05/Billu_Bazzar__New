@@ -6,6 +6,7 @@ const {
   getMyReturnById,
   getAllAdmin,
   updateStatusAdmin,
+  initiateRefundAdmin,
 } = require('../controllers/returnController');
 const { verifyCustomer, verifyAdmin } = require('../middleware/auth');
 const { hasPermission } = require('../middleware/rbac');
@@ -32,5 +33,7 @@ router.patch('/:id/status', verifyAdmin, hasPermission('update_orders'), updateS
 router.put('/:id/status', verifyAdmin, hasPermission('update_orders'), updateStatusAdmin);
 router.patch('/admin/:id/status', verifyAdmin, hasPermission('update_orders'), updateStatusAdmin);
 router.put('/admin/:id/status', verifyAdmin, hasPermission('update_orders'), updateStatusAdmin);
+router.post('/:id/refund', verifyAdmin, hasPermission('update_orders'), initiateRefundAdmin);
+router.post('/admin/:id/refund', verifyAdmin, hasPermission('update_orders'), initiateRefundAdmin);
 
 module.exports = router;

@@ -76,6 +76,7 @@ const Footer = () => {
             {[
               { label: 'About', to: '/about' },
               { label: 'Privacy', to: '/privacy' },
+              { label: 'Terms & Conditions', to: '/terms' },
               { label: 'Shipping', to: '/shipping' },
               { label: 'Cancellation', to: '/cancellation' },
               { label: 'Returns and Refunds', to: '/returns' },

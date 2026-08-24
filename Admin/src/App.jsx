@@ -77,7 +77,14 @@ const App = () => {
 
   return (
     <>
-      <Toaster position="top-center" toastOptions={{ duration: 4000 }} />
+      <Toaster
+        position="top-center"
+        containerStyle={{ zIndex: 999999 }}
+        toastOptions={{
+          duration: 4000,
+          style: { zIndex: 999999 },
+        }}
+      />
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/" element={<Navigate to="/dashboard" replace />} />

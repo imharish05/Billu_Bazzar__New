@@ -1,9 +1,12 @@
 /**
- * Professional GST Tax Invoice Generator for Billu Bazaar (Client Portal)
- * Features: Complete Indian GST Compliance, UAE VAT Compatibility, Logo Header,
- * HSN/SAC Codes, Intra-State (CGST+SGST) vs Inter-State (IGST) Auto-Detection,
- * Reverse Charge Indicator, Amount in Words, and Print-Optimized Layout.
+ * Customer Tax Invoice Generator for Billu Bazaar (Client Portal)
+ * Features: Luxury Branding, Logo/Origin Resolution, Billed & Shipped To Addresses,
+ * Razorpay Payment & Order Summary, Itemized Product Details with Thumbnails & Variants,
+ * Financial Breakdown, and Optimized A4 PDF / Print Stylesheet.
  */
+
+import { getImageUrl } from './imageUrl';
+import { getPlaceholderSvg } from './placeholder';
 
 // Standard Indian GST State Code Mapping
 export const STATE_CODE_MAP = {
@@ -174,28 +177,29 @@ export const numberToWords = (num, currency = 'INR') => {
 };
 
 /**
- * Generate Complete Professional GST Tax Invoice HTML
+ * Generate Complete Customer Tax Invoice HTML matching the modern luxury design
  */
 export const generateInvoiceHTML = (order) => {
   const seller = getSellerGstConfig();
   const currency = order.currency === 'AED' ? 'AED' : 'INR';
   const currencySymbol = currency === 'AED' ? 'AED ' : '₹';
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
 
   const fmt = (val) => {
     const num = Number(val) || 0;
-    return `${currencySymbol}${num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    return `${currencySymbol}${num.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
   };
 
-  const orderNum = order.orderNumber || `BB${order.id}`;
+  const orderNum = String(order.orderNumber || (order.id ? `BB${String(order.id).slice(-8).toUpperCase()}` : 'BB1001')).replace(/^#/, '');
   const invoiceNum = `INV-${orderNum}`;
-  const orderDate = new Date(order.createdAt || Date.now()).toLocaleDateString('en-IN', {
-    day: '2-digit',
+  const orderDate = new Date(order.createdAt || Date.now()).toLocaleDateString('en-US', {
     month: 'short',
+    day: 'numeric',
     year: 'numeric'
   });
-  const invoiceDate = new Date().toLocaleDateString('en-IN', {
-    day: '2-digit',
+  const invoiceDate = new Date().toLocaleDateString('en-US', {
     month: 'short',
+    day: 'numeric',
     year: 'numeric'
   });
 
@@ -209,113 +213,99 @@ export const generateInvoiceHTML = (order) => {
     try { billing = JSON.parse(billing); } catch { billing = {}; }
   }
 
-  // Recipient details
-  const buyerName = billing.fullName || billing.name || shipping.fullName || shipping.name || order.customer?.name || 'Customer';
-  const buyerPhone = billing.phone || billing.mobile || shipping.phone || shipping.mobile || order.customer?.phone || '—';
-  const buyerEmail = billing.email || shipping.email || order.customer?.email || '—';
-  const buyerGstin = billing.gstin || shipping.gstin || order.customer?.gstin || '';
+  // Customer / Recipient details
+  const buyerName = billing.fullName || billing.name || shipping.fullName || shipping.name || order.customer?.name || order.user?.name || 'Customer';
+  const buyerPhone = billing.phone || billing.mobile || shipping.phone || shipping.mobile || order.customer?.phone || order.user?.phone || '';
+  const buyerEmail = billing.email || shipping.email || order.customer?.email || order.user?.email || '';
 
-  // Determine buyer state & code
-  const rawState = (shipping.state || billing.state || seller.state || '').trim();
-  const normalizedState = rawState.toUpperCase();
-  const buyerStateCode = STATE_CODE_MAP[normalizedState] || billing.stateCode || shipping.stateCode || seller.stateCode;
-  const isIntraState = currency === 'INR' && (buyerStateCode === seller.stateCode || normalizedState === seller.state.toUpperCase());
+  // Format Address Lines
+  const formatAddressBlock = (addr) => {
+    const line1 = [addr.flatHouse, addr.line1, addr.address, addr.street].filter(Boolean).join(', ');
+    const line2 = [addr.areaStreet, addr.line2, addr.landmark ? `Near ${addr.landmark}` : ''].filter(Boolean).join(', ');
+    const cityStatePin = [
+      addr.city,
+      addr.state,
+      addr.pincode || addr.zipCode || addr.postalCode
+    ].filter(Boolean).join(' ');
+    const country = addr.country || 'India';
 
-  // Determine Payment Details
-  const rawPaymentMethod = order.paymentMethod || 'Online Payment';
-  const isCod = rawPaymentMethod === 'COD' || rawPaymentMethod?.includes('Cash on Delivery');
+    return {
+      line1: line1 || 'Address details on file',
+      line2,
+      cityStatePin,
+      country
+    };
+  };
+
+  const shippingAddrFormatted = formatAddressBlock(shipping);
+  const billingAddrFormatted = formatAddressBlock(billing);
+  const isSameAddress = JSON.stringify(shippingAddrFormatted) === JSON.stringify(billingAddrFormatted);
+
+  // Payment Details & Razorpay info
+  let rawPaymentMethod = order.paymentMethod || 'Online Payment';
+  const rawLower = String(rawPaymentMethod).toLowerCase();
+  if (rawLower.includes('razorpay') || rawLower.includes('online') || rawPaymentMethod === 'CARD' || rawPaymentMethod === 'UPI' || rawPaymentMethod === 'NETBANKING') {
+    rawPaymentMethod = 'Razorpay Secure Online';
+  } else if (rawPaymentMethod.toUpperCase() === 'COD' || rawLower.includes('cash')) {
+    rawPaymentMethod = 'Cash on Delivery (COD)';
+  }
+
+  const isCod = rawPaymentMethod.includes('Cash on Delivery') || rawPaymentMethod === 'COD';
   const isPaid = order.paymentStatus === 'PAID' || order.status === 'PAID' || (!isCod && order.paymentStatus !== 'FAILED' && order.paymentStatus !== 'PENDING');
-  const paymentStatusText = isPaid ? 'PAID' : (isCod ? 'PAY ON DELIVERY' : (order.paymentStatus || 'PENDING'));
-  const transactionRef = order.razorpay_payment_id || order.paymentGatewayRef || (isCod ? 'COD-ORDER' : 'N/A');
+  const paymentStatusBadge = isPaid ? 'PAID' : (isCod ? 'PAY ON DELIVERY' : (order.paymentStatus || 'PENDING'));
 
-  // Items processing with GST breakdowns
+  // Transaction reference (Razorpay payment ID, Razorpay order ID, or gateway reference)
+  const transactionRef = order.razorpay_payment_id || order.razorpayPaymentId || order.razorpay_order_id || order.razorpayOrderId || order.paymentGatewayRef || (isCod ? 'COD-ORDER' : `order_${String(order.id || orderNum).replace(/[^a-zA-Z0-9]/g, '').slice(0, 14)}`);
+
+  // Items processing
   const items = order.items || order.OrderItems || [];
-  let totalTaxableValue = 0;
-  let totalCgstAmount = 0;
-  let totalSgstAmount = 0;
-  let totalIgstAmount = 0;
-
-  const defaultFallbackRate = (order.taxRate !== undefined && order.taxRate !== null && !isNaN(Number(order.taxRate)) && Number(order.taxRate) >= 0)
-    ? Number(order.taxRate)
-    : (currency === 'AED' ? 5 : 18);
+  let subtotalCalc = 0;
 
   const processedItems = items.map((item, idx) => {
     const qty = Number(item.quantity || item.qty || 1);
-    const lineGrossPrice = Number(item.unitPrice || item.price || 0) * qty;
-    const rawRate = item.gstRate ?? item.taxRate ?? item.variant?.gstRate ?? item.product?.gstRate ?? item.selectedVariant?.gstRate ?? order.taxRate ?? defaultFallbackRate;
-    const parsedRate = typeof rawRate === 'number' ? rawRate : parseFloat(String(rawRate).replace(/[^0-9.]/g, ''));
-    const gstRate = !isNaN(parsedRate) ? parsedRate : defaultFallbackRate;
-    const hsnCode = item.hsn || item.hsnCode || item.product?.hsn || (item.variant?.sku ? '8517' : '6109');
-
-    // Backward-calculate Taxable Value from Gross (Inclusive Pricing Model)
-    const taxableValue = lineGrossPrice / (1 + (gstRate / 100));
-    const taxAmount = lineGrossPrice - taxableValue;
-    const unitRate = taxableValue / qty;
-
-    totalTaxableValue += taxableValue;
-
-    let cgstRate = 0, cgstAmt = 0;
-    let sgstRate = 0, sgstAmt = 0;
-    let igstRate = 0, igstAmt = 0;
-
-    if (currency === 'INR') {
-      if (isIntraState) {
-        cgstRate = gstRate / 2;
-        sgstRate = gstRate / 2;
-        cgstAmt = taxAmount / 2;
-        sgstAmt = taxAmount / 2;
-        totalCgstAmount += cgstAmt;
-        totalSgstAmount += sgstAmt;
-      } else {
-        igstRate = gstRate;
-        igstAmt = taxAmount;
-        totalIgstAmount += igstAmt;
-      }
-    } else {
-      // VAT for UAE
-      igstRate = gstRate;
-      igstAmt = taxAmount;
-      totalIgstAmount += igstAmt;
-    }
+    const unitPrice = Number(item.unitPrice || item.price || 0);
+    const lineTotal = unitPrice * qty;
+    subtotalCalc += lineTotal;
 
     const variantText = formatVariantAttributes(item.selectedVariant || item.variant);
-    const sku = item.variant?.sku || item.sku || '';
+    
+    // Resolve item thumbnail image
+    let rawImg = item.image || item.product?.images?.[0] || item.Product?.images?.[0] || item.product?.image || item.variant?.image;
+    let imgUrl = '';
+    if (rawImg) {
+      imgUrl = getImageUrl(rawImg);
+      if (imgUrl && imgUrl.startsWith('/') && origin) {
+        imgUrl = `${origin}${imgUrl}`;
+      }
+    } else {
+      imgUrl = getPlaceholderSvg(item.productName || item.name || 'Product');
+    }
 
     return {
       index: idx + 1,
-      name: item.productName || item.name || 'Luxury Product',
+      name: item.productName || item.name || item.product?.title || 'Luxury Product',
       variantText,
-      sku,
-      hsnCode,
+      imgUrl,
       qty,
-      unitRate,
-      taxableValue,
-      gstRate,
-      cgstRate,
-      cgstAmt,
-      sgstRate,
-      sgstAmt,
-      igstRate,
-      igstAmt,
-      lineGrossPrice
+      unitPrice,
+      lineTotal
     };
   });
 
-  const subtotal = Number(order.subtotal || totalTaxableValue);
-  const discountAmount = Number(order.discountAmount || 0);
+  const subtotal = Number(order.subtotal || subtotalCalc);
+  const discountAmount = Number(order.discountAmount || order.discount || 0);
   const shippingAmount = Number(order.shippingAmount || 0);
   const giftWrapFee = Number(order.giftWrapFee || order.giftWrapPrice || 0);
   const grandTotal = Number(order.totalAmount || (subtotal + shippingAmount + giftWrapFee - discountAmount));
-
-  const totalWords = numberToWords(grandTotal, currency);
 
   return `
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <base href="${origin}/" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>GST Tax Invoice - ${invoiceNum}</title>
+  <title>Tax Invoice - ${invoiceNum}</title>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Inter:wght@400;500;600;700;800&display=swap');
     
@@ -324,15 +314,16 @@ export const generateInvoiceHTML = (order) => {
     body {
       font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       color: #1a1a1a;
-      background-color: #f3f4f6;
-      padding: 24px;
-      font-size: 11.5px;
-      line-height: 1.45;
+      background-color: #f8fafc;
+      padding: 28px 20px;
+      font-size: 12px;
+      line-height: 1.5;
       -webkit-font-smoothing: antialiased;
     }
 
+    /* Screen Action Bar */
     .no-print-bar {
-      max-width: 860px;
+      max-width: 820px;
       margin: 0 auto 16px auto;
       display: flex;
       justify-content: space-between;
@@ -340,15 +331,15 @@ export const generateInvoiceHTML = (order) => {
       background: #ffffff;
       padding: 12px 20px;
       border-radius: 8px;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.06);
-      border: 1px solid #e5e7eb;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+      border: 1px solid #e2e8f0;
     }
 
     .btn-print {
       background: #c58837;
       color: #ffffff;
       border: none;
-      padding: 9px 22px;
+      padding: 9px 20px;
       font-weight: 700;
       border-radius: 6px;
       cursor: pointer;
@@ -358,343 +349,299 @@ export const generateInvoiceHTML = (order) => {
       gap: 8px;
       transition: background 0.2s;
     }
-    .btn-print:hover { background: #ab722a; }
+    .btn-print:hover { background: #ad742b; }
 
+    /* Invoice Container */
     .invoice-wrapper {
-      max-width: 860px;
+      max-width: 820px;
       margin: 0 auto;
       background: #ffffff;
-      border: 1px solid #d1d5db;
-      border-radius: 6px;
-      padding: 28px 32px;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 36px 40px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.04);
     }
 
-    /* Header Section */
+    /* Header */
     .invoice-header {
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
-      border-bottom: 2px solid #c58837;
-      padding-bottom: 18px;
-      margin-bottom: 18px;
+      padding-bottom: 22px;
     }
 
-    .brand-block {
+    .brand-section {
       display: flex;
       align-items: center;
       gap: 16px;
     }
 
-    .brand-logo {
-      width: 60px;
-      height: 60px;
-      border-radius: 50%;
-      object-fit: cover;
-      border: 2px solid #c58837;
-      background: #1a1a1a;
+    .brand-logo-img {
+      width: 56px;
+      height: 56px;
+      object-fit: contain;
+      border-radius: 8px;
+      border: 1px solid #e5e7eb;
+      background: #ffffff;
+      padding: 2px;
     }
 
-    .brand-name {
+    .brand-title {
       font-family: 'Cinzel', Georgia, serif;
-      font-size: 24px;
+      font-size: 26px;
       font-weight: 800;
-      color: #1a1a1a;
-      letter-spacing: 1.5px;
+      color: #111827;
+      letter-spacing: 2px;
       line-height: 1.1;
+      text-transform: uppercase;
     }
-    .brand-name span { color: #c58837; }
 
     .brand-tagline {
       font-size: 10px;
       text-transform: uppercase;
-      letter-spacing: 2px;
+      letter-spacing: 2.5px;
       color: #c58837;
       font-weight: 700;
-      margin-top: 2px;
-    }
-
-    .seller-contact-meta {
-      font-size: 10px;
-      color: #4b5563;
       margin-top: 4px;
-      line-height: 1.4;
-      max-width: 360px;
     }
 
-    .invoice-title-block {
+    .brand-support {
+      font-size: 11px;
+      color: #64748b;
+      margin-top: 6px;
+    }
+
+    .invoice-meta-section {
       text-align: right;
     }
 
-    .invoice-title-block h1 {
-      font-family: 'Cinzel', serif;
-      font-size: 20px;
+    .invoice-heading {
+      font-family: 'Cinzel', Georgia, serif;
+      font-size: 22px;
       font-weight: 800;
       color: #c58837;
-      letter-spacing: 1px;
+      letter-spacing: 1.5px;
       text-transform: uppercase;
-      margin-bottom: 2px;
-    }
-
-    .invoice-subtitle {
-      font-size: 9.5px;
-      font-weight: 700;
-      color: #6b7280;
-      text-transform: uppercase;
-      letter-spacing: 1px;
       margin-bottom: 6px;
     }
 
-    .badge-paid {
-      background: #ecfdf5;
-      color: #065f46;
-      border: 1px solid #a7f3d0;
-      padding: 3px 10px;
-      border-radius: 12px;
-      font-weight: 800;
-      font-size: 10px;
-      display: inline-block;
-      letter-spacing: 0.5px;
-    }
-
-    .badge-pending {
-      background: #fffbeb;
-      color: #92400e;
-      border: 1px solid #fde68a;
-      padding: 3px 10px;
-      border-radius: 12px;
-      font-weight: 800;
-      font-size: 10px;
-      display: inline-block;
-      letter-spacing: 0.5px;
-    }
-
-    /* Meta Details Bar */
-    .meta-bar-grid {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      background: #f8fafc;
-      border: 1px solid #e2e8f0;
-      border-radius: 6px;
-      padding: 12px 14px;
-      gap: 12px;
-      margin-bottom: 18px;
-    }
-
-    .meta-col label {
-      display: block;
-      font-size: 9.5px;
-      text-transform: uppercase;
-      color: #64748b;
-      font-weight: 700;
-      letter-spacing: 0.5px;
-      margin-bottom: 2px;
-    }
-
-    .meta-col p {
+    .meta-line {
       font-size: 11.5px;
-      font-weight: 700;
-      color: #0f172a;
+      color: #4b5563;
+      margin-bottom: 3px;
+    }
+    .meta-line strong {
+      color: #111827;
     }
 
-    /* Parties Section (Seller vs Buyer) */
-    .parties-grid {
+    .badge-status {
+      display: inline-block;
+      margin-top: 6px;
+      padding: 3px 12px;
+      border-radius: 12px;
+      font-size: 10.5px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+    .badge-paid {
+      background: #dcfce7;
+      color: #15803d;
+      border: 1px solid #bbf7d0;
+    }
+    .badge-pending {
+      background: #fef3c7;
+      color: #b45309;
+      border: 1px solid #fde68a;
+    }
+
+    /* Gold Divider */
+    .divider-gold {
+      height: 2px;
+      background: #c58837;
+      margin-bottom: 24px;
+      opacity: 0.85;
+    }
+
+    /* 2-Column Info Cards */
+    .info-cards-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 16px;
-      margin-bottom: 18px;
+      gap: 20px;
+      margin-bottom: 28px;
     }
 
-    .party-box {
-      border: 1px solid #e2e8f0;
-      border-radius: 6px;
-      padding: 12px 16px;
-      background: #fafafa;
+    .info-card {
+      background: #fafbfc;
+      border: 1px solid #f1f5f9;
+      border-radius: 8px;
+      padding: 16px 18px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.02);
     }
 
-    .party-header {
-      font-size: 10px;
-      text-transform: uppercase;
+    .card-header-title {
+      font-size: 10.5px;
       font-weight: 800;
-      letter-spacing: 1px;
-      color: #c58837;
-      border-bottom: 1px solid #e2e8f0;
-      padding-bottom: 5px;
-      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 1.2px;
+      color: #64748b;
+      margin-bottom: 10px;
     }
 
-    .party-name {
-      font-size: 13px;
+    .card-customer-name {
+      font-size: 14px;
       font-weight: 700;
       color: #111827;
-      margin-bottom: 3px;
+      margin-bottom: 4px;
     }
 
-    .party-address {
+    .card-address-text {
+      font-size: 11.5px;
+      color: #4b5563;
+      line-height: 1.5;
+    }
+
+    .card-contact-text {
+      margin-top: 8px;
       font-size: 11px;
-      color: #475569;
-      line-height: 1.45;
-    }
-
-    .party-tax-ids {
-      margin-top: 6px;
-      padding-top: 6px;
-      border-top: 1px dashed #e2e8f0;
-      font-size: 10.5px;
-      color: #334155;
-    }
-
-    /* GST Itemized Table */
-    .gst-table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-bottom: 18px;
-      font-size: 11px;
-    }
-
-    .gst-table th {
-      background-color: #1a1a1a;
-      color: #ffffff;
-      padding: 9px 8px;
-      text-align: left;
-      font-size: 9.5px;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      font-weight: 700;
-      border: 1px solid #1a1a1a;
-    }
-
-    .gst-table td {
-      padding: 8px;
-      border: 1px solid #e2e8f0;
-      vertical-align: middle;
-    }
-
-    .gst-table tr:nth-child(even) {
-      background-color: #fbfbfb;
-    }
-
-    .text-center { text-align: center; }
-    .text-right { text-align: right; }
-    .font-bold { font-weight: 700; }
-
-    /* Summary & Total Section */
-    .summary-grid {
-      display: grid;
-      grid-template-columns: 1.2fr 0.8fr;
-      gap: 16px;
-      margin-bottom: 18px;
-      align-items: start;
-    }
-
-    .words-and-notes {
-      border: 1px solid #e2e8f0;
-      border-radius: 6px;
-      padding: 12px 14px;
-      background: #f8fafc;
-    }
-
-    .amount-words-title {
-      font-size: 9.5px;
-      text-transform: uppercase;
-      font-weight: 800;
       color: #64748b;
-      letter-spacing: 0.5px;
-      margin-bottom: 3px;
     }
 
-    .amount-words-text {
-      font-size: 12px;
-      font-weight: 700;
-      color: #0f172a;
-      font-style: italic;
-    }
-
-    .summary-box {
-      border: 1px solid #e2e8f0;
-      border-radius: 6px;
-      overflow: hidden;
-    }
-
-    .summary-row {
+    .summary-item-line {
       display: flex;
-      justify-content: space-between;
-      padding: 6px 12px;
-      border-bottom: 1px solid #f1f5f9;
-      font-size: 11px;
-      color: #475569;
-    }
-    .summary-row span:last-child {
-      font-weight: 600;
-      color: #1e293b;
-    }
-
-    .summary-row.discount {
-      color: #16a34a;
-    }
-    .summary-row.discount span:last-child {
-      color: #16a34a;
-    }
-
-    .summary-grand-total {
-      display: flex;
-      justify-content: space-between;
-      padding: 10px 12px;
-      background: #1a1a1a;
-      color: #ffffff;
-      font-size: 13px;
-      font-weight: 800;
-    }
-    .summary-grand-total span:last-child {
-      color: #c58837;
-      font-size: 14px;
-    }
-
-    /* Footer / Authorized Signatory */
-    .invoice-footer {
-      border-top: 1px solid #e2e8f0;
-      padding-top: 14px;
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-end;
-      margin-top: 10px;
-    }
-
-    .declaration-text {
-      font-size: 9.5px;
-      color: #64748b;
-      max-width: 480px;
+      margin-bottom: 6px;
+      font-size: 11.5px;
       line-height: 1.4;
     }
-
-    .signatory-box {
-      text-align: right;
-      min-width: 220px;
+    .summary-item-label {
+      color: #111827;
+      font-weight: 700;
+      min-width: 130px;
+    }
+    .summary-item-value {
+      color: #4b5563;
+      flex: 1;
     }
 
-    .signatory-company {
-      font-size: 10.5px;
-      font-weight: 700;
-      color: #1e293b;
-      margin-bottom: 36px;
+    /* Items Table */
+    .items-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 24px;
     }
 
-    .signatory-line {
-      border-top: 1px solid #64748b;
-      padding-top: 4px;
-      font-size: 9.5px;
+    .items-table thead tr {
+      background: #111827;
+      color: #ffffff;
+    }
+
+    .items-table th {
+      padding: 10px 12px;
+      font-size: 10px;
       font-weight: 700;
-      color: #475569;
       text-transform: uppercase;
-      letter-spacing: 0.5px;
+      letter-spacing: 0.8px;
+      text-align: left;
     }
 
-    /* Print Styles */
+    .items-table th.col-center, .items-table td.col-center {
+      text-align: center;
+    }
+    .items-table th.col-right, .items-table td.col-right {
+      text-align: right;
+    }
+
+    .items-table tbody tr {
+      border-bottom: 1px solid #f1f5f9;
+    }
+
+    .items-table td {
+      padding: 14px 12px;
+      vertical-align: middle;
+      color: #1e293b;
+      font-size: 12px;
+    }
+
+    .item-desc-cell {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .product-thumbnail {
+      width: 44px;
+      height: 44px;
+      border-radius: 6px;
+      object-fit: cover;
+      border: 1px solid #e2e8f0;
+      background: #f8fafc;
+      flex-shrink: 0;
+    }
+
+    .item-title {
+      font-weight: 600;
+      color: #111827;
+      font-size: 12.5px;
+    }
+
+    .item-variants {
+      font-size: 10.5px;
+      color: #c58837;
+      font-weight: 600;
+      margin-top: 2px;
+    }
+
+    /* Financial Summary (Bottom Right) */
+    .totals-wrapper {
+      display: flex;
+      justify-content: flex-end;
+      margin-bottom: 30px;
+    }
+
+    .totals-box {
+      width: 320px;
+    }
+
+    .totals-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 6px 0;
+      font-size: 12px;
+      color: #4b5563;
+    }
+
+    .totals-row.discount {
+      color: #16a34a;
+      font-weight: 600;
+    }
+
+    .totals-row.grand-total {
+      border-top: 2px solid #c58837;
+      border-bottom: 2px solid #c58837;
+      padding: 10px 0;
+      margin-top: 6px;
+      font-size: 15px;
+      font-weight: 800;
+      color: #c58837;
+    }
+
+    /* Footer */
+    .invoice-footer {
+      border-top: 1px solid #f1f5f9;
+      padding-top: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 10.5px;
+      color: #94a3b8;
+    }
+
+    /* Print Specific Rules */
     @media print {
       body {
         background: #ffffff !important;
         padding: 0 !important;
-        font-size: 10.5pt !important;
+        font-size: 11pt !important;
       }
       .no-print-bar {
         display: none !important;
@@ -705,240 +652,217 @@ export const generateInvoiceHTML = (order) => {
         padding: 0 !important;
         max-width: 100% !important;
       }
-      .gst-table th {
-        background-color: #1a1a1a !important;
+      .items-table thead tr {
+        background: #111827 !important;
         color: #ffffff !important;
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
       }
-      .summary-grand-total {
-        background-color: #1a1a1a !important;
-        color: #ffffff !important;
+      .divider-gold, .totals-row.grand-total {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      .badge-paid {
+        background: #dcfce7 !important;
+        color: #15803d !important;
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
       }
       @page {
         size: A4 portrait;
-        margin: 10mm;
+        margin: 12mm;
       }
     }
   </style>
 </head>
 <body>
 
-  <!-- Screen-only Action Toolbar -->
+  <!-- Action Bar (Screen Only) -->
   <div class="no-print-bar">
-    <div>
-      <strong style="color: #1e293b; font-size: 13px;">Tax Invoice Preview</strong>
-      <span style="color: #64748b; font-size: 11px; margin-left: 8px;">(Order: ${orderNum})</span>
+    <div style="font-weight: 600; color: #1e293b; font-size: 13px;">
+      Tax Invoice Preview <span style="font-weight: normal; color: #64748b; font-size: 11.5px;">(#${orderNum})</span>
     </div>
     <button onclick="window.print()" class="btn-print">
       🖨️ Print / Save as PDF
     </button>
   </div>
 
-  <!-- Document Body -->
+  <!-- Document Container -->
   <div class="invoice-wrapper">
 
-    <!-- Header -->
+    <!-- Header Section -->
     <div class="invoice-header">
-      <div class="brand-block">
-        <img src="/logo.png" onerror="this.src='/logo.jpg'; this.onerror=null;" alt="Billu Bazaar" class="brand-logo" />
+      <div class="brand-section">
+        <img 
+          src="${origin}/logo.png" 
+          onerror="this.onerror=null; this.src='${origin}/logo.jpg';" 
+          alt="Billu Bazaar" 
+          class="brand-logo-img" 
+        />
         <div>
-          <div class="brand-name">BILLU <span>BAZAAR</span></div>
-          <div class="brand-tagline">Luxury Shopping Experience</div>
-          <div class="seller-contact-meta">
-            ${seller.companyName}<br/>
-            ${seller.address}<br/>
-            Email: ${seller.email} | Helpline: ${seller.phone} | ${seller.website}
-          </div>
+          <div class="brand-title">BILLU BAZAAR</div>
+          <div class="brand-tagline">LUXURY SHOPPING EXPERIENCE</div>
+          <div class="brand-support">Support: ${seller.email} | ${seller.phone}</div>
         </div>
       </div>
 
-      <div class="invoice-title-block">
-        <h1>TAX INVOICE</h1>
-        <div class="invoice-subtitle">Original for Recipient</div>
+      <div class="invoice-meta-section">
+        <div class="invoice-heading">TAX INVOICE</div>
+        <div class="meta-line">Invoice No: <strong>${invoiceNum}</strong></div>
+        <div class="meta-line">Order Ref: <strong>#${orderNum}</strong></div>
+        <div class="meta-line">Date: <strong>${invoiceDate}</strong></div>
         <div>
-          <span class="${isPaid ? 'badge-paid' : 'badge-pending'}">
-            ${paymentStatusText}
+          <span class="badge-status ${isPaid ? 'badge-paid' : 'badge-pending'}">
+            ${paymentStatusBadge}
           </span>
         </div>
       </div>
     </div>
 
-    <!-- Meta Details Bar -->
-    <div class="meta-bar-grid">
-      <div class="meta-col">
-        <label>Invoice Number</label>
-        <p>${invoiceNum}</p>
+    <!-- Accent Divider -->
+    <div class="divider-gold"></div>
+
+    <!-- 2 Column Address & Summary Section -->
+    <div class="info-cards-grid">
+      
+      <!-- Billed & Shipped To Address Card -->
+      <div class="info-card">
+        <div class="card-header-title">
+          ${isSameAddress ? 'BILLED & SHIPPED TO' : 'BILLED TO'}
+        </div>
+        <div class="card-customer-name">${buyerName}</div>
+        <div class="card-address-text">
+          ${billingAddrFormatted.line1}<br/>
+          ${billingAddrFormatted.line2 ? `${billingAddrFormatted.line2}<br/>` : ''}
+          ${billingAddrFormatted.cityStatePin}<br/>
+          <strong>${billingAddrFormatted.country}</strong>
+        </div>
+        <div class="card-contact-text">
+          ${buyerPhone ? `Phone: +91${buyerPhone.replace(/^\+?91/, '')}` : ''}
+          ${buyerPhone && buyerEmail ? ' | ' : ''}
+          ${buyerEmail ? `Email: ${buyerEmail}` : ''}
+        </div>
+        
+        ${!isSameAddress ? `
+          <div style="margin-top: 10px; padding-top: 8px; border-top: 1px dashed #e2e8f0;">
+            <div style="font-size: 9.5px; font-weight: 700; color: #64748b; text-transform: uppercase;">Shipped To:</div>
+            <div style="font-size: 11px; color: #475569;">
+              ${shippingAddrFormatted.line1}, ${shippingAddrFormatted.cityStatePin}
+            </div>
+          </div>
+        ` : ''}
       </div>
-      <div class="meta-col">
-        <label>Invoice Date</label>
-        <p>${invoiceDate}</p>
+
+      <!-- Payment & Shipping Summary Card -->
+      <div class="info-card">
+        <div class="card-header-title">PAYMENT & SHIPPING SUMMARY</div>
+        
+        <div class="summary-item-line">
+          <div class="summary-item-label">Payment Method:</div>
+          <div class="summary-item-value">${rawPaymentMethod}</div>
+        </div>
+
+        <div class="summary-item-line">
+          <div class="summary-item-label">Transaction Ref:</div>
+          <div class="summary-item-value" style="font-family: monospace; font-size: 11px; word-break: break-all;">
+            ${transactionRef}
+          </div>
+        </div>
+
+        <div class="summary-item-line">
+          <div class="summary-item-label">Order Date:</div>
+          <div class="summary-item-value">${orderDate}</div>
+        </div>
+
+        ${order.trackingNumber ? `
+          <div class="summary-item-line">
+            <div class="summary-item-label">Tracking Number:</div>
+            <div class="summary-item-value" style="font-family: monospace;">${order.trackingNumber}</div>
+          </div>
+        ` : ''}
+
+        ${order.deliveryPartner ? `
+          <div class="summary-item-line">
+            <div class="summary-item-label">Courier:</div>
+            <div class="summary-item-value">${order.deliveryPartner}</div>
+          </div>
+        ` : ''}
       </div>
-      <div class="meta-col">
-        <label>Order ID & Date</label>
-        <p>${orderNum} <span style="font-size: 9.5px; font-weight: normal; color: #64748b;">(${orderDate})</span></p>
-      </div>
-      <div class="meta-col">
-        <label>Place of Supply</label>
-        <p>${rawState || seller.state} <span style="font-size: 9.5px; color: #64748b;">(Code: ${buyerStateCode})</span></p>
-      </div>
+
     </div>
 
-    <!-- Parties Grid -->
-    <div class="parties-grid">
-      <!-- Seller Box -->
-      <div class="party-box">
-        <div class="party-header">Details of Seller (Supplier)</div>
-        <div class="party-name">${seller.companyName}</div>
-        <div class="party-address">
-          ${seller.address}<br/>
-          State: <strong>${seller.state}</strong> (State Code: <strong>${seller.stateCode}</strong>)
-        </div>
-        <div class="party-tax-ids">
-          <strong>GSTIN:</strong> ${seller.gstin} &nbsp;|&nbsp; <strong>PAN:</strong> ${seller.pan}<br/>
-          <strong>Reverse Charge:</strong> No
-        </div>
-      </div>
-
-      <!-- Buyer Box -->
-      <div class="party-box">
-        <div class="party-header">Details of Buyer (Billed & Shipped To)</div>
-        <div class="party-name">${buyerName}</div>
-        <div class="party-address">
-          ${shipping.flatHouse || shipping.line1 || billing.flatHouse || billing.line1 || ''} 
-          ${shipping.areaStreet || shipping.line2 || billing.areaStreet || billing.line2 || ''}<br/>
-          ${shipping.landmark ? `Near ${shipping.landmark}, ` : ''}
-          ${shipping.city || billing.city || ''}${shipping.state || billing.state ? `, ${shipping.state || billing.state}` : ''} - ${shipping.pincode || shipping.zipCode || billing.pincode || ''}<br/>
-          Phone: <strong>${buyerPhone}</strong> &nbsp;|&nbsp; Email: ${buyerEmail}
-        </div>
-        <div class="party-tax-ids">
-          <strong>Place of Supply:</strong> ${rawState || seller.state} (Code: ${buyerStateCode})
-          ${buyerGstin ? `<br/><strong>Buyer GSTIN:</strong> ${buyerGstin}` : ''}
-        </div>
-      </div>
-    </div>
-
-    <!-- Itemized GST Table -->
-    <table class="gst-table">
+    <!-- Product Items Table -->
+    <table class="items-table">
       <thead>
         <tr>
-          <th style="width: 25px;" class="text-center">#</th>
-          <th>Description of Goods</th>
-          <th style="width: 55px;" class="text-center">HSN</th>
-          <th style="width: 35px;" class="text-center">Qty</th>
-          <th style="width: 75px;" class="text-right">Unit Rate</th>
-          <th style="width: 80px;" class="text-right">Taxable Val</th>
-          ${currency === 'INR' && isIntraState ? `
-            <th style="width: 65px;" class="text-right">CGST</th>
-            <th style="width: 65px;" class="text-right">SGST</th>
-          ` : `
-            <th style="width: 75px;" class="text-right">${currency === 'AED' ? 'VAT (5%)' : 'IGST'}</th>
-          `}
-          <th style="width: 90px;" class="text-right">Total</th>
+          <th style="width: 35px;" class="col-center">#</th>
+          <th>ITEM DESCRIPTION</th>
+          <th style="width: 60px;" class="col-center">QTY</th>
+          <th style="width: 110px;" class="col-right">UNIT PRICE</th>
+          <th style="width: 110px;" class="col-right">TOTAL</th>
         </tr>
       </thead>
       <tbody>
         ${processedItems.map(item => `
           <tr>
-            <td class="text-center">${item.index}</td>
+            <td class="col-center" style="font-weight: 600; color: #64748b;">${item.index}</td>
             <td>
-              <strong style="color: #0f172a;">${item.name}</strong>
-              ${item.sku ? `<span style="font-size: 9.5px; color: #64748b; font-family: monospace; display: block;">SKU: ${item.sku}</span>` : ''}
-              ${item.variantText ? `<span style="font-size: 9.5px; color: #c58837; display: block;">${item.variantText}</span>` : ''}
+              <div class="item-desc-cell">
+                <img src="${item.imgUrl}" alt="${item.name}" class="product-thumbnail" />
+                <div>
+                  <div class="item-title">${item.name}</div>
+                  ${item.variantText ? `<div class="item-variants">${item.variantText}</div>` : ''}
+                </div>
+              </div>
             </td>
-            <td class="text-center font-mono" style="font-size: 10px;">${item.hsnCode}</td>
-            <td class="text-center font-bold">${item.qty}</td>
-            <td class="text-right">${fmt(item.unitRate)}</td>
-            <td class="text-right font-bold">${fmt(item.taxableValue)}</td>
-            ${currency === 'INR' && isIntraState ? `
-              <td class="text-right" style="font-size: 10px;">
-                <span style="color: #64748b;">${item.cgstRate}%</span><br/>${fmt(item.cgstAmt)}
-              </td>
-              <td class="text-right" style="font-size: 10px;">
-                <span style="color: #64748b;">${item.sgstRate}%</span><br/>${fmt(item.sgstAmt)}
-              </td>
-            ` : `
-              <td class="text-right" style="font-size: 10px;">
-                <span style="color: #64748b;">${item.igstRate}%</span><br/>${fmt(item.igstAmt)}
-              </td>
-            `}
-            <td class="text-right font-bold">${fmt(item.lineGrossPrice)}</td>
+            <td class="col-center" style="font-weight: 700;">${item.qty}</td>
+            <td class="col-right">${fmt(item.unitPrice)}</td>
+            <td class="col-right" style="font-weight: 700;">${fmt(item.lineTotal)}</td>
           </tr>
         `).join('')}
       </tbody>
     </table>
 
-    <!-- Summary & Words Section -->
-    <div class="summary-grid">
-      <!-- Left: Amount in words & Payment Details -->
-      <div class="words-and-notes">
-        <div class="amount-words-title">Invoice Amount in Words</div>
-        <div class="amount-words-text">${totalWords}</div>
-
-        <div style="margin-top: 14px; padding-top: 10px; border-top: 1px dashed #cbd5e1; font-size: 10px; color: #475569;">
-          <p><strong>Payment Mode:</strong> ${rawPaymentMethod}</p>
-          <p><strong>Transaction Ref:</strong> <span style="font-family: monospace;">${transactionRef}</span></p>
-          ${order.trackingNumber ? `<p><strong>AWB Tracking ID:</strong> ${order.trackingNumber}</p>` : ''}
+    <!-- Financial Breakdown Section -->
+    <div class="totals-wrapper">
+      <div class="totals-box">
+        <div class="totals-row">
+          <span>Subtotal</span>
+          <span style="font-weight: 600; color: #111827;">${fmt(subtotal)}</span>
         </div>
-      </div>
 
-      <!-- Right: Financial Breakdown -->
-      <div class="summary-box">
-        <div class="summary-row">
-          <span>Total Taxable Amount</span>
-          <span>${fmt(totalTaxableValue)}</span>
-        </div>
-        ${currency === 'INR' && isIntraState ? `
-          <div class="summary-row">
-            <span>Total CGST</span>
-            <span>${fmt(totalCgstAmount)}</span>
+        ${discountAmount > 0 ? `
+          <div class="totals-row discount">
+            <span>Discount & Rewards</span>
+            <span>-${fmt(discountAmount)}</span>
           </div>
-          <div class="summary-row">
-            <span>Total SGST</span>
-            <span>${fmt(totalSgstAmount)}</span>
-          </div>
-        ` : `
-          <div class="summary-row">
-            <span>Total ${currency === 'AED' ? 'VAT (5%)' : 'IGST'}</span>
-            <span>${fmt(totalIgstAmount)}</span>
-          </div>
-        `}
+        ` : ''}
+
         ${giftWrapFee > 0 ? `
-          <div class="summary-row">
+          <div class="totals-row">
             <span>Gift Wrapping Fee</span>
             <span>${fmt(giftWrapFee)}</span>
           </div>
         ` : ''}
-        <div class="summary-row">
-          <span>Shipping & Handling</span>
-          <span>${shippingAmount === 0 ? 'FREE' : fmt(shippingAmount)}</span>
+
+        <div class="totals-row">
+          <span>Shipping Fee</span>
+          <span style="font-weight: 600; color: #111827;">
+            ${shippingAmount === 0 ? 'FREE' : fmt(shippingAmount)}
+          </span>
         </div>
-        ${discountAmount > 0 ? `
-          <div class="summary-row discount">
-            <span>Discounts & Coupon</span>
-            <span>-${fmt(discountAmount)}</span>
-          </div>
-        ` : ''}
-        <div class="summary-grand-total">
+
+        <div class="totals-row grand-total">
           <span>Grand Total</span>
           <span>${fmt(grandTotal)}</span>
         </div>
       </div>
     </div>
 
-    <!-- Footer & Signatory -->
+    <!-- Footer Note -->
     <div class="invoice-footer">
-      <div class="declaration-text">
-        <strong>Declaration:</strong> We declare that this invoice shows the actual price of the goods described and that all particulars are true and correct.<br/>
-        <em>This is a computer-generated tax invoice and requires no signature.</em>
-      </div>
-
-      <div class="signatory-box">
-        <div class="signatory-company">For <strong>${seller.companyName}</strong></div>
-        <div class="signatory-line">Authorized Signatory</div>
-      </div>
+      <div>This is a computer-generated tax invoice and requires no physical signature.</div>
+      <div>Thank you for shopping with <strong>Billu Bazaar</strong>.</div>
     </div>
 
   </div>
@@ -954,7 +878,7 @@ export const generateInvoiceHTML = (order) => {
 export const printInvoice = (order) => {
   if (!order) return;
   const html = generateInvoiceHTML(order);
-  const printWindow = window.open('', '_blank', 'width=950,height=800');
+  const printWindow = window.open('', '_blank', 'width=950,height=850');
   if (printWindow) {
     printWindow.document.write(html);
     printWindow.document.close();

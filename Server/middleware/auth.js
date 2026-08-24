@@ -7,11 +7,14 @@ const { Customer, AdminUser } = require('../models');
  */
 const verifyCustomer = async (req, res, next) => {
   try {
-    const authHeader = req.headers.authorization;
+    const authHeader = req.headers.authorization || req.headers.Authorization;
     if (!authHeader || !authHeader.startsWith('Bearer '))
       return res.status(401).json({ success: false, message: 'No token provided' });
 
-    const token = authHeader.split(' ')[1];
+    const token = authHeader.split(' ')[1]?.trim();
+    if (!token)
+      return res.status(401).json({ success: false, message: 'No token provided' });
+
     const decoded = verifyToken(token);
 
     const customer = await Customer.findByPk(decoded.id, { attributes: { exclude: ['password'] } });

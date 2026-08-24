@@ -3,11 +3,11 @@ const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const { 
-  signAccessToken, 
-  signRefreshToken, 
+  signMobileToken,
   signResetToken, 
   verifyResetToken 
 } = require('../../config/jwt');
+const { Op } = require('sequelize');
 const { 
   Customer, 
   Cart, 
@@ -60,6 +60,24 @@ const register = async (req, res) => {
       return res.status(409).json({ success: false, message: 'An account with this email already exists' });
     }
 
+    // Check if phone number is already registered (unique phone constraint)
+    const cleanDigits = cleanPhone.replace(/^\+/, '').replace(/[\s\-()]/g, '');
+    const phoneVariations = [cleanPhone, cleanDigits, `+${cleanDigits}`];
+    if (cleanDigits.startsWith('91') && cleanDigits.length === 12) {
+      phoneVariations.push(cleanDigits.slice(2));
+    } else if (cleanDigits.length === 10) {
+      phoneVariations.push(`+91${cleanDigits}`, `91${cleanDigits}`);
+    }
+
+    const existingPhone = await Customer.findOne({
+      where: {
+        phone: { [Op.in]: phoneVariations }
+      }
+    });
+    if (existingPhone) {
+      return res.status(409).json({ success: false, message: 'This phone number is already registered' });
+    }
+
     // Fetch site loyalty settings for signup bonus points
     let initialPoints = 0;
     try {
@@ -102,24 +120,22 @@ const register = async (req, res) => {
       }
     }
 
-    const token = signAccessToken({ id: customer.id });
-    const refreshToken = signRefreshToken({ id: customer.id });
+    // 10-Year Access Token with embedded customer details & cart count
+    const tokenPayload = {
+      id: customer.id,
+      name: customer.name,
+      email: customer.email,
+      phone: customer.phone,
+      loyaltyPoints: customer.loyaltyPoints || 0,
+      cartCount: 0,
+    };
+
+    const token = signMobileToken(tokenPayload);
 
     return res.status(201).json({
       success: true,
       message: 'Customer registered successfully',
       token,
-      refreshToken,
-      bonusPointsEarned: initialPoints,
-      customer: {
-        id: customer.id,
-        name: customer.name,
-        email: customer.email,
-        phone: customer.phone,
-        loyaltyPoints: customer.loyaltyPoints,
-        referralCode: customer.referralCode,
-        preferredCurrency: customer.preferredCurrency || 'INR',
-      },
     });
   } catch (err) {
     console.error('[MobAuth Register] Error:', err);
@@ -160,26 +176,32 @@ const login = async (req, res) => {
       return res.status(403).json({ success: false, message: 'Your account has been deactivated. Please contact customer support.' });
     }
 
-    const token = signAccessToken({ id: customer.id });
-    const refreshToken = signRefreshToken({ id: customer.id });
+    // Calculate customer's cart item count
+    let cartCount = 0;
+    const cart = await Cart.findOne({
+      where: { customerId: customer.id },
+      attributes: ['id'],
+    });
+    if (cart) {
+      cartCount = await CartItem.count({ where: { cartId: cart.id } });
+    }
+
+    // 10-Year Access Token with embedded customer details & cart count
+    const tokenPayload = {
+      id: customer.id,
+      name: customer.name,
+      email: customer.email,
+      phone: customer.phone,
+      loyaltyPoints: customer.loyaltyPoints || 0,
+      cartCount,
+    };
+
+    const token = signMobileToken(tokenPayload);
 
     return res.status(200).json({
       success: true,
       message: 'Login successful',
       token,
-      refreshToken,
-      customer: {
-        id: customer.id,
-        name: customer.name,
-        email: customer.email,
-        phone: customer.phone,
-        avatar: customer.avatar || null,
-        address: customer.address || {},
-        loyaltyPoints: customer.loyaltyPoints || 0,
-        referralCode: customer.referralCode,
-        preferredCurrency: customer.preferredCurrency || 'INR',
-        whatsappOptIn: customer.whatsappOptIn || false,
-      },
     });
   } catch (err) {
     console.error('[MobAuth Login] Error:', err);
@@ -356,6 +378,7 @@ const resetPassword = async (req, res) => {
 
 /**
  * 6. Get Current User & Cart Count
+ * GET /mob-api/auth/getme
  * GET /mob-api/auth/me
  * Protected Route (Requires Bearer token)
  */
@@ -367,19 +390,26 @@ const getMe = async (req, res) => {
 
     const customerId = req.customer.id;
 
-    // Fetch fresh customer details excluding password
-    const customer = await Customer.findByPk(customerId, {
-      attributes: { exclude: ['password', 'passwordResetToken', 'passwordResetExpiry'] }
+    // Fetch fresh customer details
+    const customer = await Customer.findOne({
+      where: { id: customerId, isActive: true },
+      attributes: [
+        'id',
+        'name',
+        'email',
+        'phone',
+        'loyaltyPoints',
+        'preferredCurrency',
+        'createdAt',
+      ],
     });
 
-    if (!customer || !customer.isActive) {
+    if (!customer) {
       return res.status(401).json({ success: false, message: 'Account is deactivated or not found' });
     }
 
-    // Fetch cart count efficiently (item count and sum of quantity)
+    // Fetch cart count (only item count)
     let cartCount = 0;
-    let cartQuantity = 0;
-
     const cart = await Cart.findOne({
       where: { customerId },
       attributes: ['id'],
@@ -387,27 +417,12 @@ const getMe = async (req, res) => {
 
     if (cart) {
       cartCount = await CartItem.count({ where: { cartId: cart.id } });
-      const sumResult = await CartItem.sum('quantity', { where: { cartId: cart.id } });
-      cartQuantity = sumResult || 0;
     }
 
     return res.status(200).json({
       success: true,
-      customer: {
-        id: customer.id,
-        name: customer.name,
-        email: customer.email,
-        phone: customer.phone,
-        avatar: customer.avatar || null,
-        address: customer.address || {},
-        loyaltyPoints: customer.loyaltyPoints || 0,
-        referralCode: customer.referralCode,
-        preferredCurrency: customer.preferredCurrency || 'INR',
-        whatsappOptIn: customer.whatsappOptIn || false,
-        createdAt: customer.createdAt,
-      },
+      customer,
       cartCount,
-      cartQuantity,
     });
   } catch (err) {
     console.error('[MobAuth GetMe] Error:', err);

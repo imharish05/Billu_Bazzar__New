@@ -174,45 +174,74 @@ class RazorpayService extends PaymentGatewayInterface {
    * @returns {Promise<import('./PaymentGatewayInterface').PaymentResult>}
    */
   async refund(paymentId, amount) {
+    const hasRealKeys = process.env.RAZORPAY_KEY_ID && 
+                        !process.env.RAZORPAY_KEY_ID.includes('mock') && 
+                        process.env.RAZORPAY_KEY_SECRET &&
+                        !process.env.RAZORPAY_KEY_SECRET.includes('mock');
+
+    if (!hasRealKeys || (typeof paymentId === 'string' && paymentId.startsWith('order_sim_'))) {
+      return {
+        success: true,
+        gatewayRef: `rfnd_sim_${Date.now()}`,
+        amount: parseFloat(amount || 0),
+        currency: 'INR',
+        status: 'REFUNDED',
+        raw: { isSimulation: true }
+      };
+    }
+
     try {
-      if (typeof paymentId === 'string' && paymentId.startsWith('order_sim_')) {
-        return {
-          success: true,
-          gatewayRef: paymentId,
-          amount: parseFloat(amount || 0),
-          currency: 'INR',
-          status: 'REFUNDED',
-          raw: { isSimulation: true }
-        };
+      const instance = this._getInstance();
+      let refundAmountInPaisa = amount ? Math.round(amount * 100) : null;
+
+      // Check payment status and remaining refundable balance on Razorpay
+      try {
+        const paymentDetails = await instance.payments.fetch(paymentId);
+        if (paymentDetails && paymentDetails.amount) {
+          const alreadyRefunded = paymentDetails.amount_refunded || 0;
+          const maxAvailablePaisa = Math.max(0, paymentDetails.amount - alreadyRefunded);
+
+          if (maxAvailablePaisa === 0) {
+            return {
+              success: false,
+              status: 'Payment has already been fully refunded on Razorpay.',
+              amount: 0,
+              currency: paymentDetails.currency || 'INR',
+              raw: paymentDetails,
+            };
+          }
+
+          if (refundAmountInPaisa && refundAmountInPaisa > maxAvailablePaisa) {
+            console.warn(`[Razorpay refund] Requested refund (${refundAmountInPaisa} paise) exceeds available balance (${maxAvailablePaisa} paise). Auto-capping to ${maxAvailablePaisa} paise.`);
+            refundAmountInPaisa = maxAvailablePaisa;
+          }
+        }
+      } catch (fetchErr) {
+        console.warn('[Razorpay refund] Pre-fetch payment warning:', fetchErr.message);
       }
 
-      const instance = this._getInstance();
       const options = {};
-      if (amount) {
-        options.amount = Math.round(amount * 100); // refund amount in paisa
+      if (refundAmountInPaisa) {
+        options.amount = refundAmountInPaisa;
       }
+
       const refundObj = await instance.payments.refund(paymentId, options);
       return {
-        success: refundObj.status === 'processed',
+        success: refundObj.status === 'processed' || refundObj.status === 'pending' || !!refundObj.id,
         gatewayRef: refundObj.id,
         amount: refundObj.amount / 100,
         currency: refundObj.currency,
-        status: refundObj.status.toUpperCase(),
+        status: (refundObj.status || 'PROCESSED').toUpperCase(),
         raw: refundObj,
       };
     } catch (err) {
-      console.error('[Razorpay refund] Error:', err.message);
-      if (process.env.NODE_ENV !== 'production') {
-        return {
-          success: true,
-          gatewayRef: paymentId,
-          amount: parseFloat(amount || 0),
-          currency: 'INR',
-          status: 'REFUNDED',
-          raw: { isSimulation: true }
-        };
-      }
-      throw err;
+      const errorDescription = err?.error?.description || err?.message || 'Payment gateway rejected refund request';
+      console.error('[Razorpay refund] Error:', errorDescription);
+      return {
+        success: false,
+        status: errorDescription,
+        error: err?.error || err,
+      };
     }
   }
 }

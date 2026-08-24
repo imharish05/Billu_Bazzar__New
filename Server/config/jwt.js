@@ -23,12 +23,17 @@ const verifyResetToken = (token) => {
   return decoded;
 };
 
+// Mobile App 10-year Access Token
+const signMobileToken = (payload) =>
+  jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '3650d' });
+
 const signToken = (payload) => signAccessToken(payload);
 const verifyToken = (token) => verifyAccessToken(token);
 
 module.exports = {
   signAccessToken,
   signRefreshToken,
+  signMobileToken,
   verifyAccessToken,
   verifyRefreshToken,
   signResetToken,

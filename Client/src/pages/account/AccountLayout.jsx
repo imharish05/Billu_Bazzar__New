@@ -11,7 +11,6 @@ import api from '../../services/api';
 const NAV_ITEMS = [
   { to: '/account', label: 'Profile', icon: User, end: true },
   { to: '/account/orders', label: 'My Orders', icon: Package },
-  { to: '/account/returns', label: 'Returns & Refunds', icon: RotateCcw },
   { to: '/account/wishlist', label: 'Wishlist', icon: Heart },
   { to: '/account/reviews', label: 'My Reviews', icon: MessageSquare },
   { to: '/account/loyalty', label: 'Loyalty & Cashback', icon: Star },
@@ -84,8 +83,7 @@ const AccountLayout = () => {
       setView(VIEW_REGISTER);
     }
     if (tabParam) {
-      if (tabParam === 'orders') navigate('/account/orders', { replace: true });
-      else if (tabParam === 'returns' || tabParam === 'refunds') navigate('/account/returns', { replace: true });
+      if (tabParam === 'orders' || tabParam === 'returns' || tabParam === 'refunds') navigate('/account/orders', { replace: true });
       else if (tabParam === 'wishlist') navigate('/account/wishlist', { replace: true });
       else if (tabParam === 'reviews') navigate('/account/reviews', { replace: true });
       else if (tabParam === 'loyalty') navigate('/account/loyalty', { replace: true });

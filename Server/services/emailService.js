@@ -106,10 +106,17 @@ const formatAddressString = (rawAddr) => {
 const sendOtpEmail = async (toEmail, name, otp) => {
   const transporter = createTransporter();
 
+  const attachments = [];
+  const logoAtt = getBrandLogoAttachment();
+  if (logoAtt) {
+    attachments.push(logoAtt);
+  }
+
   const mailOptions = {
     from: `"Billu Bazaar" <${process.env.EMAIL_USER}>`,
     to: toEmail,
     subject: `${otp} is your Billu Bazaar password reset OTP`,
+    attachments,
     html: `
       <!DOCTYPE html>
       <html lang="en">
@@ -123,17 +130,8 @@ const sendOtpEmail = async (toEmail, name, otp) => {
           <tr>
             <td align="center">
               <table width="540" cellpadding="0" cellspacing="0" style="background:#ffffff;border:1px solid #EAEAEA;border-radius:10px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,0.06);">
-                <!-- Header -->
-                <tr>
-                  <td style="background:#1A1A1A;padding:24px 40px;text-align:center;">
-                    <p style="margin:0;font-family:${SANS_SERIF_FONT};font-size:22px;font-weight:bold;color:#ffffff;letter-spacing:0.12em;">
-                      BILLU <span style="color:#C9A24B;">BAZAAR</span>
-                    </p>
-                    <p style="margin:4px 0 0;font-size:11px;color:#A1A1A1;letter-spacing:0.15em;text-transform:uppercase;">
-                      Password Reset
-                    </p>
-                  </td>
-                </tr>
+                <!-- Header with Logo -->
+                ${getBrandHeaderHtml('Password Reset')}
 
                 <!-- Body -->
                 <tr>
@@ -172,6 +170,7 @@ const sendOtpEmail = async (toEmail, name, otp) => {
                 <!-- Footer -->
                 <tr>
                   <td style="background:#FAF9F6;padding:20px 40px;border-top:1px solid #EAEAEA;text-align:center;">
+                    <p style="margin:0 0 4px;color:#C9A24B;font-weight:700;letter-spacing:0.1em;font-size:12px;">BILLU BAZAAR</p>
                     <p style="margin:0;font-size:11px;color:#9CA3AF;line-height:1.6;">
                       © ${new Date().getFullYear()} Billu Bazaar. All rights reserved.<br/>
                       This is an automated email — please do not reply directly.
@@ -198,10 +197,17 @@ const sendOtpEmail = async (toEmail, name, otp) => {
 const sendFraudOtpEmail = async (toEmail, name, otp) => {
   const transporter = createTransporter();
 
+  const attachments = [];
+  const logoAtt = getBrandLogoAttachment();
+  if (logoAtt) {
+    attachments.push(logoAtt);
+  }
+
   const mailOptions = {
     from: `"Billu Bazaar Security" <${process.env.EMAIL_USER}>`,
     to: toEmail,
     subject: `${otp} is your Billu Bazaar Order Verification Code`,
+    attachments,
     html: `
       <!DOCTYPE html>
       <html lang="en">
@@ -215,17 +221,8 @@ const sendFraudOtpEmail = async (toEmail, name, otp) => {
           <tr>
             <td align="center">
               <table width="540" cellpadding="0" cellspacing="0" style="background:#ffffff;border:1px solid #EAEAEA;border-radius:10px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,0.06);">
-                <!-- Header -->
-                <tr>
-                  <td style="background:#1A1A1A;padding:24px 40px;text-align:center;">
-                    <p style="margin:0;font-family:${SANS_SERIF_FONT};font-size:22px;font-weight:bold;color:#ffffff;letter-spacing:0.12em;">
-                      BILLU <span style="color:#C9A24B;">BAZAAR</span>
-                    </p>
-                    <p style="margin:4px 0 0;font-size:11px;color:#A1A1A1;letter-spacing:0.15em;text-transform:uppercase;">
-                      Security Concierge
-                    </p>
-                  </td>
-                </tr>
+                <!-- Header with Logo -->
+                ${getBrandHeaderHtml('Security Concierge')}
 
                 <!-- Body -->
                 <tr>
@@ -261,6 +258,7 @@ const sendFraudOtpEmail = async (toEmail, name, otp) => {
                 <!-- Footer -->
                 <tr>
                   <td style="background:#FAF9F6;padding:20px 40px;border-top:1px solid #EAEAEA;text-align:center;">
+                    <p style="margin:0 0 4px;color:#C9A24B;font-weight:700;letter-spacing:0.1em;font-size:12px;">BILLU BAZAAR</p>
                     <p style="margin:0;font-size:11px;color:#9CA3AF;line-height:1.6;">
                       © ${new Date().getFullYear()} Billu Bazaar Security Concierge. All rights reserved.<br/>
                       This is an automated security email — please do not reply.
@@ -1542,19 +1540,254 @@ const sendMarketingAutomationReport = async ({
   }
 };
 
-module.exports = {
-  sendOtpEmail,
-  sendFraudOtpEmail,
-  sendOrderStatusNotification,
-  sendRestockAlertEmail,
-  sendContactEnquiryAdminNotification,
-  sendMarketingAutomationReport,
+/**
+ * Send an email notification for a return request lifecycle status update
+ * (REQUESTED, APPROVED, PICKUP_SCHEDULED, PICKED_UP, RECEIVED_AT_WAREHOUSE, REFUNDED, REJECTED)
+ */
+const sendReturnStatusNotification = async (returnRequest, customer, order) => {
+  try {
+    const transporter = createTransporter();
+    const recipientEmail = customer?.email || order?.shippingAddress?.email || order?.billingAddress?.email;
+    if (!recipientEmail) {
+      console.warn(`[sendReturnStatusNotification] No email address found for return ${returnRequest.returnNumber}`);
+      return null;
+    }
+
+    const customerName = (
+      customer?.name ||
+      order?.shippingAddress?.name ||
+      order?.shippingAddress?.fullName ||
+      order?.billingAddress?.name ||
+      'Valued Customer'
+    ).trim();
+
+    const status = (returnRequest.status || 'REQUESTED').toUpperCase();
+    const currency = returnRequest.currency || order?.currency || 'INR';
+    const currencySymbol = currency === 'AED' ? 'AED ' : '₹';
+    const refundAmountFormatted = `${currencySymbol}${parseFloat(returnRequest.refundAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+    let pickupDateStr = '';
+    if (returnRequest.pickupDate) {
+      try {
+        pickupDateStr = new Date(returnRequest.pickupDate).toLocaleDateString('en-IN', {
+          weekday: 'long',
+          day: 'numeric',
+          month: 'long',
+          year: 'numeric',
+        });
+      } catch (e) {
+        pickupDateStr = String(returnRequest.pickupDate);
+      }
+    }
+
+    const statusConfigs = {
+      REQUESTED: {
+        subject: `Return Request Received: #${returnRequest.returnNumber} - Billu Bazaar`,
+        heading: 'Return Request Received',
+        badgeText: 'Under Review',
+        badgeBg: '#FEF3C7',
+        badgeColor: '#92400E',
+        message: `We have received your return request for <strong>${returnRequest.productName}</strong>. Our quality verification team is reviewing your claim and unboxing video.`,
+      },
+      APPROVED: {
+        subject: `Return Approved: #${returnRequest.returnNumber} - Billu Bazaar`,
+        heading: 'Return Claim Approved',
+        badgeText: 'Return Approved',
+        badgeBg: '#DBEAFE',
+        badgeColor: '#1E40AF',
+        message: `Great news! Your return request for <strong>${returnRequest.productName}</strong> has been approved. We are scheduling a courier pickup for your package.`,
+      },
+      PICKUP_SCHEDULED: {
+        subject: `Courier Pickup Scheduled: #${returnRequest.returnNumber} - Billu Bazaar`,
+        heading: 'Courier Pickup Scheduled',
+        badgeText: 'Pickup Scheduled',
+        badgeBg: '#F3E8FF',
+        badgeColor: '#6B21A8',
+        message: `Doorstep pickup has been scheduled for your return${pickupDateStr ? ` on <strong>${pickupDateStr}</strong>` : ''}. Please keep the item safely packed with all tags and original accessories for the courier executive.`,
+      },
+      PICKED_UP: {
+        subject: `Item Picked Up: #${returnRequest.returnNumber} - Billu Bazaar`,
+        heading: 'Item Picked Up',
+        badgeText: 'Item Collected',
+        badgeBg: '#E0E7FF',
+        badgeColor: '#3730A3',
+        message: `Your returned item <strong>${returnRequest.productName}</strong> has been collected by our courier partner and is in transit to our warehouse.`,
+      },
+      RECEIVED_AT_WAREHOUSE: {
+        subject: `Parcel Received at Warehouse: #${returnRequest.returnNumber} - Billu Bazaar`,
+        heading: 'Received at Warehouse',
+        badgeText: 'Under Inspection',
+        badgeBg: '#CCFBF1',
+        badgeColor: '#115E59',
+        message: `Your return package for <strong>${returnRequest.productName}</strong> has reached our warehouse facility and is undergoing final inspection prior to refund issuance.`,
+      },
+      REFUNDED: {
+        subject: `Refund Processed: #${returnRequest.returnNumber} - Billu Bazaar`,
+        heading: 'Refund Completed',
+        badgeText: 'Refunded',
+        badgeBg: '#D1FAE5',
+        badgeColor: '#065F46',
+        message: `Your refund of <strong>${refundAmountFormatted}</strong> for <strong>${returnRequest.productName}</strong> has been successfully processed! The funds have been initiated to your account${returnRequest.refundTransactionRef ? ` (Ref: ${returnRequest.refundTransactionRef})` : ''}.`,
+      },
+      REJECTED: {
+        subject: `Update on Return Request: #${returnRequest.returnNumber} - Billu Bazaar`,
+        heading: 'Return Request Declined',
+        badgeText: 'Rejected',
+        badgeBg: '#FEE2E2',
+        badgeColor: '#991B1B',
+        message: `After review, we regret to inform you that your return request for <strong>${returnRequest.productName}</strong> could not be approved.`,
+      },
+    };
+
+    const config = statusConfigs[status] || {
+      subject: `Update on Return Request: #${returnRequest.returnNumber} - Billu Bazaar`,
+      heading: `Return Status: ${status}`,
+      badgeText: status,
+      badgeBg: '#F3F4F6',
+      badgeColor: '#374151',
+      message: `The status of your return request for ${returnRequest.productName} has been updated to ${status}.`,
+    };
+
+    const logoAttachment = getLogoAttachment();
+    const attachments = logoAttachment ? [logoAttachment] : [];
+    const logoSrc = logoAttachment ? 'cid:brand-logo' : '';
+
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>${config.subject}</title>
+      </head>
+      <body style="margin: 0; padding: 0; background-color: #F8F9FA; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1F2937;">
+        <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; margin: 30px auto; background-color: #FFFFFF; border-radius: 12px; overflow: hidden; border: 1px solid #E5E7EB; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+          <!-- Header -->
+          <tr>
+            <td style="background-color: #111827; padding: 28px 24px; text-align: center;">
+              ${logoSrc ? `<img src="${logoSrc}" alt="Billu Bazaar" style="max-height: 48px; width: auto; margin-bottom: 8px;" />` : `<h1 style="color: #D4AF37; margin: 0; font-size: 24px; font-weight: 700; letter-spacing: 1px;">BILLU BAZAAR</h1>`}
+              <p style="color: #9CA3AF; margin: 4px 0 0; font-size: 11px; text-transform: uppercase; letter-spacing: 2px;">Returns & Customer Concierge</p>
+            </td>
+          </tr>
+
+          <!-- Main Body -->
+          <tr>
+            <td style="padding: 32px 28px;">
+              <div style="text-align: center; margin-bottom: 24px;">
+                <span style="display: inline-block; background-color: ${config.badgeBg}; color: ${config.badgeColor}; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; padding: 4px 14px; border-radius: 20px;">
+                  ${config.badgeText}
+                </span>
+                <h2 style="color: #111827; font-size: 20px; font-weight: 700; margin: 12px 0 6px;">
+                  ${config.heading}
+                </h2>
+                <p style="color: #6B7280; font-size: 13px; margin: 0;">
+                  Return Reference: <strong style="color: #111827; font-family: monospace;">${returnRequest.returnNumber}</strong>
+                </p>
+              </div>
+
+              <p style="font-size: 14px; line-height: 1.6; color: #374151; margin-bottom: 20px;">
+                Dear <strong>${customerName}</strong>,<br><br>
+                ${config.message}
+              </p>
+
+              <!-- Pickup Date Highlight Box -->
+              ${status === 'PICKUP_SCHEDULED' && pickupDateStr ? `
+                <div style="background-color: #FAF5FF; border: 1px solid #E9D5FF; border-radius: 8px; padding: 16px 20px; margin: 20px 0; text-align: center;">
+                  <p style="margin: 0 0 4px; font-size: 11px; font-weight: 700; color: #6B21A8; text-transform: uppercase; letter-spacing: 1px;">
+                    🚚 Scheduled Pickup Date
+                  </p>
+                  <p style="margin: 0; font-size: 18px; font-weight: 800; color: #1E1B4B;">
+                    ${pickupDateStr}
+                  </p>
+                  <p style="margin: 6px 0 0; font-size: 12px; color: #7E22CE;">
+                    Please ensure the item is boxed with original accessories before the pickup partner arrives.
+                  </p>
+                </div>
+              ` : ''}
+
+              <!-- Refund Highlight Box -->
+              ${status === 'REFUNDED' ? `
+                <div style="background-color: #ECFDF5; border: 1px solid #A7F3D0; border-radius: 8px; padding: 16px 20px; margin: 20px 0; text-align: center;">
+                  <p style="margin: 0 0 4px; font-size: 11px; font-weight: 700; color: #065F46; text-transform: uppercase; letter-spacing: 1px;">
+                    💰 Amount Refunded
+                  </p>
+                  <p style="margin: 0; font-size: 22px; font-weight: 800; color: #047857; font-family: monospace;">
+                    ${refundAmountFormatted}
+                  </p>
+                  ${returnRequest.refundTransactionRef ? `
+                    <p style="margin: 6px 0 0; font-size: 12px; color: #065F46;">
+                      Transaction / Gateway Reference: <strong>${returnRequest.refundTransactionRef}</strong>
+                    </p>
+                  ` : ''}
+                </div>
+              ` : ''}
+
+              <!-- Rejection Reason Highlight Box -->
+              ${status === 'REJECTED' && returnRequest.rejectedReason ? `
+                <div style="background-color: #FEF2F2; border: 1px solid #FECACA; border-radius: 8px; padding: 14px 18px; margin: 20px 0;">
+                  <p style="margin: 0 0 4px; font-size: 11px; font-weight: 700; color: #991B1B; text-transform: uppercase;">
+                    Reason for Decision:
+                  </p>
+                  <p style="margin: 0; font-size: 13px; color: #B91C1C; line-height: 1.5;">
+                    "${returnRequest.rejectedReason}"
+                  </p>
+                </div>
+              ` : ''}
+
+              <!-- Item Snapshot Box -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin: 24px 0 20px; background-color: #F9FAFB; border: 1px solid #F3F4F6; border-radius: 8px; overflow: hidden;">
+                <tr>
+                  <td style="padding: 16px; font-size: 13px; color: #1F2937;">
+                    <p style="margin: 0 0 4px; font-weight: 700; font-size: 14px;">${returnRequest.productName}</p>
+                    <p style="margin: 0 0 4px; font-size: 12px; color: #6B7280;">Return Quantity: <strong>${returnRequest.quantity}</strong></p>
+                    <p style="margin: 0; font-size: 12px; color: #6B7280;">Refund Value: <strong style="color: #D4AF37;">${refundAmountFormatted}</strong></p>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- CTA Button -->
+              <div style="text-align: center; margin: 30px 0 10px;">
+                <a href="${process.env.CLIENT_URL || 'https://billubazaar.com'}/account/returns/${returnRequest.id || returnRequest.returnNumber}" style="display: inline-block; background-color: #111827; color: #FFFFFF; text-decoration: none; padding: 12px 28px; border-radius: 6px; font-size: 13px; font-weight: 700; letter-spacing: 0.5px;">
+                  Track Return Status
+                </a>
+              </div>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background-color: #F9FAFB; padding: 20px 24px; text-align: center; border-top: 1px solid #E5E7EB; font-size: 12px; color: #9CA3AF;">
+              <p style="margin: 0 0 4px;">Billu Bazaar Concierge Support</p>
+              <p style="margin: 0;">If you have any questions regarding your return or pickup, simply reply to this email.</p>
+            </td>
+          </tr>
+        </table>
+      </body>
+      </html>
+    `;
+
+    const mailOptions = {
+      from: `"Billu Bazaar Customer Support" <${process.env.EMAIL_USER}>`,
+      to: recipientEmail,
+      subject: config.subject,
+      html: htmlContent,
+      attachments,
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    console.log(`[sendReturnStatusNotification] Return email (${status}) sent to ${recipientEmail} - MsgID: ${info.messageId}`);
+    return info;
+  } catch (err) {
+    console.error(`[sendReturnStatusNotification] Error sending return email for ${returnRequest.returnNumber}:`, err.message);
+    return null;
+  }
 };
 
 module.exports = {
   sendOtpEmail,
   sendFraudOtpEmail,
   sendOrderStatusNotification,
+  sendReturnStatusNotification,
   sendRestockAlertEmail,
   sendContactEnquiryAdminNotification,
   sendMarketingAutomationReport,

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { ArrowLeft, Check, Circle, MapPin, Truck, CreditCard, FileText, Phone, MessageSquare, RefreshCw, XCircle, Star, X, AlertTriangle, RotateCcw, Video, Upload, ShieldAlert } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { ArrowLeft, Check, Circle, MapPin, Truck, CreditCard, FileText, Phone, MessageSquare, RefreshCw, XCircle, Star, X, AlertTriangle, RotateCcw, Video, Upload, ShieldAlert, ShieldCheck, Play, ExternalLink, Clock, CheckCircle } from 'lucide-react';
 import { useSelector, useDispatch } from 'react-redux';
 import { fetchOrderById, cancelCustomerOrder } from '../../redux/slices/ordersSlice';
 import { createReview } from '../../redux/slices/reviewsSlice';
@@ -40,6 +40,60 @@ const STATUS_LABELS = {
   REFUNDED: 'Refunded',
 };
 
+const RETURN_STATUS_CONFIG = {
+  REQUESTED: {
+    label: 'Under Review',
+    color: 'bg-amber-50 text-amber-800 border-amber-200',
+    icon: Clock,
+    step: 1,
+  },
+  APPROVED: {
+    label: 'Return Approved',
+    color: 'bg-blue-50 text-blue-800 border-blue-200',
+    icon: CheckCircle,
+    step: 2,
+  },
+  PICKUP_SCHEDULED: {
+    label: 'Pickup Scheduled',
+    color: 'bg-purple-50 text-purple-800 border-purple-200',
+    icon: Truck,
+    step: 2,
+  },
+  PICKED_UP: {
+    label: 'Item Picked Up',
+    color: 'bg-indigo-50 text-indigo-800 border-indigo-200',
+    icon: Truck,
+    step: 3,
+  },
+  RECEIVED_AT_WAREHOUSE: {
+    label: 'Under Inspection',
+    color: 'bg-teal-50 text-teal-800 border-teal-200',
+    icon: RefreshCw,
+    step: 3,
+  },
+  REFUNDED: {
+    label: 'Refund Processed',
+    color: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+    icon: CheckCircle,
+    step: 4,
+  },
+  REJECTED: {
+    label: 'Request Rejected',
+    color: 'bg-red-50 text-red-800 border-red-200',
+    icon: XCircle,
+    step: 0,
+  },
+};
+
+const RETURN_REASON_LABELS = {
+  DAMAGED_PRODUCT: 'Damaged / Broken Item',
+  WRONG_ITEM_SENT: 'Wrong Product Sent',
+  DEFECTIVE_OR_NOT_WORKING: 'Defective / Faulty Product',
+  MISMATCH_WITH_DESCRIPTION: 'Mismatched with Description',
+  MISSING_PARTS_ACCESSORIES: 'Missing Accessories / Parts',
+  OTHER: 'Other Quality Issue',
+};
+
 const OrderDetailPage = () => {
   const { id } = useParams();
   const dispatch = useDispatch();
@@ -68,6 +122,26 @@ const OrderDetailPage = () => {
   const [bankIfsc, setBankIfsc] = useState('');
   const [bankUpi, setBankUpi] = useState('');
   const [isSubmittingReturn, setIsSubmittingReturn] = useState(false);
+  const [activeVideoModal, setActiveVideoModal] = useState(null);
+
+  const orderReturnRequests = (() => {
+    const list = [];
+    if (order && Array.isArray(order.returnRequests) && order.returnRequests.length > 0) {
+      list.push(...order.returnRequests);
+    }
+    if (order && Array.isArray(order.items)) {
+      order.items.forEach(item => {
+        if (Array.isArray(item.returnRequests)) {
+          item.returnRequests.forEach(r => {
+            if (!list.some(existing => (existing.id && existing.id === r.id) || (existing.returnNumber && existing.returnNumber === r.returnNumber))) {
+              list.push(r);
+            }
+          });
+        }
+      });
+    }
+    return list;
+  })();
 
   const handleOpenReviewModal = (item) => {
     setTargetItem(item);
@@ -640,6 +714,11 @@ const OrderDetailPage = () => {
               ? variantEntries.map(([k, v]) => `${k}: ${v}`).join(' · ')
               : null;
 
+            const itemReturn = orderReturnRequests.find(
+              (r) => String(r.orderItemId) === String(item.id) || (item.returnRequests && item.returnRequests.some((ir) => String(ir.id) === String(r.id)))
+            );
+            const hasActiveReturn = Boolean(itemReturn || (item.returnStatus && item.returnStatus !== 'NONE'));
+
             return (
               <div key={item.id || idx} className="flex items-center gap-4 py-3 border-b border-neutral-100 last:border-0 flex-wrap sm:flex-nowrap">
                 <img
@@ -663,13 +742,21 @@ const OrderDetailPage = () => {
                   </span>
                   {order.status === 'DELIVERED' && (
                     <div className="flex items-center gap-2 flex-wrap justify-end mt-1">
-                      {item.returnStatus && item.returnStatus !== 'NONE' ? (
-                        <Link
-                          to="/account/returns"
-                          className="px-2.5 py-1 bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 text-xs font-semibold rounded-lg transition-colors inline-flex items-center gap-1"
-                        >
-                          <RotateCcw size={12} /> Return {item.returnStatus === 'REQUESTED' ? 'Requested' : item.returnStatus === 'APPROVED' ? 'Approved' : item.returnStatus === 'REFUNDED' ? 'Refunded' : item.returnStatus}
-                        </Link>
+                      {hasActiveReturn ? (
+                        <div className="flex flex-col items-end gap-1">
+                          <Link
+                            to={`/account/returns/${itemReturn?.id || itemReturn?.returnNumber || item.id}`}
+                            className="px-3 py-1 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 text-xs font-semibold rounded-lg transition-colors inline-flex items-center gap-1.5 shadow-xs"
+                          >
+                            <RotateCcw size={12} className="text-brand-gold" />
+                            <span>Track Return</span>
+                          </Link>
+                          {/* {itemReturn?.pickupDate && (
+                            <span className="text-[10px] text-purple-700 font-semibold bg-purple-50 px-1.5 py-0.5 rounded border border-purple-200">
+                              Pickup: {new Date(itemReturn.pickupDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                            </span>
+                          )} */}
+                        </div>
                       ) : (
                         <button
                           type="button"
@@ -710,15 +797,12 @@ const OrderDetailPage = () => {
             <span>Shipping Fee</span>
             <span>{shippingAmount === 0 ? 'FREE' : formatOrderAmount(shippingAmount, currency)}</span>
           </div>
-          {taxAmount > 0 && (
-            <div className="flex justify-between">
-              <span>GST ({order?.taxRate ? `${Number(order.taxRate)}% Included` : 'Included'})</span>
-              <span>{formatOrderAmount(taxAmount, currency)}</span>
+          <div className="pt-4 border-t border-neutral-200">
+            <div className="flex justify-between items-center text-neutral-900 font-bold text-base">
+              <span>Total Value</span>
+              <span className="text-brand-gold">{formatOrderAmount(totalAmount, currency)}</span>
             </div>
-          )}
-          <div className="flex justify-between items-center pt-4 border-t border-neutral-200 text-neutral-900 font-bold text-base">
-            <span>Total Value</span>
-            <span className="text-brand-gold">{formatOrderAmount(totalAmount, currency)}</span>
+            <p className="text-[11px] font-medium text-neutral-500 text-right mt-0.5">(Includes GST)</p>
           </div>
         </div>
       </div>
@@ -1116,6 +1200,7 @@ const OrderDetailPage = () => {
           </div>
         </div>
       )}
+
     </motion.div>
   );
 };

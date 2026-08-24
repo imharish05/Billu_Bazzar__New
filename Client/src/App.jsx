@@ -19,6 +19,7 @@ import AccountLayout from './pages/account/AccountLayout';
 import ProfilePage from './pages/account/ProfilePage';
 import OrdersPage from './pages/account/OrdersPage';
 import OrderDetailPage from './pages/account/OrderDetailPage';
+import ReturnDetailPage from './pages/account/ReturnDetailPage';
 import WishlistPage from './pages/account/WishlistPage';
 import LoyaltyPage from './pages/account/LoyaltyPage';
 import PersonalShopperPage from './pages/account/PersonalShopperPage';
@@ -30,6 +31,7 @@ import LoaderPreviewPage from './pages/LoaderPreviewPage';
 import ContactPage from './pages/ContactPage';
 import AboutPage from './pages/AboutPage';
 import PrivacyPage from './pages/PrivacyPage';
+import TermsPage from './pages/TermsPage';
 import ShippingPage from './pages/ShippingPage';
 import CancellationPage from './pages/CancellationPage';
 import ReturnsPage from './pages/ReturnsPage';
@@ -176,6 +178,8 @@ const App = () => {
           <Route path="/contact" element={<ContactPage />} />
           <Route path="/about" element={<AboutPage />} />
           <Route path="/privacy" element={<PrivacyPage />} />
+          <Route path="/terms" element={<TermsPage />} />
+          <Route path="/terms-and-conditions" element={<Navigate to="/terms" replace />} />
           <Route path="/shipping" element={<ShippingPage />} />
           <Route path="/cancellation" element={<CancellationPage />} />
           <Route path="/returns" element={<ReturnsPage />} />
@@ -184,7 +188,9 @@ const App = () => {
             <Route index element={<ProfilePage />} />
             <Route path="orders" element={<OrdersPage />} />
             <Route path="orders/:id" element={<OrderDetailPage />} />
-            <Route path="returns" element={<ReturnsRefundsPage />} />
+            <Route path="orders/:orderId/returns/:id" element={<ReturnDetailPage />} />
+            <Route path="returns/:id" element={<ReturnDetailPage />} />
+            <Route path="returns" element={<Navigate to="/account/orders" replace />} />
             <Route path="wishlist" element={<WishlistPage />} />
             <Route path="loyalty" element={<LoyaltyPage />} />
             <Route path="personal-shopper" element={<PersonalShopperPage />} />

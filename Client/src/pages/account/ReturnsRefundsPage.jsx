@@ -24,6 +24,64 @@ import { formatPrice, formatOrderAmount } from '../../utils/currency';
 import { getImageUrl } from '../../utils/imageUrl';
 import { getPlaceholderSvg } from '../../utils/placeholder';
 
+const EXCLUDE_VARIANT_KEYS = new Set([
+  'id', 'sku', 'variantId', 'productId', 'stock', 'price', 'mrp',
+  'image', 'images', 'createdAt', 'updatedAt', 'gstRate', 'barcode', 'taxRate'
+]);
+
+export const parseVariantObject = (raw) => {
+  if (!raw) return null;
+  let parsed = raw;
+  for (let i = 0; i < 4; i++) {
+    if (typeof parsed === 'string') {
+      const trimmed = parsed.trim();
+      if (
+        (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+        (trimmed.startsWith('[') && trimmed.endsWith(']')) ||
+        (trimmed.startsWith('"') && trimmed.endsWith('"'))
+      ) {
+        try {
+          const next = JSON.parse(parsed);
+          if (next === parsed) break;
+          parsed = next;
+        } catch {
+          break;
+        }
+      } else {
+        break;
+      }
+    } else {
+      break;
+    }
+  }
+
+  if (Array.isArray(parsed) && parsed.length > 0) parsed = parsed[0];
+  if (parsed && typeof parsed === 'object') {
+    if (parsed.attributes && typeof parsed.attributes === 'object') {
+      parsed = parsed.attributes;
+    }
+    return parsed;
+  }
+  return null;
+};
+
+export const getVariantEntries = (ret) => {
+  if (!ret) return [];
+  const raw =
+    ret.selectedVariant ||
+    ret.orderItem?.selectedVariant ||
+    ret.orderItem?.variant ||
+    ret.variant ||
+    ret.variantAttributes;
+
+  const obj = parseVariantObject(raw);
+  if (!obj || typeof obj !== 'object') return [];
+
+  return Object.entries(obj).filter(
+    ([k, v]) => !EXCLUDE_VARIANT_KEYS.has(k) && v !== undefined && v !== null && String(v).trim() !== ''
+  );
+};
+
 const STATUS_CONFIG = {
   REQUESTED: {
     label: 'Under Review',
@@ -281,7 +339,7 @@ const ReturnsRefundsPage = () => {
                           to={`/account/orders/${item.order.id}`}
                           className="font-semibold text-neutral-900 hover:text-brand-gold hover:underline"
                         >
-                          #{item.order.orderNumber || item.order.id}
+                          {item.order.orderNumber || item.order.id}
                         </Link>
                         {orderDateStr && ` (${orderDateStr})`}
                       </span>
@@ -316,15 +374,23 @@ const ReturnsRefundsPage = () => {
                         <h3 className="font-semibold text-neutral-900 text-sm leading-snug">
                           {item.productName}
                         </h3>
-                        {item.selectedVariant &&
-                          typeof item.selectedVariant === 'object' &&
-                          Object.keys(item.selectedVariant).length > 0 && (
-                            <p className="text-xs text-neutral-500 mt-1">
-                              {Object.entries(item.selectedVariant)
-                                .map(([k, v]) => `${k}: ${v}`)
-                                .join(' · ')}
-                            </p>
-                          )}
+                        {(() => {
+                          const variantEntries = getVariantEntries(item);
+                          if (variantEntries.length === 0) return null;
+                          return (
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {variantEntries.map(([k, v]) => (
+                                <span
+                                  key={k}
+                                  className="inline-flex items-center px-2 py-0.5 rounded bg-amber-50 text-amber-900 border border-amber-200/60 font-medium text-[11px]"
+                                >
+                                  <span className="text-neutral-500 mr-1 capitalize">{k}:</span>
+                                  <span className="font-semibold">{String(v)}</span>
+                                </span>
+                              ))}
+                            </div>
+                          );
+                        })()}
                         <div className="flex items-center gap-3 mt-2 text-xs">
                           <span className="px-2 py-0.5 bg-neutral-100 text-neutral-700 rounded font-medium">
                             Return Qty: {item.quantity}
@@ -344,8 +410,14 @@ const ReturnsRefundsPage = () => {
                             {REASON_LABELS[item.reason] || item.reason}
                           </span>
                         </div>
+                        {item.pickupDate && (
+                          <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 bg-purple-50 text-purple-900 border border-purple-200/80 rounded-lg text-xs font-semibold">
+                            <Truck size={13} className="text-purple-600" />
+                            <span>Scheduled Pickup: <strong>{new Date(item.pickupDate).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}</strong></span>
+                          </div>
+                        )}
                         {item.reasonDetails && (
-                          <p className="text-xs text-neutral-600 mt-1 italic bg-neutral-50 p-2 rounded border border-neutral-100">
+                          <p className="text-xs text-neutral-600 mt-1.5 italic bg-neutral-50 p-2 rounded border border-neutral-100">
                             "{item.reasonDetails}"
                           </p>
                         )}
