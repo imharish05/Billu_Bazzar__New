@@ -400,7 +400,7 @@ const VendorsAdminPage = () => {
                 </div>
 
                 <div className="flex items-center gap-2 pt-2 border-t border-brand-light">
-                  <Switch checked={form.isActive} onChange={e => setForm(p => ({ ...p, isActive: e.target.checked }))} id="vendor-active" />
+                  <Switch checked={form.isActive} onChange={e => setForm(p => ({ ...p, isActive: typeof e === 'boolean' ? e : Boolean(e?.target?.checked) }))} id="vendor-active" />
                   <label className="text-xs font-semibold text-brand-text cursor-pointer select-none" htmlFor="vendor-active">Active Status</label>
                 </div>
 

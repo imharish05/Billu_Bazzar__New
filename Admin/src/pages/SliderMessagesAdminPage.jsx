@@ -349,7 +349,7 @@ const SliderMessagesAdminPage = () => {
                       <Switch
                         id="sm-active"
                         checked={form.isActive}
-                        onChange={(e) => setForm((p) => ({ ...p, isActive: e.target.checked }))}
+                        onChange={(e) => setForm((p) => ({ ...p, isActive: typeof e === 'boolean' ? e : Boolean(e?.target?.checked) }))}
                       />
                       <span>Active Message</span>
                     </label>

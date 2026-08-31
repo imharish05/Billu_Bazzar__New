@@ -2,12 +2,61 @@ import { useEffect, useState } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { Link, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { CheckCircle, Package, Download, MapPin, Clock, RefreshCw } from 'lucide-react';
+import { CheckCircle, Package, Download, MapPin, Clock, RefreshCw, ShoppingBag, CreditCard, ExternalLink, ArrowRight } from 'lucide-react';
 import Footer from '../components/Footer';
 import { printInvoice } from '../utils/invoiceGenerator';
 import { formatPrice, formatOrderAmount } from '../utils/currency';
 import { fetchOrderById } from '../redux/slices/ordersSlice';
+import { getImageUrl } from '../utils/imageUrl';
+import { getPlaceholderSvg } from '../utils/placeholder';
 import api from '../services/api';
+
+/* Helper to parse variant JSON strings safely */
+const parseVariant = (val) => {
+  if (!val) return null;
+  let parsed = val;
+  for (let i = 0; i < 5; i++) {
+    if (typeof parsed === 'string') {
+      const trimmed = parsed.trim();
+      if (
+        (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+        (trimmed.startsWith('[') && trimmed.endsWith(']')) ||
+        (trimmed.startsWith('"') && trimmed.endsWith('"'))
+      ) {
+        try {
+          const next = JSON.parse(parsed);
+          if (next === parsed) break;
+          parsed = next;
+        } catch {
+          break;
+        }
+      } else {
+        break;
+      }
+    } else {
+      break;
+    }
+  }
+  if (Array.isArray(parsed) && parsed.length > 0) parsed = parsed[0];
+  if (typeof parsed === 'object' && parsed !== null) return parsed;
+  return null;
+};
+
+/* Helper to format variant attributes into human-readable string */
+const getVariantString = (rawVariant) => {
+  const variantObj = parseVariant(rawVariant);
+  if (variantObj) {
+    const EXCLUDE_KEYS = new Set(['id', 'sku', 'variantId', 'productId', 'stock', 'price', 'mrp', 'image', 'createdAt', 'updatedAt', 'gstRate']);
+    const entries = Object.entries(variantObj).filter(([k, v]) => !EXCLUDE_KEYS.has(k) && v !== undefined && v !== null && v !== '');
+    if (entries.length > 0) {
+      return entries.map(([k, v]) => `${k}: ${v}`).join(' · ');
+    }
+  }
+  if (typeof rawVariant === 'string' && !rawVariant.startsWith('{') && !rawVariant.startsWith('[')) {
+    return rawVariant;
+  }
+  return null;
+};
 
 /* Helper to calculate dynamic tracking steps based on order.status & paymentStatus */
 const calculateTrackingSteps = (currentStatus, currentPaymentStatus) => {
@@ -64,7 +113,7 @@ const OrderConfirmationPage = () => {
   const orderIdFromUrl = searchParams.get('orderId') || searchParams.get('orderNumber') || searchParams.get('cartId');
 
   const { current: order } = useSelector(s => s.orders);
-  const { code: currencyCode, rate: currencyRate } = useSelector(s => s.currency);
+  const { code: currencyCode } = useSelector(s => s.currency);
 
   const [refreshing, setRefreshing] = useState(false);
   const targetId = orderIdFromUrl || order?.id || order?.orderNumber;
@@ -122,6 +171,14 @@ const OrderConfirmationPage = () => {
   const addrPhone = addr.phone || order?.customer?.phone;
   const addrEmail = addr.email || order?.customer?.email;
 
+  // Order items resolution
+  const items = order?.items || order?.OrderItems || [];
+  const subtotal = Number(order?.subtotal || items.reduce((sum, item) => sum + (Number(item.totalPrice) || (Number(item.quantity || item.qty || 1) * Number(item.unitPrice || item.price || 0))), 0));
+  const discountAmount = Number(order?.discountAmount || order?.discount || 0);
+  const shippingAmount = Number(order?.shippingAmount || 0);
+  const giftWrapFee = Number(order?.giftWrapFee || order?.giftWrapPrice || 0);
+  const totalAmount = Number(order?.totalAmount || (subtotal + shippingAmount + giftWrapFee - discountAmount));
+
   return (
     <main id="main-content">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 md:px-8 py-8 sm:py-12">
@@ -138,7 +195,7 @@ const OrderConfirmationPage = () => {
           <p className="text-brand-grey text-sm sm:text-base">Thank you for shopping at Billu Bazaar.</p>
           {order && (
             <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 mt-3">
-              <span className="text-brand-gold font-bold text-base sm:text-lg">Order {order.orderNumber}</span>
+              <span className="text-brand-gold font-bold text-base sm:text-lg">Order #{String(order.orderNumber || order.id || '').replace(/^#/, '')}</span>
               <span className={`text-xs font-semibold px-3 py-1 rounded-full uppercase tracking-wider ${
                 displayStatus === 'DELIVERED' || displayStatus === 'PAID' || displayStatus === 'CONFIRMED'
                   ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
@@ -154,16 +211,17 @@ const OrderConfirmationPage = () => {
 
         {/* Order details grid */}
         {order && (
-          <div className="grid md:grid-cols-2 gap-4 sm:gap-6 mb-6 sm:mb-8">
+          <div className="grid md:grid-cols-2 gap-4 sm:gap-6 mb-6">
+            {/* Left Card: Order Summary */}
             <div className="bg-white shadow-sm p-5 sm:p-6 border border-brand-light rounded-xl flex flex-col justify-between">
               <div>
-                <h3 className="font-playfair text-lg font-bold text-brand-text mb-4 flex items-center gap-2.5">
-                  <Package size={22} className="text-brand-gold shrink-0" /> Order Details
+                <h3 className="font-playfair text-base sm:text-lg font-bold text-brand-text mb-4 flex items-center gap-2.5">
+                  <Package size={20} className="text-brand-gold shrink-0" /> Order Details
                 </h3>
                 <div className="space-y-3 text-sm">
                   <div className="flex items-center justify-between gap-4">
                     <span className="text-brand-grey shrink-0 whitespace-nowrap">Order Total</span>
-                    <span className="font-bold text-brand-gold text-base text-right">{fmt(order.totalAmount)}</span>
+                    <span className="font-bold text-brand-gold text-base text-right">{fmt(totalAmount)}</span>
                   </div>
                   <div className="flex items-center justify-between gap-4">
                     <span className="text-brand-grey shrink-0 whitespace-nowrap">Payment Method</span>
@@ -174,15 +232,37 @@ const OrderConfirmationPage = () => {
                     <span className="font-semibold text-emerald-600 text-right">{displayPaymentStatus}</span>
                   </div>
                   <div className="flex items-center justify-between gap-4">
-                    <span className="text-brand-grey shrink-0 whitespace-nowrap">Items Count</span>
-                    <span className="text-brand-text text-right">{order.items?.length || 0} item(s)</span>
+                    <span className="text-brand-grey shrink-0 whitespace-nowrap">Total Items</span>
+                    <span className="font-medium text-brand-text text-right">{items.length} {items.length === 1 ? 'item' : 'items'}</span>
                   </div>
+                  {order.createdAt && (
+                    <div className="flex items-center justify-between gap-4 pt-1 border-t border-neutral-100">
+                      <span className="text-brand-grey shrink-0 whitespace-nowrap">Order Date</span>
+                      <span className="text-neutral-700 text-right text-xs">
+                        {new Date(order.createdAt).toLocaleDateString('en-IN', {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric'
+                        })}
+                      </span>
+                    </div>
+                  )}
+                  {order.razorpay_payment_id && (
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="text-brand-grey shrink-0 whitespace-nowrap">Transaction ID</span>
+                      <span className="text-[11px] font-mono text-neutral-600 text-right truncate max-w-[170px]" title={order.razorpay_payment_id}>
+                        {order.razorpay_payment_id}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
+
+            {/* Right Card: Shipping Address */}
             <div className="bg-white shadow-sm p-5 sm:p-6 border border-brand-light rounded-xl">
               <h3 className="font-playfair text-base sm:text-lg font-bold text-brand-text mb-4 flex items-center gap-2.5">
-                <MapPin size={22} className="text-brand-gold shrink-0" /> 
+                <MapPin size={20} className="text-brand-gold shrink-0" /> 
                 Shipping Address
               </h3>
               <div className="text-sm font-sans space-y-1">
@@ -196,18 +276,142 @@ const OrderConfirmationPage = () => {
                   <div className="text-neutral-500 text-sm mt-3 pt-2.5 border-t border-neutral-100 space-y-1">
                     {addrPhone && (
                       <p className="text-sm text-neutral-700">
-                        <span className="font-medium text-neutral-900">Phone : </span>
+                        <span className="font-medium text-neutral-900">Phone: </span>
                         <span className="text-neutral-600">{addrPhone}</span>
                       </p>
                     )}
                     {addrEmail && (
                       <p className="text-sm text-neutral-700 break-all">
-                        <span className="font-medium text-neutral-900">Email : </span>
+                        <span className="font-medium text-neutral-900">Email: </span>
                         <span className="text-neutral-600">{addrEmail}</span>
                       </p>
                     )}
                   </div>
                 )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Order Items List Card */}
+        {order && items.length > 0 && (
+          <div className="bg-white shadow-sm p-5 sm:p-6 mb-6 border border-brand-light rounded-xl">
+            <div className="flex items-center justify-between gap-3 pb-4 mb-4 border-b border-neutral-100">
+              <h3 className="font-playfair text-base sm:text-lg font-bold text-brand-text flex items-center gap-2.5">
+                <ShoppingBag size={20} className="text-brand-gold shrink-0" />
+                <span>Order Items</span>
+                <span className="text-xs font-sans font-medium text-neutral-500 bg-neutral-100 px-2.5 py-0.5 rounded-full">
+                  {items.length} {items.length === 1 ? 'item' : 'items'}
+                </span>
+              </h3>
+            </div>
+
+            {/* Items List */}
+            <div className="divide-y divide-neutral-100">
+              {items.map((item, idx) => {
+                const variantInfo = getVariantString(item.selectedVariant || item.variant);
+                const rawImg = item.displayImage || item.variantImage || item.variant?.image || item.image || item.productImage || item.product?.images?.[0] || item.product?.image;
+                const imgSrc = getImageUrl(rawImg) || getPlaceholderSvg(item.productName || item.name || 'Product');
+                const productName = item.productName || item.name || item.product?.title || 'Luxury Item';
+                const qty = Number(item.quantity || item.qty || 1);
+                const unitPrice = Number(item.unitPrice || item.price || 0);
+                const lineTotal = Number(item.totalPrice || (qty * unitPrice));
+                const productSlug = item.product?.slug || item.productId || item.product?.id;
+
+                return (
+                  <div key={item.id || idx} className="py-4 first:pt-0 last:pb-0 flex items-center gap-3 sm:gap-4">
+                    {/* Thumbnail Image */}
+                    <div className="w-16 h-20 sm:w-20 sm:h-24 rounded-lg overflow-hidden border border-neutral-200/80 bg-neutral-50 flex-shrink-0 relative">
+                      <img
+                        src={imgSrc}
+                        alt={productName}
+                        className="w-full h-full object-cover object-center"
+                        onError={(e) => {
+                          e.target.onerror = null;
+                          e.target.src = getPlaceholderSvg(productName);
+                        }}
+                      />
+                    </div>
+
+                    {/* Item Details */}
+                    <div className="flex-1 min-w-0 pr-1">
+                      {productSlug ? (
+                        <Link
+                          to={`/product/${productSlug}`}
+                          className="font-semibold text-sm sm:text-base text-neutral-900 hover:text-brand-gold transition-colors line-clamp-1 block"
+                        >
+                          {productName}
+                        </Link>
+                      ) : (
+                        <h4 className="font-semibold text-sm sm:text-base text-neutral-900 line-clamp-1">
+                          {productName}
+                        </h4>
+                      )}
+
+                      {/* Variant Attributes */}
+                      {variantInfo && (
+                        <div className="mt-1">
+                          <span className="inline-flex items-center text-[11px] sm:text-xs font-medium text-amber-900 bg-amber-50/80 border border-amber-200/60 px-2 py-0.5 rounded-md">
+                            {variantInfo}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Quantity & Unit Price */}
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-neutral-500 mt-1.5">
+                        <span>Qty: <strong className="text-neutral-800">{qty}</strong></span>
+                        <span className="text-neutral-300">•</span>
+                        <span>Unit Price: <strong className="text-neutral-800">{fmt(unitPrice)}</strong></span>
+                      </div>
+                    </div>
+
+                    {/* Line Total */}
+                    <div className="text-right flex-shrink-0 self-center">
+                      <div className="text-sm sm:text-base font-bold text-brand-gold">
+                        {fmt(lineTotal)}
+                      </div>
+                      {qty > 1 && (
+                        <div className="text-[10px] sm:text-xs text-neutral-400 mt-0.5">
+                          ({qty} × {fmt(unitPrice)})
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Financial Breakdown Summary */}
+            <div className="mt-5 pt-4 border-t border-neutral-100 space-y-2 text-xs sm:text-sm text-neutral-600">
+              <div className="flex items-center justify-between">
+                <span>Subtotal</span>
+                <span className="font-medium text-neutral-900">{fmt(subtotal)}</span>
+              </div>
+
+              {discountAmount > 0 && (
+                <div className="flex items-center justify-between text-emerald-600 font-medium">
+                  <span>Discount Applied</span>
+                  <span>-{fmt(discountAmount)}</span>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between">
+                <span>Shipping Fee</span>
+                <span className="font-medium text-neutral-900">
+                  {shippingAmount === 0 ? <span className="text-emerald-600 font-semibold uppercase text-xs">Free</span> : fmt(shippingAmount)}
+                </span>
+              </div>
+
+              {giftWrapFee > 0 && (
+                <div className="flex items-center justify-between">
+                  <span>Gift Wrap Packaging</span>
+                  <span className="font-medium text-neutral-900">{fmt(giftWrapFee)}</span>
+                </div>
+              )}
+
+              <div className="pt-3 mt-2 border-t border-neutral-200 flex items-center justify-between font-bold text-sm sm:text-base text-neutral-900">
+                <span>Total Amount</span>
+                <span className="text-brand-gold text-base sm:text-lg">{fmt(totalAmount)}</span>
               </div>
             </div>
           </div>
@@ -264,16 +468,6 @@ const OrderConfirmationPage = () => {
           </div>
         </div>
 
-        {/* Mock tracking map placeholder */}
-        {/* <div className="bg-brand-light h-44 flex items-center justify-center mb-6 relative overflow-hidden rounded-xl border border-brand-light">
-          <div className="absolute inset-0 bg-gradient-to-br from-amber-50/40 to-amber-100/30 opacity-60" />
-          <div className="relative text-center p-4">
-            <MapPin size={28} className="text-brand-gold mx-auto mb-2" />
-            <p className="text-sm font-semibold text-brand-text">Shipment Tracking Active</p>
-            <p className="text-xs text-brand-grey mt-0.5">Estimated Delivery: 2–4 Business Days via Billu Express Logistics</p>
-          </div>
-        </div> */}
-
         {/* Actions */}
         <div className="flex flex-col sm:flex-row gap-3">
           <button onClick={() => printInvoice(order)} className="btn-outline flex items-center justify-center gap-2 flex-1 py-3.5" id="download-invoice">
@@ -285,7 +479,7 @@ const OrderConfirmationPage = () => {
         </div>
 
         <div className="text-center mt-10">
-          <Link to="/products" className="text-brand-gold font-semibold text-sm hover:underline focus-visible:outline-brand-gold" id="continue-shopping-confirm">
+          <Link to="/products" className="text-brand-gold font-semibold text-sm hover:underline focus-visible:outline-brand-gold inline-flex items-center gap-1.5" id="continue-shopping-confirm">
             ← Continue Shopping
           </Link>
         </div>
@@ -296,3 +490,4 @@ const OrderConfirmationPage = () => {
 };
 
 export default OrderConfirmationPage;
+

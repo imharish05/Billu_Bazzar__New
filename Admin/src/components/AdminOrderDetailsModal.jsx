@@ -145,7 +145,7 @@ const AdminOrderDetailsModal = ({ order, onClose, onStatusUpdate }) => {
           </div>
 
           <div className="flex items-center gap-2.5">
-            <button
+            {/* <button
               onClick={handlePrintInvoice}
               className="px-3.5 py-1.5 bg-brand-gold text-white hover:bg-amber-600 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm shadow-amber-500/20"
               title="Print GST Tax Invoice"
@@ -153,7 +153,7 @@ const AdminOrderDetailsModal = ({ order, onClose, onStatusUpdate }) => {
             >
               <Printer size={14} />
               <span>Print Tax Invoice</span>
-            </button>
+            </button> */}
             <button
               onClick={onClose}
               className="p-1.5 text-neutral-400 hover:text-neutral-700 transition-colors rounded-full hover:bg-neutral-100"

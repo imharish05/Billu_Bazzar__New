@@ -809,7 +809,7 @@ const WarehousesAdminPage = () => {
                     <span className="text-xs font-semibold text-neutral-700">Warehouse Status (Active)</span>
                     <Switch
                       checked={warehouseForm.isActive}
-                      onChange={e => setWarehouseForm(f => ({ ...f, isActive: e.target.checked }))}
+                      onChange={e => setWarehouseForm(f => ({ ...f, isActive: typeof e === 'boolean' ? e : Boolean(e?.target?.checked) }))}
                     />
                   </div>
                 </div>

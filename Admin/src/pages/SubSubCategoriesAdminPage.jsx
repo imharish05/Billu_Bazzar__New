@@ -386,7 +386,7 @@ const SubSubCategoriesAdminPage = () => {
                 {/* Status */}
                 <div className="flex items-center gap-2 pt-1">
                   <Switch checked={form.isActive}
-                    onChange={e => setForm(p => ({ ...p, isActive: e.target.checked }))}
+                    onChange={e => setForm(p => ({ ...p, isActive: typeof e === 'boolean' ? e : Boolean(e?.target?.checked) }))}
                     id="ssc-active" />
                   <label className="text-xs font-semibold text-brand-text cursor-pointer select-none" htmlFor="ssc-active">
                     Active (Visible in store)
