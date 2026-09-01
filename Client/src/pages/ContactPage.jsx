@@ -116,7 +116,7 @@ const ContactPage = () => {
                   <p className="text-brand-grey text-sm">
                     <a href="tel:+919999999999" className="hover:text-brand-gold transition-colors">+91 99999 99999</a>
                   </p>
-                  <p className="text-xs text-brand-grey/80 mt-0.5">Toll-free within India</p>
+                  {/* <p className="text-xs text-brand-grey/80 mt-0.5">Toll-free within India</p> */}
                 </div>
               </div>
 

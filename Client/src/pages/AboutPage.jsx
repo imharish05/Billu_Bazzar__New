@@ -239,9 +239,19 @@ const AboutPage = () => {
             <div className="absolute -inset-4 border border-brand-gold/20 translate-x-2 translate-y-2 pointer-events-none rounded-sm" />
             <div className="relative bg-neutral-100 border border-brand-light shadow-lg overflow-hidden group">
               <img 
-                src={data.story.imageUrl || '/about-story-general.png'} 
+                src={
+                  data.story?.imageUrl?.startsWith('http://') || data.story?.imageUrl?.startsWith('https://') || data.story?.imageUrl?.startsWith('data:')
+                    ? data.story.imageUrl
+                    : data.story?.imageUrl?.startsWith('/uploads')
+                    ? `${import.meta.env.VITE_SERVER_URL || 'http://localhost:5000'}${data.story.imageUrl}`
+                    : (data.story?.imageUrl || '/about-story-general.png')
+                } 
                 alt="Premium multi-category lifestyle curation showroom display" 
                 className="w-full h-[280px] sm:h-[350px] md:h-[450px] object-cover filter contrast-[1.03] transition-transform duration-700 group-hover:scale-105"
+                onError={(e) => {
+                  e.target.onerror = null;
+                  e.target.src = '/about-story-general.png';
+                }}
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
               

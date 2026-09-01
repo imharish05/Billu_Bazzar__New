@@ -414,14 +414,18 @@ const SiteSettingsAdminPage = () => {
                           {imagePreview ? (
                             <>
                               <img
-                                src={imagePreview.startsWith('data:') || imagePreview.startsWith('http://') || imagePreview.startsWith('https://')
-                                  ? imagePreview
-                                  : `${import.meta.env.VITE_SERVER_URL || 'http://localhost:5000'}${imagePreview.startsWith('/') ? '' : '/'}${imagePreview}`}
+                                src={
+                                  imagePreview.startsWith('data:') || imagePreview.startsWith('http://') || imagePreview.startsWith('https://')
+                                    ? imagePreview
+                                    : imagePreview.startsWith('/uploads')
+                                    ? `${import.meta.env.VITE_SERVER_URL || 'http://localhost:5000'}${imagePreview}`
+                                    : imagePreview
+                                }
                                 alt="Story Banner Preview"
                                 className="w-full h-full object-cover"
                                 onError={(e) => {
                                   e.target.onerror = null;
-                                  e.target.src = 'https://images.unsplash.com/photo-1469334031218-e382a71b716b?w=800';
+                                  e.target.src = '/about-story-general.png';
                                 }}
                               />
                               {imageFile && (
@@ -432,7 +436,7 @@ const SiteSettingsAdminPage = () => {
                             </>
                           ) : (
                             <img
-                              src="https://images.unsplash.com/photo-1469334031218-e382a71b716b?w=800"
+                              src="/about-story-general.png"
                               alt="Story Banner Fallback"
                               className="w-full h-full object-cover opacity-80"
                             />

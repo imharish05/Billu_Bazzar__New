@@ -145,11 +145,22 @@ const getMyDeliveredItems = async (req, res) => {
     const customerId = req.customer.id;
 
     const deliveredOrders = await Order.findAll({
-      where: { customerId, status: 'DELIVERED' },
+      where: {
+        customerId,
+        status: 'DELIVERED',
+        paymentStatus: { [Op.ne]: 'REFUNDED' }
+      },
       include: [
         {
           model: OrderItem,
           as: 'items',
+          where: {
+            [Op.or]: [
+              { returnStatus: null },
+              { returnStatus: 'NONE' }
+            ]
+          },
+          required: false,
           include: [{ model: Product, as: 'product', attributes: ['id', 'name', 'slug', 'defaultProductImage', 'images'] }],
         },
       ],
@@ -297,6 +308,19 @@ const createReview = async (req, res) => {
 
       if (!matchesItem) {
         return res.status(403).json({ success: false, message: 'This product is not part of the specified order.' });
+      }
+
+      // Check if product was returned or refunded
+      const ReturnRequestModel = require('../models').ReturnRequest;
+      const returnReq = await ReturnRequestModel.findOne({
+        where: {
+          orderId: validOrderId,
+          customerId,
+          status: { [Op.ne]: 'REJECTED' }
+        }
+      });
+      if (returnReq || targetOrder.status === 'RETURNED' || targetOrder.paymentStatus === 'REFUNDED') {
+        return res.status(400).json({ success: false, message: 'Reviews cannot be submitted for returned or refunded products.' });
       }
     }
 

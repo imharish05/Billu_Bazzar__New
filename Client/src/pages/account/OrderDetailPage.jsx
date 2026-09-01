@@ -760,6 +760,12 @@ const OrderDetailPage = () => {
               (r) => String(r.orderItemId) === String(item.id) || (item.returnRequests && item.returnRequests.some((ir) => String(ir.id) === String(r.id)))
             );
             const hasActiveReturn = Boolean(itemReturn || (item.returnStatus && item.returnStatus !== 'NONE'));
+            const isItemReturned = Boolean(
+              itemReturn ||
+              (item.returnStatus && item.returnStatus !== 'NONE') ||
+              order.status === 'RETURNED' ||
+              order.paymentStatus === 'REFUNDED'
+            );
 
             return (
               <div key={item.id || idx} className="flex items-center gap-4 py-3 border-b border-neutral-100 last:border-0 flex-wrap sm:flex-nowrap">
@@ -801,13 +807,15 @@ const OrderDetailPage = () => {
                           <RotateCcw size={12} /> Return Item
                         </button>
                       )}
-                      <button
-                        type="button"
-                        onClick={() => handleOpenReviewModal(item)}
-                        className="px-3 py-1 bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200 text-xs font-semibold rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
-                      >
-                        <Star size={12} /> Write Review
-                      </button>
+                      {!isItemReturned && (
+                        <button
+                          type="button"
+                          onClick={() => handleOpenReviewModal(item)}
+                          className="px-3 py-1 bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200 text-xs font-semibold rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
+                        >
+                          <Star size={12} /> Write Review
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
