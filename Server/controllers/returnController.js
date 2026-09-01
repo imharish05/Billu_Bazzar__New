@@ -1,9 +1,70 @@
 'use strict';
-const { sequelize, ReturnRequest, Order, OrderItem, Product, ProductVariant, Customer, InventoryMovementLog, Warehouse, WarehouseStock } = require('../models');
+const { sequelize, ReturnRequest, Order, OrderItem, Product, ProductVariant, Customer, InventoryMovementLog, Warehouse, WarehouseStock, LoyaltyLedger } = require('../models');
 const { Op } = require('sequelize');
 const { toAbsoluteUrl } = require('../utils/imageUrl');
 const RazorpayService = require('../services/RazorpayService');
 const { sendReturnStatusNotification } = require('../services/emailService');
+
+const processReturnLoyaltyAdjustment = async (returnRequest, transaction) => {
+  try {
+    if (!returnRequest || !returnRequest.customerId || !returnRequest.orderId) return;
+
+    const cust = await Customer.findByPk(returnRequest.customerId, {
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
+    if (!cust) return;
+
+    const order = returnRequest.order || await Order.findByPk(returnRequest.orderId, { transaction });
+    if (!order) return;
+
+    let currentBalance = Number(cust.loyaltyPoints) || 0;
+    const orderSubtotal = Number(order.subtotal) || Number(order.totalAmount) || 1;
+    const refundRatio = Math.min(1, Math.max(0, (Number(returnRequest.refundAmount) || 0) / orderSubtotal));
+
+    // 1. Proportional Restoration of Redeemed Points
+    if (order.redeemedPoints > 0) {
+      const proportionalRedeemed = Math.round(Number(order.redeemedPoints) * refundRatio);
+      if (proportionalRedeemed > 0) {
+        currentBalance += proportionalRedeemed;
+        await LoyaltyLedger.create({
+          customerId: cust.id,
+          orderId: order.id,
+          type: 'BONUS',
+          points: proportionalRedeemed,
+          balance: currentBalance,
+          description: `Restored ${proportionalRedeemed} redeemed points from returned item for Order ${order.orderNumber}`
+        }, { transaction });
+      }
+    }
+
+    // 2. Proportional Clawback of Earned Points (Negative Balance Approach - Approach A)
+    const earnedLedgers = await LoyaltyLedger.findAll({
+      where: { customerId: cust.id, orderId: order.id, type: 'EARN' },
+      transaction,
+    });
+    const totalEarnedPoints = earnedLedgers.reduce((sum, l) => sum + Number(l.points || 0), 0);
+    if (totalEarnedPoints > 0) {
+      const proportionalEarned = Math.round(totalEarnedPoints * refundRatio);
+      if (proportionalEarned > 0) {
+        currentBalance = currentBalance - proportionalEarned;
+        await LoyaltyLedger.create({
+          customerId: cust.id,
+          orderId: order.id,
+          type: 'EXPIRE',
+          points: -proportionalEarned,
+          balance: currentBalance,
+          description: `Reversed ${proportionalEarned} earned points from returned item for Order ${order.orderNumber}`
+        }, { transaction });
+      }
+    }
+
+    cust.loyaltyPoints = currentBalance;
+    await cust.save({ transaction });
+  } catch (err) {
+    console.error('[processReturnLoyaltyAdjustment] Error adjusting loyalty points on return:', err.message);
+  }
+};
 
 const formatReturn = (ret, req) => {
   if (!ret) return ret;
@@ -17,6 +78,9 @@ const formatReturn = (ret, req) => {
   }
   if (json.orderItem?.productImage) {
     json.orderItem.productImage = toAbsoluteUrl(json.orderItem.productImage, req);
+  }
+  if (typeof json.statusTimeline === 'string') {
+    try { json.statusTimeline = JSON.parse(json.statusTimeline); } catch (e) { json.statusTimeline = {}; }
   }
 
   // Ensure net product refund amount (excluding non-refundable shipping fee and minus proportional discounts)
@@ -304,6 +368,7 @@ const getAllAdmin = async (req, res) => {
 
     const { count, rows } = await ReturnRequest.findAndCountAll({
       where,
+      distinct: true,
       limit: parseInt(limit, 10),
       offset: (parseInt(page, 10) - 1) * parseInt(limit, 10),
       order: [['createdAt', 'DESC']],
@@ -423,6 +488,32 @@ const updateStatusAdmin = async (req, res) => {
         type: 'RETURN_RESTOCK',
         reason: `Return Restock for return ${returnRequest.returnNumber}`,
       }, { transaction });
+
+      // Loyalty points adjustment on return refund (Negative balance approach)
+      await processReturnLoyaltyAdjustment(returnRequest, transaction);
+
+      // Sync Order payment status & refund timeline
+      if (returnRequest.orderId) {
+        const orderInstance = await Order.findByPk(returnRequest.orderId, {
+          include: [{ model: OrderItem, as: 'items' }],
+          transaction
+        });
+        if (orderInstance) {
+          let orderTimeline = orderInstance.statusTimeline || {};
+          if (typeof orderTimeline === 'string') {
+            try { orderTimeline = JSON.parse(orderTimeline); } catch (e) { orderTimeline = {}; }
+          }
+          const allItemsRefunded = (orderInstance.items || []).every(item => item.returnStatus === 'REFUNDED' || item.id === returnRequest.orderItemId);
+          orderInstance.paymentStatus = allItemsRefunded ? 'REFUNDED' : 'PARTIALLY_REFUNDED';
+          orderTimeline.refundStatus = 'COMPLETED';
+          orderTimeline.refundGatewayRef = returnRequest.refundTransactionRef || orderInstance.razorpay_payment_id;
+          orderTimeline.refundAmount = parseFloat(returnRequest.refundAmount) || 0;
+          orderTimeline.refundNote = `Return refund of ${returnRequest.currency || 'INR'} ${orderTimeline.refundAmount} processed successfully (Ref: ${orderTimeline.refundGatewayRef}).`;
+          orderTimeline.returnRefundDate = new Date().toISOString();
+          orderInstance.statusTimeline = orderTimeline;
+          await orderInstance.save({ transaction });
+        }
+      }
     }
 
     await transaction.commit();
@@ -543,10 +634,12 @@ const initiateRefundAdmin = async (req, res) => {
     if (typeof currentTimeline === 'string') {
       try { currentTimeline = JSON.parse(currentTimeline); } catch (e) { currentTimeline = {}; }
     }
-    returnRequest.statusTimeline = {
-      ...currentTimeline,
-      REFUNDED: new Date().toISOString(),
-    };
+    const nowIso = new Date().toISOString();
+    if (!currentTimeline.RECEIVED_AT_WAREHOUSE) {
+      currentTimeline.RECEIVED_AT_WAREHOUSE = nowIso;
+    }
+    currentTimeline.REFUNDED = nowIso;
+    returnRequest.statusTimeline = currentTimeline;
 
     await returnRequest.save({ transaction });
 
@@ -574,6 +667,32 @@ const initiateRefundAdmin = async (req, res) => {
         type: 'RETURN_RESTOCK',
         reason: `Automated Razorpay product refund for return ${returnRequest.returnNumber} (Ref: ${returnRequest.refundTransactionRef})`,
       }, { transaction });
+
+      // Loyalty points adjustment on return refund (Negative balance approach)
+      await processReturnLoyaltyAdjustment(returnRequest, transaction);
+
+      // Sync Order payment status & refund timeline
+      if (returnRequest.orderId) {
+        const orderInstance = await Order.findByPk(returnRequest.orderId, {
+          include: [{ model: OrderItem, as: 'items' }],
+          transaction
+        });
+        if (orderInstance) {
+          let orderTimeline = orderInstance.statusTimeline || {};
+          if (typeof orderTimeline === 'string') {
+            try { orderTimeline = JSON.parse(orderTimeline); } catch (e) { orderTimeline = {}; }
+          }
+          const allItemsRefunded = (orderInstance.items || []).every(item => item.returnStatus === 'REFUNDED' || item.id === returnRequest.orderItemId);
+          orderInstance.paymentStatus = allItemsRefunded ? 'REFUNDED' : 'PARTIALLY_REFUNDED';
+          orderTimeline.refundStatus = 'COMPLETED';
+          orderTimeline.refundGatewayRef = returnRequest.refundTransactionRef || refundResult.gatewayRef || paymentId;
+          orderTimeline.refundAmount = actualRefundedAmount;
+          orderTimeline.refundNote = `Return refund of ${returnRequest.currency || 'INR'} ${actualRefundedAmount} processed successfully via Razorpay (Ref: ${orderTimeline.refundGatewayRef}).`;
+          orderTimeline.returnRefundDate = new Date().toISOString();
+          orderInstance.statusTimeline = orderTimeline;
+          await orderInstance.save({ transaction });
+        }
+      }
     }
 
     await transaction.commit();

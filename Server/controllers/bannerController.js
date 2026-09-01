@@ -20,6 +20,60 @@ const handleDBError = (err, res, type = 'item') => {
 
 const { deleteLocalFile } = require('../utils/fileHelper');
 
+// Word & Character limits for Banner content fields
+const BANNER_LIMITS = {
+  title: { maxChars: 60, maxWords: 10, label: 'Title' },
+  subtitle: { maxChars: 95, maxWords: 14, label: 'Subtitle' },
+  badgeText: { maxChars: 25, maxWords: 4, label: 'Badge text' },
+  ctaText: { maxChars: 25, maxWords: 3, label: 'CTA button text' },
+  ctaLink: { maxChars: 255, label: 'CTA link' },
+};
+
+const countWords = (text) => {
+  if (!text || typeof text !== 'string') return 0;
+  const trimmed = text.trim();
+  return trimmed ? trimmed.split(/\s+/).filter(Boolean).length : 0;
+};
+
+const validateBannerWordings = (data) => {
+  if (data.title) {
+    if (data.title.length > BANNER_LIMITS.title.maxChars) {
+      return `Title exceeds maximum length of ${BANNER_LIMITS.title.maxChars} characters.`;
+    }
+    if (countWords(data.title) > BANNER_LIMITS.title.maxWords) {
+      return `Title exceeds maximum limit of ${BANNER_LIMITS.title.maxWords} words.`;
+    }
+  }
+  if (data.subtitle) {
+    if (data.subtitle.length > BANNER_LIMITS.subtitle.maxChars) {
+      return `Subtitle exceeds maximum length of ${BANNER_LIMITS.subtitle.maxChars} characters.`;
+    }
+    if (countWords(data.subtitle) > BANNER_LIMITS.subtitle.maxWords) {
+      return `Subtitle exceeds maximum limit of ${BANNER_LIMITS.subtitle.maxWords} words.`;
+    }
+  }
+  if (data.badgeText) {
+    if (data.badgeText.length > BANNER_LIMITS.badgeText.maxChars) {
+      return `Badge text exceeds maximum length of ${BANNER_LIMITS.badgeText.maxChars} characters.`;
+    }
+    if (countWords(data.badgeText) > BANNER_LIMITS.badgeText.maxWords) {
+      return `Badge text exceeds maximum limit of ${BANNER_LIMITS.badgeText.maxWords} words.`;
+    }
+  }
+  if (data.ctaText) {
+    if (data.ctaText.length > BANNER_LIMITS.ctaText.maxChars) {
+      return `CTA button text exceeds maximum length of ${BANNER_LIMITS.ctaText.maxChars} characters.`;
+    }
+    if (countWords(data.ctaText) > BANNER_LIMITS.ctaText.maxWords) {
+      return `CTA button text exceeds maximum limit of ${BANNER_LIMITS.ctaText.maxWords} words.`;
+    }
+  }
+  if (data.ctaLink && data.ctaLink.length > BANNER_LIMITS.ctaLink.maxChars) {
+    return `CTA link exceeds maximum length of ${BANNER_LIMITS.ctaLink.maxChars} characters.`;
+  }
+  return null;
+};
+
 // Clean incoming payload data
 const prepareBannerData = (rawData) => {
   const data = { ...rawData };
@@ -85,6 +139,13 @@ const getAll = async (req, res) => {
 const create = async (req, res) => {
   try {
     const data = prepareBannerData(req.body);
+    const wordingError = validateBannerWordings(data);
+    if (wordingError) {
+      if (req.file) {
+        try { fs.unlinkSync(req.file.path); } catch (e) {}
+      }
+      return res.status(400).json({ success: false, message: wordingError });
+    }
     if (data.type === 'COUNTDOWN') {
       if (data.countdown && new Date(data.countdown).getTime() <= Date.now()) {
         if (req.file) {
@@ -126,6 +187,13 @@ const update = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Banner not found' });
     }
     const data = prepareBannerData(req.body);
+    const wordingError = validateBannerWordings(data);
+    if (wordingError) {
+      if (req.file) {
+        try { fs.unlinkSync(req.file.path); } catch (e) {}
+      }
+      return res.status(400).json({ success: false, message: wordingError });
+    }
     if (data.type === 'COUNTDOWN') {
       if (data.countdown && new Date(data.countdown).getTime() <= Date.now()) {
         if (req.file) {

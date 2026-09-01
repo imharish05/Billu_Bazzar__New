@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { Link, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { CheckCircle, Package, Download, MapPin, Clock, RefreshCw, ShoppingBag, CreditCard, ExternalLink, ArrowRight } from 'lucide-react';
+import { CheckCircle, Package, Download, MapPin, Clock, RefreshCw, ShoppingBag, CreditCard, ExternalLink, ArrowRight, AlertTriangle, XCircle, X } from 'lucide-react';
+import toast from 'react-hot-toast';
 import Footer from '../components/Footer';
 import { printInvoice } from '../utils/invoiceGenerator';
 import { formatPrice, formatOrderAmount } from '../utils/currency';
-import { fetchOrderById } from '../redux/slices/ordersSlice';
+import { fetchOrderById, cancelCustomerOrder } from '../redux/slices/ordersSlice';
 import { getImageUrl } from '../utils/imageUrl';
 import { getPlaceholderSvg } from '../utils/placeholder';
 import api from '../services/api';
@@ -116,6 +117,10 @@ const OrderConfirmationPage = () => {
   const { code: currencyCode } = useSelector(s => s.currency);
 
   const [refreshing, setRefreshing] = useState(false);
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState('Ordered by mistake');
+  const [cancelReasonDetails, setCancelReasonDetails] = useState('');
+  const [isCancelling, setIsCancelling] = useState(false);
   const targetId = orderIdFromUrl || order?.id || order?.orderNumber;
 
   useEffect(() => {
@@ -148,11 +153,48 @@ const OrderConfirmationPage = () => {
     setTimeout(() => setRefreshing(false), 500);
   };
 
+  const handleCancelSubmit = async (e) => {
+    e.preventDefault();
+    if (!order?.id) return;
+    const finalReason = cancelReason === 'Other'
+      ? (cancelReasonDetails.trim() || 'Other reason')
+      : (cancelReasonDetails.trim() ? `${cancelReason} - ${cancelReasonDetails.trim()}` : cancelReason);
+
+    if (!finalReason || finalReason.trim().length < 3) {
+      toast.error('Please select or specify a valid reason for cancellation.');
+      return;
+    }
+
+    setIsCancelling(true);
+    try {
+      const result = await dispatch(cancelCustomerOrder({ id: order.id, reason: finalReason }));
+      if (cancelCustomerOrder.fulfilled.match(result)) {
+        toast.success('Your order has been cancelled successfully.');
+        setCancelModalOpen(false);
+        if (targetId) dispatch(fetchOrderById(targetId));
+      } else {
+        toast.error(result.payload || 'Failed to cancel order.');
+      }
+    } catch (err) {
+      toast.error('An unexpected error occurred while cancelling order.');
+    } finally {
+      setIsCancelling(false);
+    }
+  };
+
   const fmt = (v) => formatOrderAmount(v, order?.currency || currencyCode);
 
   const isSuccessParam = searchParams.get('status') === 'success';
   const displayStatus = (order?.status === 'PENDING_PAYMENT' && isSuccessParam) ? 'CONFIRMED' : (order?.status || 'CONFIRMED');
   const displayPaymentStatus = (order?.paymentStatus === 'UNPAID' && (isSuccessParam || order?.status === 'CONFIRMED' || order?.status === 'PAID')) ? 'PAID' : (order?.paymentStatus || 'PAID');
+
+  // 24-hour cancellation window calculation
+  const orderPlacedTime = new Date(order?.createdAt || Date.now()).getTime();
+  const hoursSincePlaced = (Date.now() - orderPlacedTime) / (1000 * 60 * 60);
+  const isWithin24Hours = hoursSincePlaced <= 24;
+  const canCancel = order && ['PENDING', 'PENDING_PAYMENT', 'PAID', 'CONFIRMED'].includes(order.status) && isWithin24Hours;
+  const hoursLeft = Math.max(0, Math.floor(24 - hoursSincePlaced));
+  const minsLeft = Math.max(0, Math.floor(((24 - hoursSincePlaced) % 1) * 60));
 
   const trackingSteps = calculateTrackingSteps(displayStatus, displayPaymentStatus);
 
@@ -174,10 +216,26 @@ const OrderConfirmationPage = () => {
   // Order items resolution
   const items = order?.items || order?.OrderItems || [];
   const subtotal = Number(order?.subtotal || items.reduce((sum, item) => sum + (Number(item.totalPrice) || (Number(item.quantity || item.qty || 1) * Number(item.unitPrice || item.price || 0))), 0));
-  const discountAmount = Number(order?.discountAmount || order?.discount || 0);
+  const totalDiscount = Number(order?.discountAmount || order?.discount || 0);
+  const explicitCouponDisc = Number(order?.couponDiscount || 0);
+  const explicitLoyaltyDisc = Number(order?.loyaltyDiscount || 0);
+
+  let resolvedCouponDiscount = explicitCouponDisc;
+  let resolvedLoyaltyDiscount = explicitLoyaltyDisc;
+
+  if (resolvedCouponDiscount === 0 && resolvedLoyaltyDiscount === 0 && totalDiscount > 0) {
+    if (order?.couponId || order?.coupon) {
+      resolvedCouponDiscount = totalDiscount;
+    } else {
+      resolvedLoyaltyDiscount = totalDiscount;
+    }
+  }
+
   const shippingAmount = Number(order?.shippingAmount || 0);
-  const giftWrapFee = Number(order?.giftWrapFee || order?.giftWrapPrice || 0);
-  const totalAmount = Number(order?.totalAmount || (subtotal + shippingAmount + giftWrapFee - discountAmount));
+  const explicitGw = Number(order?.giftWrapFee || order?.giftWrapPrice || 0);
+  const calculatedGwDiff = Math.round(Number(order?.totalAmount || 0) - (subtotal + shippingAmount - totalDiscount));
+  const giftWrapFee = explicitGw > 0 ? explicitGw : (calculatedGwDiff > 0 ? calculatedGwDiff : 0);
+  const totalAmount = Number(order?.totalAmount || (subtotal + shippingAmount + giftWrapFee - totalDiscount));
 
   return (
     <main id="main-content">
@@ -388,10 +446,17 @@ const OrderConfirmationPage = () => {
                 <span className="font-medium text-neutral-900">{fmt(subtotal)}</span>
               </div>
 
-              {discountAmount > 0 && (
+              {resolvedCouponDiscount > 0 && (
                 <div className="flex items-center justify-between text-emerald-600 font-medium">
-                  <span>Discount Applied</span>
-                  <span>-{fmt(discountAmount)}</span>
+                  <span>Coupon Discount{order?.coupon?.code ? ` (${order.coupon.code})` : ''}</span>
+                  <span>-{fmt(resolvedCouponDiscount)}</span>
+                </div>
+              )}
+
+              {resolvedLoyaltyDiscount > 0 && (
+                <div className="flex items-center justify-between text-emerald-600 font-medium">
+                  <span>Loyalty Points Redeemed{order?.redeemedPoints ? ` (${order.redeemedPoints} pts)` : ''}</span>
+                  <span>-{fmt(resolvedLoyaltyDiscount)}</span>
                 </div>
               )}
 
@@ -468,6 +533,31 @@ const OrderConfirmationPage = () => {
           </div>
         </div>
 
+        {/* Cancellation Notice Banner */}
+        {canCancel && (
+          <div className="mb-8 bg-amber-50/90 border border-amber-200 rounded-xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 shadow-2xs">
+            <div className="flex items-center gap-3 text-xs text-amber-950">
+              <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center shrink-0 text-amber-700">
+                <AlertTriangle size={16} />
+              </div>
+              <div>
+                <p className="font-bold text-neutral-900">24-Hour Free Cancellation Active</p>
+                <p className="text-amber-800 text-[11px] mt-0.5">
+                  You can cancel this order within 24 hours of placement ({hoursLeft}h {minsLeft}m remaining).
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setCancelModalOpen(true)}
+              className="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-semibold text-red-600 bg-white border border-red-200 rounded-lg hover:bg-red-600 hover:text-white transition-all shadow-2xs cursor-pointer active:scale-95 shrink-0"
+              id="confirm-cancel-btn-banner"
+            >
+              <XCircle size={14} /> Cancel Order
+            </button>
+          </div>
+        )}
+
         {/* Actions */}
         <div className="flex flex-col sm:flex-row gap-3">
           <button onClick={() => printInvoice(order)} className="btn-outline flex items-center justify-center gap-2 flex-1 py-3.5" id="download-invoice">
@@ -484,6 +574,103 @@ const OrderConfirmationPage = () => {
           </Link>
         </div>
       </div>
+
+      {/* ── Order Cancellation Modal ───────────────────────────────────────── */}
+      {cancelModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-fade-in">
+          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full p-4 sm:p-6 relative border border-neutral-100 max-h-[90vh] flex flex-col">
+            <button
+              onClick={() => !isCancelling && setCancelModalOpen(false)}
+              className="absolute top-4 right-4 text-neutral-400 hover:text-neutral-700 p-1 rounded-full hover:bg-neutral-100 transition-colors"
+              aria-label="Close modal"
+            >
+              <X size={18} />
+            </button>
+
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-50 text-red-600 flex items-center justify-center shrink-0">
+                <AlertTriangle size={20} />
+              </div>
+              <div>
+                <h3 className="font-playfair text-lg font-bold text-neutral-900 leading-tight">
+                  Cancel Order #{String(order?.orderNumber || order?.id || '').replace(/^#/, '')}
+                </h3>
+                <p className="text-xs text-neutral-500 mt-0.5">
+                  Please review the cancellation terms and select your reason ({hoursLeft}h {minsLeft}m window remaining).
+                </p>
+              </div>
+            </div>
+
+            <form onSubmit={handleCancelSubmit} className="space-y-4 overflow-y-auto flex-1 pr-1">
+              {/* Reason Selection */}
+              <div>
+                <label className="block text-xs font-semibold text-neutral-800 mb-1.5 uppercase tracking-wider">
+                  Reason for Cancellation <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={cancelReason}
+                  onChange={(e) => setCancelReason(e.target.value)}
+                  className="w-full border border-neutral-200 rounded-lg px-3 py-2 text-xs bg-white focus:outline-none focus:border-brand-gold font-medium text-neutral-800"
+                  required
+                >
+                  <option value="Ordered by mistake">Ordered by mistake</option>
+                  <option value="Found a better price / alternative elsewhere">Found a better price / alternative elsewhere</option>
+                  <option value="Incorrect delivery address / contact details">Incorrect delivery address / contact details</option>
+                  <option value="Delivery time is too long / delayed">Delivery time is too long / delayed</option>
+                  <option value="Need to change variant, size, or color">Need to change variant, size, or color</option>
+                  <option value="Changed mind / No longer required">Changed mind / No longer required</option>
+                  <option value="Other">Other reason (specify below)</option>
+                </select>
+              </div>
+
+              {/* Reason Details */}
+              <div>
+                <label className="block text-xs font-semibold text-neutral-800 mb-1.5 uppercase tracking-wider">
+                  Additional Details {cancelReason === 'Other' ? <span className="text-red-500">*</span> : <span className="text-neutral-400 font-normal">(Optional)</span>}
+                </label>
+                <textarea
+                  rows={2}
+                  value={cancelReasonDetails}
+                  onChange={(e) => setCancelReasonDetails(e.target.value)}
+                  placeholder={cancelReason === 'Other' ? "Please explain why you wish to cancel this order..." : "Any additional notes for our support team..."}
+                  required={cancelReason === 'Other'}
+                  className="w-full border border-neutral-200 rounded-lg p-2.5 text-xs bg-white focus:outline-none focus:border-brand-gold"
+                />
+              </div>
+
+              <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-3 border-t border-neutral-100">
+                <button
+                  type="button"
+                  disabled={isCancelling}
+                  onClick={() => setCancelModalOpen(false)}
+                  className="w-full sm:w-auto px-4 py-2 border border-neutral-200 text-neutral-600 text-xs font-semibold rounded-lg hover:bg-neutral-50 transition-colors"
+                >
+                  Keep Order
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCancelling}
+                  className="w-full sm:w-auto px-5 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold rounded-lg shadow-sm transition-all inline-flex items-center justify-center gap-1.5 disabled:opacity-50"
+                  id="btn-confirm-cancel-order"
+                >
+                  {isCancelling ? (
+                    <>
+                      <RefreshCw size={13} className="animate-spin text-white" />
+                      <span>Cancelling Order…</span>
+                    </>
+                  ) : (
+                    <>
+                      <XCircle size={14} />
+                      <span>Confirm Cancellation</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       <Footer />
     </main>
   );

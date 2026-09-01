@@ -48,9 +48,13 @@ const getAll = async (req, res) => {
       });
     }
 
-    let coupons = await Coupon.findAll({ order: [['createdAt', 'DESC']] });
+    // For storefront requests without pagination, only return active coupons
+    where.isActive = true;
+    let coupons = await Coupon.findAll({ where, order: [['createdAt', 'DESC']] });
 
-    if (coupons.length === 0) {
+    // Seed defaults only if the table is completely empty (count is 0)
+    const totalCouponCount = await Coupon.count();
+    if (totalCouponCount === 0) {
       try {
         coupons = await Coupon.bulkCreate([
           { code: 'WELCOME10', type: 'PERCENT', value: 10, minOrderValue: 499, maxDiscount: 500, isActive: true, validFrom: new Date(), validUntil: new Date(Date.now() + 365 * 86400000) },
@@ -97,6 +101,17 @@ const create = async (req, res) => {
     if (body.validTo && !body.validUntil) body.validUntil = body.validTo;
     if (!body.validFrom) body.validFrom = new Date();
     if (!body.validUntil) body.validUntil = new Date(Date.now() + 30 * 86400000);
+
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
+    if (new Date(body.validUntil) < startOfToday) {
+      return res.status(400).json({ success: false, message: 'Valid Until date cannot be in the past' });
+    }
+    if (new Date(body.validUntil) < new Date(body.validFrom)) {
+      return res.status(400).json({ success: false, message: 'Valid Until date cannot be earlier than Valid From date' });
+    }
+
     if (body.usageLimit === '' || body.usageLimit === null || body.usageLimit === undefined || body.usageLimit === '0' || body.usageLimit === 0) {
       body.usageLimit = null;
     } else {
@@ -116,6 +131,19 @@ const update = async (req, res) => {
     const body = { ...req.body };
     if (body.code) body.code = normalizeCode(body.code);
     if (body.validTo && !body.validUntil) body.validUntil = body.validTo;
+
+    if (body.validUntil) {
+      const startOfToday = new Date();
+      startOfToday.setHours(0, 0, 0, 0);
+      if (new Date(body.validUntil) < startOfToday) {
+        return res.status(400).json({ success: false, message: 'Valid Until date cannot be in the past' });
+      }
+      const validFromDate = body.validFrom ? new Date(body.validFrom) : new Date(coupon.validFrom);
+      if (new Date(body.validUntil) < validFromDate) {
+        return res.status(400).json({ success: false, message: 'Valid Until date cannot be earlier than Valid From date' });
+      }
+    }
+
     if ('usageLimit' in body) {
       if (body.usageLimit === '' || body.usageLimit === null || body.usageLimit === undefined || body.usageLimit === '0' || body.usageLimit === 0) {
         body.usageLimit = null;
@@ -145,36 +173,10 @@ const validate = async (req, res) => {
   try {
     const subtotal = Number(req.body.subtotal || req.body.cartSubtotal || 0);
     const code = normalizeCode(req.body.code);
-    let coupon = await Coupon.findOne({ where: { code } });
+    const coupon = await Coupon.findOne({ where: { code } });
 
-    // Fallback for default codes if missing or inactive
-    const defaultSpecs = {
-      'WELCOME10': { type: 'PERCENT', value: 10, minOrderValue: 499, maxDiscount: 500 },
-      'FESTIVE20': { type: 'PERCENT', value: 20, minOrderValue: 999, maxDiscount: 1000 },
-      'BILLU100': { type: 'FLAT', value: 100, minOrderValue: 799, maxDiscount: 100 },
-      'LUXURY500': { type: 'FLAT', value: 500, minOrderValue: 2999, maxDiscount: 500 },
-    };
-
-    if ((!coupon || !coupon.isActive) && defaultSpecs[code]) {
-      const spec = defaultSpecs[code];
-      if (!coupon) {
-        coupon = await Coupon.create({
-          code,
-          type: spec.type,
-          value: spec.value,
-          minOrderValue: spec.minOrderValue,
-          maxDiscount: spec.maxDiscount,
-          isActive: true,
-          validFrom: new Date(),
-          validUntil: new Date(Date.now() + 365 * 86400000)
-        });
-      } else {
-        await coupon.update({
-          isActive: true,
-          validFrom: new Date(),
-          validUntil: new Date(Date.now() + 365 * 86400000)
-        });
-      }
+    if (!coupon) {
+      return res.status(404).json({ success: false, valid: false, message: 'Invalid coupon code' });
     }
 
     const reason = isUsable(coupon, subtotal);

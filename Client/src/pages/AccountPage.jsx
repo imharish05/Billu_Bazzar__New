@@ -172,18 +172,24 @@ const AccountPage = () => {
               {activeTab === 'orders' && (
                 <div>
                   <h2 className="font-playfair text-xl font-semibold mb-5">My Orders</h2>
-                  {loading ? (
-                    <div className="space-y-4">{[...Array(3)].map((_, i) => <div key={i} className="skeleton h-24 w-full" />)}</div>
-                  ) : orders.length === 0 ? (
-                    <div className="bg-white shadow-sm p-12 text-center">
-                      <Package size={40} className="text-brand-light mx-auto mb-3" strokeWidth={1} />
-                      <p className="font-playfair text-xl mb-2">No orders yet</p>
-                      <p className="text-brand-grey text-sm mb-4">Start exploring our curated collections</p>
-                      <Link to="/products" className="btn-primary" id="orders-empty-shop">Shop Now</Link>
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      {orders.map(order => (
+                  {(() => {
+                    const validOrders = orders.filter(order => {
+                      const isCod = order.paymentMethod === 'COD' || (order.paymentMethod || '').includes('Cash on Delivery');
+                      const isPaid = order.paymentStatus === 'PAID' || ['CONFIRMED', 'PROCESSING', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED', 'RETURNED', 'REFUNDED'].includes(order.status);
+                      return isPaid || isCod;
+                    });
+                    return loading ? (
+                      <div className="space-y-4">{[...Array(3)].map((_, i) => <div key={i} className="skeleton h-24 w-full" />)}</div>
+                    ) : validOrders.length === 0 ? (
+                      <div className="bg-white shadow-sm p-12 text-center">
+                        <Package size={40} className="text-brand-light mx-auto mb-3" strokeWidth={1} />
+                        <p className="font-playfair text-xl mb-2">No orders yet</p>
+                        <p className="text-brand-grey text-sm mb-4">Start exploring our curated collections</p>
+                        <Link to="/products" className="btn-primary" id="orders-empty-shop">Shop Now</Link>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {validOrders.map(order => (
                         <div key={order.id} className="bg-white shadow-sm p-5">
                           <div className="flex justify-between items-start mb-3 flex-wrap gap-2">
                             <div>

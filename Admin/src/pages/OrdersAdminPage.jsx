@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AlertTriangle, Eye, Printer } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
 import AdminOrderDetailsModal from '../components/AdminOrderDetailsModal';
@@ -44,6 +44,7 @@ const PAY_COLORS = { PAID: 'bg-green-50 text-green-700', UNPAID: 'bg-yellow-50 t
 
 const OrdersAdminPage = () => {
   const dispatch = useDispatch();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { items: orders, loading, total, totalPages } = useSelector(s => s.orders);
   const { admin } = useSelector(s => s.auth);
@@ -58,10 +59,16 @@ const OrdersAdminPage = () => {
   const statusFromUrl = searchParams.get('status');
   const activeStatus = statusFromUrl || 'All';
 
-  const loadCounts = async () => {
+  useEffect(() => {
+    if (statusFromUrl === 'RETURNED') {
+      navigate('/returns', { replace: true });
+    }
+  }, [statusFromUrl, navigate]);
+
+  const loadStatusCounts = async () => {
     try {
       const res = await api.get('/orders/status-counts');
-      if (res.data.success) {
+      if (res.data?.success) {
         setOrderCounts(res.data.counts || {});
       }
     } catch (err) {
@@ -70,23 +77,29 @@ const OrdersAdminPage = () => {
   };
 
   useEffect(() => {
+    loadStatusCounts();
+    const interval = setInterval(loadStatusCounts, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    if (activeStatus === 'RETURNED') return;
     dispatch(fetchAdminOrders({
-      status: activeStatus === 'All' ? undefined : activeStatus,
-      search: search || undefined,
       page,
-      limit
+      limit,
+      search: search || undefined,
+      status: activeStatus === 'All' ? undefined : activeStatus
     }));
-    loadCounts();
-  }, [activeStatus, search, page, limit, dispatch]);
+  }, [dispatch, page, limit, search, activeStatus]);
 
   useEffect(() => {
     const handleStatusChanged = () => {
-      loadCounts();
+      loadStatusCounts();
       dispatch(fetchAdminOrders({
-        status: activeStatus === 'All' ? undefined : activeStatus,
-        search: search || undefined,
         page,
-        limit
+        limit,
+        search: search || undefined,
+        status: activeStatus === 'All' ? undefined : activeStatus
       }));
     };
     window.addEventListener('adminOrderStatusChanged', handleStatusChanged);
@@ -96,6 +109,10 @@ const OrdersAdminPage = () => {
   }, [activeStatus, search, page, limit, dispatch]);
 
   const handleTabClick = (s) => {
+    if (s === 'RETURNED') {
+      navigate('/returns');
+      return;
+    }
     setPage(1);
     if (s === 'All') {
       setSearchParams({});
@@ -207,7 +224,7 @@ const OrdersAdminPage = () => {
                         id={`status-${order.id}`}
                         aria-label="Order status"
                       >
-                        {['PENDING','CONFIRMED','PROCESSING','SHIPPED','OUT_FOR_DELIVERY','DELIVERED','CANCELLED','RETURNED'].map(s => (
+                        {['PENDING','CONFIRMED','PROCESSING','SHIPPED','OUT_FOR_DELIVERY','DELIVERED','CANCELLED'/* ,'RETURNED' */].map(s => (
                           <option key={s} value={s}>{STATUS_LABELS[s] || s}</option>
                         ))}
                       </select>
@@ -224,7 +241,7 @@ const OrdersAdminPage = () => {
                       >
                         <Eye size={14} /> Details
                       </button>
-                      <button
+                      {/* <button
                         onClick={() => {
                           toast.success(`Opening Tax Invoice for Order ${order.orderNumber}...`);
                           printInvoice(order);
@@ -234,7 +251,7 @@ const OrdersAdminPage = () => {
                         id={`print-order-${order.id}`}
                       >
                         <Printer size={14} /> Invoice
-                      </button>
+                      </button> */}
                     </div>
                   </td>
                 </tr>

@@ -152,7 +152,10 @@ const getAll = async (req, res) => {
     }
 
     const { count, rows } = await Order.findAndCountAll({
-      where, limit: parseInt(limit), offset: (parseInt(page) - 1) * parseInt(limit),
+      where,
+      distinct: true,
+      limit: parseInt(limit),
+      offset: (parseInt(page) - 1) * parseInt(limit),
       order: [['createdAt', 'DESC']],
       include: [
         { model: Customer, as: 'customer', attributes: ['id', 'name', 'email', 'phone'], required: false },
@@ -176,8 +179,12 @@ const getMyOrders = async (req, res) => {
     const orders = await Order.findAll({
       where: {
         customerId: req.customer.id,
-        // Exclude only expired payment sessions
-        status: { [Op.ne]: 'EXPIRED' },
+        [Op.or]: [
+          { paymentStatus: 'PAID' },
+          { paymentMethod: 'Cash on Delivery (COD)' },
+          { paymentMethod: 'COD' },
+          { status: { [Op.in]: ['CONFIRMED', 'PROCESSING', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED', 'RETURNED', 'REFUNDED'] } }
+        ]
       },
       order: [['createdAt', 'DESC']],
       include: [
@@ -223,32 +230,215 @@ const cancelMyOrder = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Order not found' });
     }
 
-    const cancellableStatuses = ['PENDING', 'PENDING_PAYMENT', 'CONFIRMED'];
+    const cancellableStatuses = ['PENDING', 'PENDING_PAYMENT', 'PAID', 'CONFIRMED'];
     if (!cancellableStatuses.includes(order.status)) {
       await transaction.rollback();
       return res.status(400).json({
         success: false,
-        message: `Order cannot be cancelled because its status is '${order.status}'. Please contact support.`,
+        message: `Order cannot be cancelled because it is already ${order.status === 'PROCESSING' ? 'packed/processing' : order.status === 'SHIPPED' ? 'dispatched' : order.status}. Cancellation is strictly not permitted once packed or dispatched.`,
+      });
+    }
+
+    // 24-hour / Same-day cancellation window check
+    const orderCreatedAt = new Date(order.createdAt).getTime();
+    const hoursSincePlaced = (Date.now() - orderCreatedAt) / (1000 * 60 * 60);
+    if (hoursSincePlaced > 24) {
+      await transaction.rollback();
+      return res.status(400).json({
+        success: false,
+        message: 'Orders can only be cancelled within 24 hours of placement (same day). Please contact customer support.',
+      });
+    }
+
+    const rawReason = req.body?.reason || req.body?.cancellationReason;
+    const reason = typeof rawReason === 'string' ? rawReason.trim() : '';
+    if (!reason || reason.length < 3) {
+      await transaction.rollback();
+      return res.status(400).json({
+        success: false,
+        message: 'A valid cancellation reason is required to process order cancellation.',
       });
     }
 
     if (order.inventoryProcessed) {
-      for (const item of order.items) {
+      const { resolveWarehouseIdForItem } = require('./warehouseController');
+
+      const sortedItems = [...order.items].sort((a, b) => {
+        if (a.productId !== b.productId) return a.productId - b.productId;
+        return (a.variantId || 0) - (b.variantId || 0);
+      });
+
+      for (const item of sortedItems) {
+        const whId = await resolveWarehouseIdForItem(item.productId, item.variantId, transaction);
+        let currentStock = 0;
+
         if (item.variantId) {
-          const variant = await ProductVariant.findByPk(item.variantId, { transaction });
-          if (variant) await variant.increment('stock', { by: item.quantity, transaction });
-        } else if (item.productId) {
-          const product = await Product.findByPk(item.productId, { transaction });
-          if (product) await product.increment('stock', { by: item.quantity, transaction });
+          const variant = await ProductVariant.findOne({
+            where: { id: item.variantId },
+            lock: transaction.LOCK.UPDATE,
+            transaction
+          });
+          if (variant) {
+            currentStock = parseInt(variant.stock, 10) || 0;
+            await variant.increment('stock', { by: item.quantity, transaction });
+          }
         }
+
+        const product = await Product.findOne({
+          where: { id: item.productId },
+          lock: transaction.LOCK.UPDATE,
+          transaction
+        });
+        if (product) {
+          if (!item.variantId) currentStock = parseInt(product.stock, 10) || 0;
+          await product.increment('stock', { by: item.quantity, transaction });
+        }
+
+        if (whId) {
+          const [whStock] = await WarehouseStock.findOrCreate({
+            where: { warehouseId: whId, productId: item.productId, variantId: item.variantId || null },
+            defaults: { warehouseId: whId, productId: item.productId, variantId: item.variantId || null, quantity: currentStock, reservedQty: 0 },
+            transaction
+          });
+          await whStock.increment('quantity', { by: item.quantity, transaction });
+        }
+
+        // Log movement
+        await InventoryMovementLog.create({
+          productId: item.productId,
+          variantId: item.variantId || null,
+          warehouseId: whId,
+          orderId: order.id,
+          quantity: item.quantity,
+          type: 'ORDER_CANCEL_RESTOCK',
+          reason: `Customer cancelled order: ${order.orderNumber}. Reason: ${reason}`
+        }, { transaction });
+      }
+
+      order.inventoryProcessed = false;
+    }
+
+    let timeline = order.statusTimeline || {};
+    if (typeof timeline === 'string') {
+      try { timeline = JSON.parse(timeline); } catch (e) { timeline = {}; }
+    }
+    timeline.CANCELLED = new Date().toISOString();
+    timeline.cancelReason = reason;
+    timeline.cancelledBy = 'CUSTOMER';
+
+    const isPaidOnline = order.paymentStatus === 'PAID';
+    const paymentId = order.razorpay_payment_id || order.paymentGatewayRef;
+    const refundAmount = parseFloat(order.totalAmount || 0);
+
+    if (isPaidOnline && paymentId && refundAmount > 0) {
+      try {
+        const gatewayResolver = require('../services/paymentGatewayResolver');
+        const gateway = gatewayResolver.getGateway(order.currency || 'INR');
+        const refundResult = await gateway.refund(paymentId, refundAmount);
+
+        if (refundResult.success) {
+          order.paymentStatus = 'REFUNDED';
+          timeline.refundStatus = 'COMPLETED';
+          timeline.refundGatewayRef = refundResult.gatewayRef || paymentId;
+          timeline.refundAmount = refundResult.amount || refundAmount;
+          timeline.refundNote = `100% full refund of ${order.currency || 'INR'} ${refundAmount} processed successfully via ${order.currency === 'AED' ? 'Telr' : 'Razorpay'} (Ref: ${refundResult.gatewayRef || paymentId}).`;
+
+          await InventoryMovementLog.create({
+            productId: 0,
+            orderId: order.id,
+            quantity: 0,
+            type: 'REFUND_OOS',
+            reason: `Automated 100% full refund of ${order.currency || 'INR'} ${refundAmount} upon customer order cancellation (Gateway Ref: ${refundResult.gatewayRef || paymentId}).`
+          }, { transaction });
+        } else {
+          console.warn(`[cancelMyOrder] Gateway refund: ${refundResult.status}`);
+          timeline.refundStatus = 'PENDING_MANUAL';
+          timeline.refundNote = `Automated gateway refund note: ${refundResult.status}. Full refund will be processed to the original payment method.`;
+        }
+      } catch (refundErr) {
+        console.error('[cancelMyOrder] Error executing payment refund:', refundErr.message);
+        timeline.refundStatus = 'PENDING_MANUAL';
+        timeline.refundNote = `Full refund of ${order.currency || 'INR'} ${refundAmount} will be processed to the original payment method within 5-7 business days.`;
+      }
+    }
+
+    // ── Loyalty Points Reversal & Restoration ──────────────────────────
+    if (order.customerId) {
+      const cust = await Customer.findByPk(order.customerId, { transaction, lock: transaction.LOCK.UPDATE });
+      if (cust) {
+        let currentBalance = Number(cust.loyaltyPoints) || 0;
+
+        // 1. Restore points redeemed by the customer for this order
+        if (order.redeemedPoints > 0) {
+          const pointsToRestoreTotal = Number(order.redeemedPoints);
+          const alreadyRestoredLedgers = await LoyaltyLedger.findAll({
+            where: { customerId: cust.id, orderId: order.id, type: 'BONUS' },
+            transaction
+          });
+          const totalAlreadyRestored = alreadyRestoredLedgers.reduce((sum, l) => sum + Number(l.points || 0), 0);
+          const remainingToRestore = Math.max(0, pointsToRestoreTotal - totalAlreadyRestored);
+
+          if (remainingToRestore > 0) {
+            currentBalance += remainingToRestore;
+            await LoyaltyLedger.create({
+              customerId: cust.id,
+              orderId: order.id,
+              type: 'BONUS',
+              points: remainingToRestore,
+              balance: currentBalance,
+              description: `Restored ${remainingToRestore} loyalty points from cancelled Order ${order.orderNumber}`
+            }, { transaction });
+          }
+        }
+
+        // 2. Clawback / Reverse points earned from this order
+        const earnedLedgers = await LoyaltyLedger.findAll({
+          where: { customerId: cust.id, orderId: order.id, type: 'EARN' },
+          transaction
+        });
+        const totalEarnedPoints = earnedLedgers.reduce((sum, l) => sum + Number(l.points || 0), 0);
+
+        const alreadyReversedLedgers = await LoyaltyLedger.findAll({
+          where: { customerId: cust.id, orderId: order.id, type: 'EXPIRE' },
+          transaction
+        });
+        const totalAlreadyReversed = alreadyReversedLedgers.reduce((sum, l) => sum + Math.abs(Number(l.points || 0)), 0);
+        const remainingToClawback = Math.max(0, totalEarnedPoints - totalAlreadyReversed);
+
+        if (remainingToClawback > 0) {
+          currentBalance = Math.max(0, currentBalance - remainingToClawback);
+          await LoyaltyLedger.create({
+            customerId: cust.id,
+            orderId: order.id,
+            type: 'EXPIRE',
+            points: -remainingToClawback,
+            balance: currentBalance,
+            description: `Reversed ${remainingToClawback} earned loyalty points from cancelled Order ${order.orderNumber}`
+          }, { transaction });
+        }
+
+        // Save final exact points balance to customer record
+        cust.loyaltyPoints = currentBalance;
+        await cust.save({ transaction });
       }
     }
 
     order.status = 'CANCELLED';
+    order.statusTimeline = timeline;
     await order.save({ transaction });
 
     await transaction.commit();
-    res.json({ success: true, message: 'Order cancelled successfully', order });
+
+    const { syncStorefrontStock } = require('./warehouseController');
+    if (order.items && typeof syncStorefrontStock === 'function') {
+      for (const item of order.items) {
+        syncStorefrontStock(item.productId, item.variantId || null).catch(console.error);
+      }
+    }
+
+    sendOrderStatusNotification(order, 'CANCELLED').catch(err => console.error('[orderController] Error sending cancel email:', err.message));
+
+    res.json({ success: true, message: 'Order cancelled successfully', order: formatOrder(order, req) });
   } catch (err) {
     await transaction.rollback();
     res.status(500).json({ success: false, message: err.message });
@@ -636,6 +826,9 @@ const placeOrder = async (req, res) => {
       paymentMethod: resolvedPaymentMethod,
       subtotal,
       discountAmount: discountAmount + loyaltyDiscount,
+      couponDiscount: discountAmount,
+      loyaltyDiscount: loyaltyDiscount,
+      redeemedPoints: pointsToRedeem,
       shippingAmount,
       taxAmount,
       taxRate,
@@ -644,6 +837,7 @@ const placeOrder = async (req, res) => {
       shippingAddress,
       billingAddress: billingAddress || shippingAddress,
       notes: req.body.giftMessage || req.body.notes || null,
+      isGiftWrap: Boolean(isGiftWrap),
       giftWrapFee: isGiftWrap ? giftWrapCharge : 0,
       inventoryProcessed: isCod,
       statusTimeline: isCod
@@ -920,9 +1114,109 @@ const updateStatus = async (req, res) => {
       updatedTimeline.PENDING = order.createdAt ? new Date(order.createdAt).toISOString() : new Date().toISOString();
     }
 
+    const isCancelOrRefund = status === 'CANCELLED' || status === 'REFUNDED';
+    const isPaidOnline = order.paymentStatus === 'PAID';
+    const paymentId = order.razorpay_payment_id || order.paymentGatewayRef;
+    const refundAmount = parseFloat(order.totalAmount || 0);
+
+    let resolvedPaymentStatus = paymentStatus || order.paymentStatus;
+
+    if (isCancelOrRefund && isPaidOnline && paymentId && refundAmount > 0 && order.paymentStatus !== 'REFUNDED') {
+      try {
+        const gatewayResolver = require('../services/paymentGatewayResolver');
+        const gateway = gatewayResolver.getGateway(order.currency || 'INR');
+        const refundResult = await gateway.refund(paymentId, refundAmount);
+
+        if (refundResult.success) {
+          resolvedPaymentStatus = 'REFUNDED';
+          updatedTimeline.refundStatus = 'COMPLETED';
+          updatedTimeline.refundGatewayRef = refundResult.gatewayRef || paymentId;
+          updatedTimeline.refundAmount = refundResult.amount || refundAmount;
+          updatedTimeline.refundNote = `100% full refund of ${order.currency || 'INR'} ${refundAmount} processed successfully via ${order.currency === 'AED' ? 'Telr' : 'Razorpay'} (Ref: ${refundResult.gatewayRef || paymentId}).`;
+
+          await InventoryMovementLog.create({
+            productId: 0,
+            orderId: order.id,
+            quantity: 0,
+            type: 'REFUND_OOS',
+            reason: `Automated 100% full refund of ${order.currency || 'INR'} ${refundAmount} on status transition to ${status} (Gateway Ref: ${refundResult.gatewayRef || paymentId}).`
+          }, { transaction });
+        } else {
+          console.warn(`[updateStatus] Gateway refund note: ${refundResult.status}`);
+          updatedTimeline.refundStatus = 'PENDING_MANUAL';
+          updatedTimeline.refundNote = `Automated gateway refund note: ${refundResult.status}. Full refund will be processed manually.`;
+        }
+      } catch (refundErr) {
+        console.error('[updateStatus] Error executing payment refund:', refundErr.message);
+        updatedTimeline.refundStatus = 'PENDING_MANUAL';
+        updatedTimeline.refundNote = `Full refund of ${order.currency || 'INR'} ${refundAmount} will be processed manually.`;
+      }
+    }
+
+    // ── Loyalty Points Reversal & Restoration (Only once upon cancellation/refund) ──
+    if (isCancelOrRefund && previousStatus !== 'CANCELLED' && previousStatus !== 'REFUNDED' && order.customerId) {
+      const cust = await Customer.findByPk(order.customerId, { transaction, lock: transaction.LOCK.UPDATE });
+      if (cust) {
+        let currentBalance = Number(cust.loyaltyPoints) || 0;
+
+        // 1. Restore redeemed points
+        if (order.redeemedPoints > 0) {
+          const pointsToRestoreTotal = Number(order.redeemedPoints);
+          const alreadyRestoredLedgers = await LoyaltyLedger.findAll({
+            where: { customerId: cust.id, orderId: order.id, type: 'BONUS' },
+            transaction
+          });
+          const totalAlreadyRestored = alreadyRestoredLedgers.reduce((sum, l) => sum + Number(l.points || 0), 0);
+          const remainingToRestore = Math.max(0, pointsToRestoreTotal - totalAlreadyRestored);
+
+          if (remainingToRestore > 0) {
+            currentBalance += remainingToRestore;
+            await LoyaltyLedger.create({
+              customerId: cust.id,
+              orderId: order.id,
+              type: 'BONUS',
+              points: remainingToRestore,
+              balance: currentBalance,
+              description: `Restored ${remainingToRestore} loyalty points from ${status.toLowerCase()} Order ${order.orderNumber}`
+            }, { transaction });
+          }
+        }
+
+        // 2. Reverse earned points
+        const earnedLedgers = await LoyaltyLedger.findAll({
+          where: { customerId: cust.id, orderId: order.id, type: 'EARN' },
+          transaction
+        });
+        const totalEarnedPoints = earnedLedgers.reduce((sum, l) => sum + Number(l.points || 0), 0);
+
+        const alreadyReversedLedgers = await LoyaltyLedger.findAll({
+          where: { customerId: cust.id, orderId: order.id, type: 'EXPIRE' },
+          transaction
+        });
+        const totalAlreadyReversed = alreadyReversedLedgers.reduce((sum, l) => sum + Math.abs(Number(l.points || 0)), 0);
+        const remainingToClawback = Math.max(0, totalEarnedPoints - totalAlreadyReversed);
+
+        if (remainingToClawback > 0) {
+          currentBalance = Math.max(0, currentBalance - remainingToClawback);
+          await LoyaltyLedger.create({
+            customerId: cust.id,
+            orderId: order.id,
+            type: 'EXPIRE',
+            points: -remainingToClawback,
+            balance: currentBalance,
+            description: `Reversed ${remainingToClawback} earned loyalty points from ${status.toLowerCase()} Order ${order.orderNumber}`
+          }, { transaction });
+        }
+
+        // Save final exact points balance to customer record
+        cust.loyaltyPoints = currentBalance;
+        await cust.save({ transaction });
+      }
+    }
+
     const orderUpdatePayload = {
       status,
-      paymentStatus: paymentStatus || order.paymentStatus,
+      paymentStatus: resolvedPaymentStatus,
       inventoryProcessed: order.inventoryProcessed,
       statusTimeline: updatedTimeline
     };
@@ -1069,6 +1363,15 @@ const getStatusCounts = async (req, res) => {
       counts.ABANDONED = abandonedCount;
     } catch {
       counts.ABANDONED = 0;
+    }
+
+    try {
+      const activeReturnsCount = await ReturnRequest.count({
+        where: { status: { [Op.notIn]: ['REFUNDED', 'REJECTED'] } }
+      });
+      counts.RETURNED = Math.max(counts.RETURNED, activeReturnsCount);
+    } catch {
+      // Keep order counts RETURNED
     }
 
     res.json({ success: true, counts });

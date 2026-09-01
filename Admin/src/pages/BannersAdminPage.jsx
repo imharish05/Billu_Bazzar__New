@@ -118,6 +118,40 @@ const validateBannerImageDimensions = (dims, bannerType, file = null) => {
   return { isValid: true, message: null };
 };
 
+// Word & Character limits for Banner content fields
+const BANNER_LIMITS = {
+  title: { maxChars: 60, maxWords: 10, label: 'Title' },
+  subtitle: { maxChars: 95, maxWords: 14, label: 'Subtitle' },
+  badgeText: { maxChars: 25, maxWords: 4, label: 'Badge Text' },
+  ctaText: { maxChars: 25, maxWords: 3, label: 'CTA Button Text' },
+  ctaLink: { maxChars: 255, label: 'CTA Link' },
+};
+
+const countWords = (text) => {
+  if (!text || typeof text !== 'string') return 0;
+  const trimmed = text.trim();
+  return trimmed ? trimmed.split(/\s+/).filter(Boolean).length : 0;
+};
+
+const renderFieldCounter = (value, config) => {
+  const str = value || '';
+  const charCount = str.length;
+  const wordCount = countWords(str);
+  const isCharOver = charCount > config.maxChars;
+  const isWordOver = config.maxWords && wordCount > config.maxWords;
+  const isNearLimit = (config.maxChars && charCount >= config.maxChars * 0.85) || (config.maxWords && wordCount >= config.maxWords);
+
+  let textColor = 'text-brand-grey/70';
+  if (isCharOver || isWordOver) textColor = 'text-red-500 font-semibold';
+  else if (isNearLimit) textColor = 'text-amber-600 font-medium';
+
+  return (
+    <span className={`text-[11px] font-mono tracking-tight ${textColor}`}>
+      {config.maxWords ? `${wordCount}/${config.maxWords} words · ` : ''}{charCount}/{config.maxChars} chars
+    </span>
+  );
+};
+
 const BannersAdminPage = () => {
   const [banners, setBanners] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -329,6 +363,44 @@ const BannersAdminPage = () => {
         setUploadError('Badge Text is required for Exclusive Deal.');
         setSaving(false); setUploadProgress(null); return;
       }
+    }
+
+    // Word and character limits validation
+    if (form.title && countWords(form.title) > BANNER_LIMITS.title.maxWords) {
+      setUploadError(`Title cannot exceed ${BANNER_LIMITS.title.maxWords} words (currently ${countWords(form.title)} words).`);
+      setSaving(false); setUploadProgress(null); return;
+    }
+    if (form.title && form.title.length > BANNER_LIMITS.title.maxChars) {
+      setUploadError(`Title cannot exceed ${BANNER_LIMITS.title.maxChars} characters.`);
+      setSaving(false); setUploadProgress(null); return;
+    }
+    if (form.subtitle && countWords(form.subtitle) > BANNER_LIMITS.subtitle.maxWords) {
+      setUploadError(`Subtitle cannot exceed ${BANNER_LIMITS.subtitle.maxWords} words (currently ${countWords(form.subtitle)} words).`);
+      setSaving(false); setUploadProgress(null); return;
+    }
+    if (form.subtitle && form.subtitle.length > BANNER_LIMITS.subtitle.maxChars) {
+      setUploadError(`Subtitle cannot exceed ${BANNER_LIMITS.subtitle.maxChars} characters.`);
+      setSaving(false); setUploadProgress(null); return;
+    }
+    if (form.badgeText && countWords(form.badgeText) > BANNER_LIMITS.badgeText.maxWords) {
+      setUploadError(`Badge text cannot exceed ${BANNER_LIMITS.badgeText.maxWords} words (currently ${countWords(form.badgeText)} words).`);
+      setSaving(false); setUploadProgress(null); return;
+    }
+    if (form.badgeText && form.badgeText.length > BANNER_LIMITS.badgeText.maxChars) {
+      setUploadError(`Badge text cannot exceed ${BANNER_LIMITS.badgeText.maxChars} characters.`);
+      setSaving(false); setUploadProgress(null); return;
+    }
+    if (form.ctaText && countWords(form.ctaText) > BANNER_LIMITS.ctaText.maxWords) {
+      setUploadError(`CTA button text cannot exceed ${BANNER_LIMITS.ctaText.maxWords} words (currently ${countWords(form.ctaText)} words).`);
+      setSaving(false); setUploadProgress(null); return;
+    }
+    if (form.ctaText && form.ctaText.length > BANNER_LIMITS.ctaText.maxChars) {
+      setUploadError(`CTA button text cannot exceed ${BANNER_LIMITS.ctaText.maxChars} characters.`);
+      setSaving(false); setUploadProgress(null); return;
+    }
+    if (form.ctaLink && form.ctaLink.length > BANNER_LIMITS.ctaLink.maxChars) {
+      setUploadError(`CTA link cannot exceed ${BANNER_LIMITS.ctaLink.maxChars} characters.`);
+      setSaving(false); setUploadProgress(null); return;
     }
 
     const file = imageFile || fileInputRef.current?.files?.[0];
@@ -678,13 +750,39 @@ const BannersAdminPage = () => {
 
                 {/* Title & Subtitle */}
                 <div>
-                  <label className="block text-xs font-semibold text-brand-grey mb-1.5" htmlFor="ban-title">Title {(form.type !== 'HERO') && '*'}</label>
-                  <input id="ban-title" type="text" value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} className="w-full border border-brand-light px-3 py-2 text-sm focus:outline-none focus:border-brand-gold rounded-sm" placeholder="e.g. Midnight Luxury Sale" />
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-semibold text-brand-grey" htmlFor="ban-title">
+                      Title {(form.type !== 'HERO') && '*'}
+                    </label>
+                    {renderFieldCounter(form.title, BANNER_LIMITS.title)}
+                  </div>
+                  <input
+                    id="ban-title"
+                    type="text"
+                    maxLength={BANNER_LIMITS.title.maxChars}
+                    value={form.title}
+                    onChange={e => setForm(p => ({ ...p, title: e.target.value }))}
+                    className="w-full border border-brand-light px-3 py-2 text-sm focus:outline-none focus:border-brand-gold rounded-sm"
+                    placeholder="e.g. Midnight Luxury Sale"
+                  />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-brand-grey mb-1.5" htmlFor="ban-sub">Subtitle {(form.type !== 'HERO') && '*'}</label>
-                  <input id="ban-sub" type="text" value={form.subtitle} onChange={e => setForm(p => ({ ...p, subtitle: e.target.value }))} className="w-full border border-brand-light px-3 py-2 text-sm focus:outline-none focus:border-brand-gold rounded-sm" placeholder="e.g. Up to 50% Off Luxury Watches & Apparel" />
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-semibold text-brand-grey" htmlFor="ban-sub">
+                      Subtitle {(form.type !== 'HERO') && '*'}
+                    </label>
+                    {renderFieldCounter(form.subtitle, BANNER_LIMITS.subtitle)}
+                  </div>
+                  <input
+                    id="ban-sub"
+                    type="text"
+                    maxLength={BANNER_LIMITS.subtitle.maxChars}
+                    value={form.subtitle}
+                    onChange={e => setForm(p => ({ ...p, subtitle: e.target.value }))}
+                    className="w-full border border-brand-light px-3 py-2 text-sm focus:outline-none focus:border-brand-gold rounded-sm"
+                    placeholder="e.g. Up to 50% Off Luxury Watches & Apparel"
+                  />
                 </div>
 
                 {/* Countdown Time */}
@@ -698,20 +796,60 @@ const BannersAdminPage = () => {
                 {/* CTA text & link */}
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-semibold text-brand-grey mb-1.5" htmlFor="ban-ctaText">CTA Button Text {(form.type === 'EXCLUSIVE_DEAL' || form.type === 'COUNTDOWN') && '*'}</label>
-                    <input id="ban-ctaText" type="text" value={form.ctaText} onChange={e => setForm(p => ({ ...p, ctaText: e.target.value }))} className="w-full border border-brand-light px-3 py-2 text-sm focus:outline-none focus:border-brand-gold rounded-sm" placeholder="e.g. SHOP NOW" />
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-xs font-semibold text-brand-grey truncate mr-1" htmlFor="ban-ctaText">
+                        CTA Text {(form.type === 'EXCLUSIVE_DEAL' || form.type === 'COUNTDOWN') && '*'}
+                      </label>
+                      {renderFieldCounter(form.ctaText, BANNER_LIMITS.ctaText)}
+                    </div>
+                    <input
+                      id="ban-ctaText"
+                      type="text"
+                      maxLength={BANNER_LIMITS.ctaText.maxChars}
+                      value={form.ctaText}
+                      onChange={e => setForm(p => ({ ...p, ctaText: e.target.value }))}
+                      className="w-full border border-brand-light px-3 py-2 text-sm focus:outline-none focus:border-brand-gold rounded-sm"
+                      placeholder="e.g. SHOP NOW"
+                    />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-brand-grey mb-1.5" htmlFor="ban-ctaLink">CTA Link *</label>
-                    <input id="ban-ctaLink" type="text" value={form.ctaLink} onChange={e => setForm(p => ({ ...p, ctaLink: e.target.value }))} required className="w-full border border-brand-light px-3 py-2 text-sm focus:outline-none focus:border-brand-gold rounded-sm" placeholder="e.g. /products" />
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-xs font-semibold text-brand-grey" htmlFor="ban-ctaLink">
+                        CTA Link *
+                      </label>
+                      {renderFieldCounter(form.ctaLink, BANNER_LIMITS.ctaLink)}
+                    </div>
+                    <input
+                      id="ban-ctaLink"
+                      type="text"
+                      maxLength={BANNER_LIMITS.ctaLink.maxChars}
+                      value={form.ctaLink}
+                      onChange={e => setForm(p => ({ ...p, ctaLink: e.target.value }))}
+                      required
+                      className="w-full border border-brand-light px-3 py-2 text-sm focus:outline-none focus:border-brand-gold rounded-sm"
+                      placeholder="e.g. /products"
+                    />
                   </div>
                 </div>
 
                 {/* Badge + Active Toggle */}
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-semibold text-brand-grey mb-1.5" htmlFor="ban-badge">Badge Text {(form.type === 'EXCLUSIVE_DEAL' || form.type === 'COUNTDOWN') && '*'}</label>
-                    <input id="ban-badge" type="text" value={form.badgeText} onChange={e => setForm(p => ({ ...p, badgeText: e.target.value }))} className="w-full border border-brand-light px-3 py-2 text-sm focus:outline-none focus:border-brand-gold rounded-sm" placeholder="e.g. 50% OFF" />
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-xs font-semibold text-brand-grey truncate mr-1" htmlFor="ban-badge">
+                        Badge Text {(form.type === 'EXCLUSIVE_DEAL' || form.type === 'COUNTDOWN') && '*'}
+                      </label>
+                      {renderFieldCounter(form.badgeText, BANNER_LIMITS.badgeText)}
+                    </div>
+                    <input
+                      id="ban-badge"
+                      type="text"
+                      maxLength={BANNER_LIMITS.badgeText.maxChars}
+                      value={form.badgeText}
+                      onChange={e => setForm(p => ({ ...p, badgeText: e.target.value }))}
+                      className="w-full border border-brand-light px-3 py-2 text-sm focus:outline-none focus:border-brand-gold rounded-sm"
+                      placeholder="e.g. 50% OFF"
+                    />
                   </div>
                   <div className="flex items-end pb-2">
                     <label className="flex items-center gap-2 text-sm cursor-pointer select-none" htmlFor="ban-active">

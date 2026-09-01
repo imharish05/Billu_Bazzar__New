@@ -349,22 +349,26 @@ const DashboardPage = () => {
                   </p>
                 ) : (
                   lowStockAlerts.map((item, idx) => (
-                    <div key={idx} className="flex items-center gap-3 p-3 bg-amber-50/60 rounded-lg">
+                    <Link
+                      key={idx}
+                      to={item.warehouseId ? `/warehouses?warehouseId=${item.warehouseId}&lowStock=true` : '/warehouses'}
+                      className="flex items-center gap-3 p-3 bg-amber-50/60 hover:bg-amber-100/60 transition-colors rounded-lg group cursor-pointer"
+                    >
                       <Package size={16} className="text-amber-600 flex-shrink-0" strokeWidth={1.5} />
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs font-semibold line-clamp-1 text-neutral-800">{item.message || 'Low Stock Product'}</p>
+                        <p className="text-xs font-semibold line-clamp-1 text-neutral-800 group-hover:text-amber-900">{item.message || 'Low Stock Product'}</p>
                         <p className="text-[10px] text-brand-grey">Warehouse: {item.warehouseId || 'Main'}</p>
                       </div>
                       <span className="flex-shrink-0 text-[11px] font-bold bg-red-100 text-red-600 px-2 py-0.5 rounded-full">
                         {item.quantity || 0} left
                       </span>
-                    </div>
+                    </Link>
                   ))
                 )}
               </div>
             </div>
 
-            <Link to="/products" className="mt-4 text-xs text-brand-gold hover:underline flex items-center gap-1 font-semibold" id="low-stock-manage">
+            <Link to="/warehouses" className="mt-4 text-xs text-brand-gold hover:underline flex items-center gap-1 font-semibold" id="low-stock-manage">
               Manage Stock <ArrowRight size={12} />
             </Link>
           </div>

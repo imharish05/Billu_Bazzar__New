@@ -36,6 +36,9 @@ const Order = sequelize.define('Order', {
   inventoryProcessed: { type: DataTypes.BOOLEAN, defaultValue: false, allowNull: false },
   subtotal: { type: DataTypes.DECIMAL(12, 2), allowNull: false },
   discountAmount: { type: DataTypes.DECIMAL(12, 2), defaultValue: 0 },
+  couponDiscount: { type: DataTypes.DECIMAL(12, 2), defaultValue: 0 },
+  loyaltyDiscount: { type: DataTypes.DECIMAL(12, 2), defaultValue: 0 },
+  redeemedPoints: { type: DataTypes.INTEGER, defaultValue: 0 },
   shippingAmount: { type: DataTypes.DECIMAL(12, 2), defaultValue: 0 },
   taxAmount: { type: DataTypes.DECIMAL(12, 2), defaultValue: 0 },
   taxRate: { type: DataTypes.DECIMAL(5, 2), defaultValue: 0 },
@@ -49,6 +52,8 @@ const Order = sequelize.define('Order', {
   estimatedDelivery: { type: DataTypes.DATE },
   deliveredAt: { type: DataTypes.DATE },
   isFraudFlagged: { type: DataTypes.BOOLEAN, defaultValue: false },
+  isGiftWrap: { type: DataTypes.BOOLEAN, defaultValue: false },
+  giftWrapFee: { type: DataTypes.DECIMAL(10, 2), defaultValue: 0 },
   invoicePath: { type: DataTypes.STRING(500) },
   statusTimeline: { type: DataTypes.JSON, defaultValue: {} },
 }, {

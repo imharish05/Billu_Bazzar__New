@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Check, Circle, MapPin, Truck, CreditCard, FileText, Phone, MessageSquare, RefreshCw, XCircle, Star, X, AlertTriangle, RotateCcw, Video, Upload, ShieldAlert, ShieldCheck, Play, ExternalLink, Clock, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Check, Circle, MapPin, Truck, CreditCard, FileText, Phone, MessageSquare, RefreshCw, XCircle, Star, X, AlertTriangle, RotateCcw, Video, Upload, ShieldAlert, ShieldCheck, Play, ExternalLink, Clock, CheckCircle, Trash2, Film } from 'lucide-react';
 import { useSelector, useDispatch } from 'react-redux';
 import { fetchOrderById, cancelCustomerOrder } from '../../redux/slices/ordersSlice';
+import { fetchProfile } from '../../redux/slices/authSlice';
 import { createReview } from '../../redux/slices/reviewsSlice';
 import { createReturnRequest } from '../../redux/slices/returnsSlice';
 import { formatPrice, formatOrderAmount } from '../../utils/currency';
@@ -113,9 +114,8 @@ const OrderDetailPage = () => {
   const [returnQty, setReturnQty] = useState(1);
   const [returnReason, setReturnReason] = useState('DAMAGED_PRODUCT');
   const [returnReasonDetails, setReturnReasonDetails] = useState('');
-  const [returnVideoType, setReturnVideoType] = useState('file'); // 'file' | 'link'
   const [returnVideoFile, setReturnVideoFile] = useState(null);
-  const [returnVideoUrl, setReturnVideoUrl] = useState('');
+  const [videoPreviewUrl, setVideoPreviewUrl] = useState(null);
   const [returnImageFiles, setReturnImageFiles] = useState([]);
   const [bankAccountName, setBankAccountName] = useState('');
   const [bankAccountNumber, setBankAccountNumber] = useState('');
@@ -123,6 +123,19 @@ const OrderDetailPage = () => {
   const [bankUpi, setBankUpi] = useState('');
   const [isSubmittingReturn, setIsSubmittingReturn] = useState(false);
   const [activeVideoModal, setActiveVideoModal] = useState(null);
+
+  // Manage live video file preview URL with proper memory cleanup
+  useEffect(() => {
+    if (returnVideoFile) {
+      const objUrl = URL.createObjectURL(returnVideoFile);
+      setVideoPreviewUrl(objUrl);
+      return () => {
+        URL.revokeObjectURL(objUrl);
+      };
+    } else {
+      setVideoPreviewUrl(null);
+    }
+  }, [returnVideoFile]);
 
   const orderReturnRequests = (() => {
     const list = [];
@@ -156,9 +169,7 @@ const OrderDetailPage = () => {
     setReturnQty(1);
     setReturnReason('DAMAGED_PRODUCT');
     setReturnReasonDetails('');
-    setReturnVideoType('file');
     setReturnVideoFile(null);
-    setReturnVideoUrl('');
     setReturnImageFiles([]);
     setBankAccountName('');
     setBankAccountNumber('');
@@ -171,12 +182,8 @@ const OrderDetailPage = () => {
     e.preventDefault();
     if (!targetReturnItem) return;
 
-    if (returnVideoType === 'file' && !returnVideoFile) {
+    if (!returnVideoFile) {
       toast.error('Compulsory parcel opening/unboxing video file is required.');
-      return;
-    }
-    if (returnVideoType === 'link' && !returnVideoUrl.trim()) {
-      toast.error('Compulsory unboxing video link (Google Drive/YouTube/Cloud) is required.');
       return;
     }
 
@@ -190,11 +197,7 @@ const OrderDetailPage = () => {
       if (returnReasonDetails.trim()) {
         formData.append('reasonDetails', returnReasonDetails.trim());
       }
-      if (returnVideoType === 'file' && returnVideoFile) {
-        formData.append('video', returnVideoFile);
-      } else if (returnVideoType === 'link' && returnVideoUrl.trim()) {
-        formData.append('unboxingVideoUrl', returnVideoUrl.trim());
-      }
+      formData.append('video', returnVideoFile);
 
       if (returnImageFiles && returnImageFiles.length > 0) {
         for (let i = 0; i < returnImageFiles.length; i++) {
@@ -258,67 +261,44 @@ const OrderDetailPage = () => {
     }
   }, [id, dispatch]);
 
-  const executeCancelOrder = async () => {
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState('Ordered by mistake');
+  const [cancelReasonDetails, setCancelReasonDetails] = useState('');
+
+  const handleOpenCancelModal = () => {
+    setCancelReason('Ordered by mistake');
+    setCancelReasonDetails('');
+    setCancelModalOpen(true);
+  };
+  const handleCancelOrder = handleOpenCancelModal;
+
+  const handleCancelSubmit = async (e) => {
+    e.preventDefault();
+    const finalReason = cancelReason === 'Other'
+      ? (cancelReasonDetails.trim() || 'Other reason')
+      : (cancelReasonDetails.trim() ? `${cancelReason} - ${cancelReasonDetails.trim()}` : cancelReason);
+
+    if (!finalReason || finalReason.trim().length < 3) {
+      toast.error('Please select or specify a valid reason for cancellation.');
+      return;
+    }
+
     setIsCancelling(true);
     try {
-      const result = await dispatch(cancelCustomerOrder(id));
+      const result = await dispatch(cancelCustomerOrder({ id, reason: finalReason }));
       if (cancelCustomerOrder.fulfilled.match(result)) {
         toast.success('Your order has been cancelled successfully.');
+        setCancelModalOpen(false);
+        dispatch(fetchOrderById(id));
+        dispatch(fetchProfile());
       } else {
         toast.error(result.payload || 'Failed to cancel order.');
       }
     } catch (err) {
-      toast.error('An unexpected error occurred.');
+      toast.error('An unexpected error occurred while cancelling order.');
     } finally {
       setIsCancelling(false);
     }
-  };
-
-  const handleCancelOrder = () => {
-    toast(
-      (t) => (
-        <div className="flex flex-col items-center text-center gap-3 py-2 px-1 min-w-[280px]">
-          <div className="p-2.5 bg-red-50 text-red-600 rounded-full shrink-0">
-            <AlertTriangle size={22} />
-          </div>
-          <div>
-            <p className="text-base font-semibold text-neutral-900">Cancel Order?</p>
-            <p className="text-xs text-neutral-500 mt-1 leading-relaxed max-w-xs">
-              Are you sure you want to cancel this order? This action cannot be undone.
-            </p>
-          </div>
-          <div className="flex items-center justify-center gap-3 pt-2 border-t border-neutral-100 w-full">
-            <button
-              onClick={() => toast.dismiss(t.id)}
-              className="flex-1 px-3 py-2 text-xs font-semibold text-neutral-600 hover:text-neutral-900 bg-neutral-100 hover:bg-neutral-200 rounded-md transition-colors"
-            >
-              Keep Order
-            </button>
-            <button
-              onClick={() => {
-                toast.dismiss(t.id);
-                executeCancelOrder();
-              }}
-              className="flex-1 px-3 py-2 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 rounded-md transition-colors shadow-sm"
-            >
-              Yes, Cancel Order
-            </button>
-          </div>
-        </div>
-      ),
-      {
-        duration: 8000,
-        position: 'top-center',
-        id: 'confirm-cancel-order',
-        style: {
-          background: '#ffffff',
-          borderRadius: '12px',
-          border: '1px solid #e5e7eb',
-          boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
-          maxWidth: '400px',
-        },
-      }
-    );
   };
 
   const handleDownloadInvoice = () => {
@@ -497,10 +477,33 @@ const OrderDetailPage = () => {
   const subtotal = parseFloat(order.subtotal || 0);
   const taxAmount = parseFloat(order.taxAmount || 0);
   const shippingAmount = parseFloat(order.shippingAmount || 0);
-  const discountAmount = parseFloat(order.discountAmount || 0);
-  const totalAmount = parseFloat(order.totalAmount || 0);
+  const totalDiscount = parseFloat(order.discountAmount || 0);
+  const explicitCouponDisc = parseFloat(order.couponDiscount || 0);
+  const explicitLoyaltyDisc = parseFloat(order.loyaltyDiscount || 0);
 
-  const canCancel = ['PENDING', 'PENDING_PAYMENT', 'CONFIRMED'].includes(order.status);
+  let resolvedCouponDiscount = explicitCouponDisc;
+  let resolvedLoyaltyDiscount = explicitLoyaltyDisc;
+
+  if (resolvedCouponDiscount === 0 && resolvedLoyaltyDiscount === 0 && totalDiscount > 0) {
+    if (order.couponId || order.coupon) {
+      resolvedCouponDiscount = totalDiscount;
+    } else {
+      resolvedLoyaltyDiscount = totalDiscount;
+    }
+  }
+
+  const explicitGw = parseFloat(order.giftWrapFee || order.giftWrapPrice || 0);
+  const calculatedGwDiff = Math.round(parseFloat(order.totalAmount || 0) - (subtotal + shippingAmount - totalDiscount));
+  const giftWrapFee = explicitGw > 0 ? explicitGw : (calculatedGwDiff > 0 ? calculatedGwDiff : 0);
+  const totalAmount = parseFloat(order.totalAmount || (subtotal + shippingAmount + giftWrapFee - totalDiscount));
+
+  // 24-hour cancellation window calculation
+  const orderPlacedTime = new Date(order.createdAt).getTime();
+  const hoursSincePlaced = (Date.now() - orderPlacedTime) / (1000 * 60 * 60);
+  const isWithin24Hours = hoursSincePlaced <= 24;
+  const canCancel = ['PENDING', 'PENDING_PAYMENT', 'PAID', 'CONFIRMED'].includes(order.status) && isWithin24Hours;
+  const hoursLeft = Math.max(0, Math.floor(24 - hoursSincePlaced));
+  const minsLeft = Math.max(0, Math.floor(((24 - hoursSincePlaced) % 1) * 60));
 
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
@@ -509,26 +512,59 @@ const OrderDetailPage = () => {
       </Link>
 
       {/* Main Order Metadata Header */}
-      <div className="bg-white shadow-sm p-4 sm:p-6 mb-5 border border-neutral-100 rounded-lg flex justify-between items-start flex-wrap gap-4">
-        <div>
-          <div className="flex items-center gap-3 mb-1.5 flex-wrap">
-            <h1 className="font-playfair text-xl font-bold text-neutral-900">Order {order.orderNumber}</h1>
-            <span className={`text-xs font-semibold px-3 py-1 rounded-full ${STATUS_COLORS[order.status] || 'bg-gray-100'}`}>
-              {STATUS_LABELS[order.status] || order.status}
-            </span>
+      <div className="bg-white shadow-sm p-4 sm:p-6 mb-5 border border-neutral-100 rounded-lg">
+        <div className="flex justify-between items-start flex-wrap gap-4">
+          <div>
+            <div className="flex items-center gap-3 mb-1.5 flex-wrap">
+              <h1 className="font-playfair text-xl font-bold text-neutral-900">Order {order.orderNumber}</h1>
+              <span className={`text-xs font-semibold px-3 py-1 rounded-full ${STATUS_COLORS[order.status] || 'bg-gray-100'}`}>
+                {STATUS_LABELS[order.status] || order.status}
+              </span>
+            </div>
+            <p className="text-xs text-brand-grey">
+              Placed on {new Date(order.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+            </p>
           </div>
-          <p className="text-xs text-brand-grey">
-            Placed on {new Date(order.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-          </p>
+
+          <div className="flex items-center gap-2.5 flex-wrap">
+            {canCancel && (
+              <button
+                onClick={handleOpenCancelModal}
+                disabled={isCancelling}
+                className="group inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold uppercase tracking-wider text-red-600 bg-red-50/70 border border-red-200 rounded-lg hover:bg-red-600 hover:text-white hover:border-red-600 transition-all duration-200 shadow-2xs cursor-pointer active:scale-95 disabled:opacity-50"
+                id="btn-cancel-order"
+                title={`Cancel order (Window closes in ${hoursLeft}h ${minsLeft}m)`}
+              >
+                {isCancelling ? (
+                  <RefreshCw size={13} className="animate-spin text-red-600 group-hover:text-white" />
+                ) : (
+                  <XCircle size={14} />
+                )}
+                <span>{isCancelling ? 'Cancelling…' : 'Cancel Order'}</span>
+              </button>
+            )}
+
+            <button 
+              onClick={handleDownloadInvoice}
+              className="group inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold uppercase tracking-wider text-neutral-700 bg-white border border-neutral-300 rounded-lg shadow-sm hover:border-brand-gold hover:text-brand-gold hover:bg-amber-50/50 hover:shadow active:scale-95 transition-all duration-200 cursor-pointer"
+              id="btn-download-invoice"
+            >
+              <FileText size={14} className="text-neutral-500 group-hover:text-brand-gold transition-colors" />
+              <span>Download Invoice</span>
+            </button>
+          </div>
         </div>
-        <button 
-          onClick={handleDownloadInvoice}
-          className="group inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold uppercase tracking-wider text-neutral-700 bg-white border border-neutral-300 rounded-lg shadow-sm hover:border-brand-gold hover:text-brand-gold hover:bg-amber-50/50 hover:shadow active:scale-95 transition-all duration-200 cursor-pointer"
-          id="btn-download-invoice"
-        >
-          <FileText size={14} className="text-neutral-500 group-hover:text-brand-gold transition-colors" />
-          <span>Download Invoice</span>
-        </button>
+
+        {canCancel && (
+          <div className="mt-4 pt-3 border-t border-neutral-100 flex items-center justify-between text-xs text-amber-900 bg-amber-50/60 p-2.5 rounded-md border border-amber-200/50">
+            <div className="flex items-center gap-2">
+              <AlertTriangle size={14} className="text-amber-600 shrink-0" />
+              <span>
+                <strong>24-Hour Cancellation Window:</strong> You can cancel this order within 24 hours of placement ({hoursLeft}h {minsLeft}m remaining).
+              </span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Tracking timeline */}
@@ -686,8 +722,14 @@ const OrderDetailPage = () => {
               </div>
               {order.razorpay_payment_id && (
                 <div className="mt-2 pt-2 border-t border-neutral-200/60">
-                  <span className="text-[11px] text-neutral-400 block uppercase tracking-wider font-semibold">Razorpay Transaction ID</span>
+                  <span className="text-[11px] text-neutral-400 block uppercase tracking-wider font-semibold">Payment Transaction ID</span>
                   <span className="text-sm font-mono font-medium text-brand-gold select-all">{order.razorpay_payment_id}</span>
+                </div>
+              )}
+              {order.statusTimeline?.refundGatewayRef && (
+                <div className="mt-2 pt-2 border-t border-neutral-200/60">
+                  <span className="text-[11px] text-emerald-700 block uppercase tracking-wider font-bold">Refund Reference ID</span>
+                  <span className="text-sm font-mono font-bold text-emerald-800 select-all">{order.statusTimeline.refundGatewayRef}</span>
                 </div>
               )}
             </div>
@@ -743,20 +785,13 @@ const OrderDetailPage = () => {
                   {order.status === 'DELIVERED' && (
                     <div className="flex items-center gap-2 flex-wrap justify-end mt-1">
                       {hasActiveReturn ? (
-                        <div className="flex flex-col items-end gap-1">
-                          <Link
-                            to={`/account/returns/${itemReturn?.id || itemReturn?.returnNumber || item.id}`}
-                            className="px-3 py-1 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 text-xs font-semibold rounded-lg transition-colors inline-flex items-center gap-1.5 shadow-xs"
-                          >
-                            <RotateCcw size={12} className="text-brand-gold" />
-                            <span>Track Return</span>
-                          </Link>
-                          {/* {itemReturn?.pickupDate && (
-                            <span className="text-[10px] text-purple-700 font-semibold bg-purple-50 px-1.5 py-0.5 rounded border border-purple-200">
-                              Pickup: {new Date(itemReturn.pickupDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
-                            </span>
-                          )} */}
-                        </div>
+                        <Link
+                          to={`/account/returns/${itemReturn?.id || itemReturn?.returnNumber || item.id}`}
+                          className="px-3 py-1 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 text-xs font-semibold rounded-lg transition-colors inline-flex items-center gap-1.5 shadow-xs"
+                        >
+                          <RotateCcw size={12} className="text-brand-gold" />
+                          <span>Track Return</span>
+                        </Link>
                       ) : (
                         <button
                           type="button"
@@ -787,16 +822,28 @@ const OrderDetailPage = () => {
             <span>Subtotal</span>
             <span>{formatOrderAmount(subtotal, currency)}</span>
           </div>
-          {discountAmount > 0 && (
+          {resolvedCouponDiscount > 0 && (
             <div className="flex justify-between text-green-600">
-              <span>Discount (Coupon / Loyalty)</span>
-              <span>-{formatOrderAmount(discountAmount, currency)}</span>
+              <span>Coupon Discount{order.coupon?.code ? ` (${order.coupon.code})` : ''}</span>
+              <span>-{formatOrderAmount(resolvedCouponDiscount, currency)}</span>
+            </div>
+          )}
+          {resolvedLoyaltyDiscount > 0 && (
+            <div className="flex justify-between text-green-600">
+              <span>Loyalty Points Redeemed{order.redeemedPoints ? ` (${order.redeemedPoints} pts)` : ''}</span>
+              <span>-{formatOrderAmount(resolvedLoyaltyDiscount, currency)}</span>
             </div>
           )}
           <div className="flex justify-between">
             <span>Shipping Fee</span>
             <span>{shippingAmount === 0 ? 'FREE' : formatOrderAmount(shippingAmount, currency)}</span>
           </div>
+          {giftWrapFee > 0 && (
+            <div className="flex justify-between">
+              <span>Gift Wrap Packaging</span>
+              <span>{formatOrderAmount(giftWrapFee, currency)}</span>
+            </div>
+          )}
           <div className="pt-4 border-t border-neutral-200">
             <div className="flex justify-between items-center text-neutral-900 font-bold text-base">
               <span>Total Value</span>
@@ -816,12 +863,13 @@ const OrderDetailPage = () => {
         <div className="flex gap-3">
           {canCancel && (
             <button
-              onClick={handleCancelOrder}
+              onClick={handleOpenCancelModal}
               disabled={isCancelling}
-              className="px-4 py-2 border border-red-200 text-red-600 text-xs font-semibold rounded hover:bg-red-50 transition-colors disabled:opacity-50"
-              id="btn-cancel-order"
+              className="px-4 py-2 border border-red-200 text-red-600 text-xs font-semibold rounded hover:bg-red-50 transition-colors disabled:opacity-50 inline-flex items-center gap-1.5"
+              id="btn-cancel-order-bottom"
             >
-              {isCancelling ? 'Cancelling...' : 'Cancel Order'}
+              <XCircle size={14} />
+              <span>{isCancelling ? 'Cancelling...' : 'Cancel Order'}</span>
             </button>
           )}
           <a
@@ -929,36 +977,39 @@ const OrderDetailPage = () => {
       {/* Return Item Request Modal Form */}
       {returnModalOpen && targetReturnItem && (
         <div
-          className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 overflow-y-auto"
+          className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto"
           onClick={() => setReturnModalOpen(false)}
         >
           <div
-            className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl relative my-8 max-h-[90vh] overflow-y-auto"
+            className="bg-white rounded-2xl sm:rounded-3xl max-w-lg w-full p-4 sm:p-6 shadow-2xl relative my-auto max-h-[92vh] overflow-y-auto border border-neutral-100"
             onClick={(e) => e.stopPropagation()}
           >
+            {/* Modal Close Button */}
             <button
               onClick={() => setReturnModalOpen(false)}
-              className="absolute top-4 right-4 p-2 text-neutral-400 hover:text-neutral-700 transition-colors rounded-full"
+              className="absolute top-3.5 right-3.5 sm:top-4 sm:right-4 p-1.5 text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100 transition-colors rounded-full"
+              aria-label="Close return modal"
             >
               <X size={18} />
             </button>
 
-            <div className="flex items-center gap-2 mb-1">
-              <div className="p-2 bg-amber-50 text-brand-gold rounded-lg">
-                <RotateCcw size={18} />
+            {/* Modal Header */}
+            <div className="flex items-start gap-2.5 sm:gap-3 mb-3 pr-8">
+              <div className="p-2 sm:p-2.5 bg-amber-50 text-brand-gold rounded-xl shrink-0">
+                <RotateCcw size={20} />
               </div>
-              <div>
-                <h3 className="font-playfair text-xl font-bold text-neutral-900">
+              <div className="min-w-0">
+                <h3 className="font-playfair text-lg sm:text-xl font-bold text-neutral-900 leading-tight">
                   Request Item Return
                 </h3>
-                <p className="text-xs text-neutral-500">
-                  Order #{order.orderNumber || order.id} · Individual Product Return
+                <p className="text-[11px] sm:text-xs text-neutral-500 mt-0.5 truncate">
+                  Order #{order.orderNumber || order.id} · Individual Item Return
                 </p>
               </div>
             </div>
 
             {/* Target Item Snapshot */}
-            <div className="my-4 p-3 bg-neutral-50 rounded-xl border border-neutral-100 flex items-center gap-3">
+            <div className="my-3 p-2.5 sm:p-3 bg-neutral-50 rounded-xl border border-neutral-200/70 flex items-center gap-3">
               <img
                 src={
                   getImageUrl(
@@ -971,7 +1022,7 @@ const OrderDetailPage = () => {
                   ) || getPlaceholderSvg(targetReturnItem.productName || targetReturnItem.name || 'Product')
                 }
                 alt={targetReturnItem.productName || targetReturnItem.name}
-                className="w-12 h-14 object-cover rounded border border-neutral-200 shrink-0 bg-white"
+                className="w-12 h-14 object-cover rounded-lg border border-neutral-200 shrink-0 bg-white"
                 onError={(e) => {
                   e.target.onerror = null;
                   e.target.src = getPlaceholderSvg(targetReturnItem.productName || targetReturnItem.name || 'Product');
@@ -982,22 +1033,22 @@ const OrderDetailPage = () => {
                   {targetReturnItem.productName || targetReturnItem.name}
                 </p>
                 <p className="text-[11px] text-neutral-500 mt-0.5">
-                  Ordered Quantity: {targetReturnItem.quantity} · Unit Price: {formatOrderAmount(targetReturnItem.unitPrice || targetReturnItem.price, currency)}
+                  Ordered Qty: <span className="font-semibold text-neutral-800">{targetReturnItem.quantity}</span> · Price: <span className="font-semibold text-neutral-800">{formatOrderAmount(targetReturnItem.unitPrice || targetReturnItem.price, currency)}</span>
                 </p>
               </div>
             </div>
 
-            <form onSubmit={handleReturnSubmit} className="space-y-4 text-left">
+            <form onSubmit={handleReturnSubmit} className="space-y-3.5 text-left">
               {/* Return Quantity */}
               {targetReturnItem.quantity > 1 && (
                 <div>
-                  <label className="block text-xs font-semibold text-neutral-700 mb-1 uppercase tracking-wider">
+                  <label className="block text-[11px] sm:text-xs font-semibold text-neutral-700 mb-1 uppercase tracking-wider">
                     Quantity to Return *
                   </label>
                   <select
                     value={returnQty}
                     onChange={(e) => setReturnQty(parseInt(e.target.value, 10))}
-                    className="w-full px-3 py-2 border border-neutral-200 rounded text-sm focus:border-brand-gold focus:outline-none"
+                    className="w-full px-3 py-2 border border-neutral-200 rounded-lg text-xs sm:text-sm focus:border-brand-gold focus:outline-none bg-white"
                     required
                   >
                     {Array.from({ length: targetReturnItem.quantity }, (_, i) => i + 1).map((qty) => (
@@ -1011,13 +1062,13 @@ const OrderDetailPage = () => {
 
               {/* Reason Dropdown */}
               <div>
-                <label className="block text-xs font-semibold text-neutral-700 mb-1 uppercase tracking-wider">
+                <label className="block text-[11px] sm:text-xs font-semibold text-neutral-700 mb-1 uppercase tracking-wider">
                   Reason for Return *
                 </label>
                 <select
                   value={returnReason}
                   onChange={(e) => setReturnReason(e.target.value)}
-                  className="w-full px-3 py-2 border border-neutral-200 rounded text-sm focus:border-brand-gold focus:outline-none"
+                  className="w-full px-3 py-2 border border-neutral-200 rounded-lg text-xs sm:text-sm focus:border-brand-gold focus:outline-none bg-white"
                   required
                 >
                   <option value="DAMAGED_PRODUCT">Damaged / Broken item upon delivery</option>
@@ -1031,7 +1082,7 @@ const OrderDetailPage = () => {
 
               {/* Reason Details */}
               <div>
-                <label className="block text-xs font-semibold text-neutral-700 mb-1 uppercase tracking-wider">
+                <label className="block text-[11px] sm:text-xs font-semibold text-neutral-700 mb-1 uppercase tracking-wider">
                   Description of Issue (Optional)
                 </label>
                 <textarea
@@ -1039,107 +1090,101 @@ const OrderDetailPage = () => {
                   value={returnReasonDetails}
                   onChange={(e) => setReturnReasonDetails(e.target.value)}
                   placeholder="Please describe the issue in detail..."
-                  className="w-full px-3 py-2 border border-neutral-200 rounded text-sm focus:border-brand-gold focus:outline-none resize-none"
+                  className="w-full px-3 py-2 border border-neutral-200 rounded-lg text-xs sm:text-sm focus:border-brand-gold focus:outline-none resize-none bg-white"
                 />
               </div>
 
-              {/* COMPULSORY UNBOXING VIDEO SECTION */}
-              <div className="p-4 bg-amber-500/10 border-2 border-brand-gold/50 rounded-xl space-y-3">
-                <div className="flex items-start gap-2.5">
-                  <ShieldAlert className="text-brand-gold w-5 h-5 shrink-0 mt-0.5" />
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="bg-red-500 text-white text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded">
-                        Compulsory
-                      </span>
-                      <h4 className="text-xs font-bold text-neutral-900">
-                        Continuous Parcel Unboxing Video Proof *
-                      </h4>
-                    </div>
+              {/* COMPULSORY UNBOXING VIDEO SECTION (Fully Responsive) */}
+              <div className="p-3.5 sm:p-4 bg-amber-500/10 border-2 border-brand-gold/40 rounded-xl sm:rounded-2xl space-y-3">
+                <div className="flex items-start gap-2.5 sm:gap-3">
+                  <div className="p-1.5 bg-brand-gold/20 text-brand-gold rounded-lg shrink-0 mt-0.5">
+                    <ShieldAlert size={18} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h4 className="text-xs sm:text-sm font-bold text-neutral-900 font-playfair tracking-wide leading-snug">
+                      Unboxing Video Proof <span className="text-red-500 font-bold">*</span>
+                    </h4>
                     <p className="text-[11px] text-neutral-600 mt-1 leading-relaxed">
-                      As per Billu Bazaar return policy, an uncut 360° parcel opening video from seal breaking to product inspection is strictly required for verification.
+                      As per our return policy, a continuous parcel opening video from seal breaking to product inspection is strictly required.
                     </p>
                   </div>
                 </div>
 
-                {/* Video Option Selector */}
-                <div className="flex gap-2 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => setReturnVideoType('file')}
-                    className={`flex-1 py-1.5 text-xs font-semibold rounded-lg border transition-all ${
-                      returnVideoType === 'file'
-                        ? 'bg-neutral-900 text-white border-neutral-900 shadow-xs'
-                        : 'bg-white text-neutral-600 border-neutral-200 hover:bg-neutral-50'
-                    }`}
-                  >
-                    Upload Video File
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setReturnVideoType('link')}
-                    className={`flex-1 py-1.5 text-xs font-semibold rounded-lg border transition-all ${
-                      returnVideoType === 'link'
-                        ? 'bg-neutral-900 text-white border-neutral-900 shadow-xs'
-                        : 'bg-white text-neutral-600 border-neutral-200 hover:bg-neutral-50'
-                    }`}
-                  >
-                    Provide Cloud Video Link
-                  </button>
-                </div>
-
-                {returnVideoType === 'file' ? (
+                {/* Video Upload Dropzone or Live Video Preview */}
+                {!returnVideoFile ? (
                   <div>
-                    <label className="flex flex-col items-center justify-center border-2 border-dashed border-neutral-300 hover:border-brand-gold bg-white p-4 rounded-lg cursor-pointer transition-colors text-center">
-                      <Upload size={20} className="text-brand-gold mb-1" />
+                    <label className="flex flex-col items-center justify-center border-2 border-dashed border-neutral-300 hover:border-brand-gold bg-white p-4 sm:p-5 rounded-xl cursor-pointer transition-all text-center group shadow-2xs hover:shadow-xs">
+                      <div className="w-10 h-10 rounded-full bg-amber-50 group-hover:bg-amber-100 flex items-center justify-center text-brand-gold mb-2 transition-colors">
+                        <Upload size={18} />
+                      </div>
                       <span className="text-xs font-semibold text-neutral-800">
-                        {returnVideoFile ? returnVideoFile.name : 'Click to select unboxing video file'}
+                        Click to select unboxing video file
                       </span>
-                      <span className="text-[10px] text-neutral-400 mt-0.5">
+                      <span className="text-[10px] text-neutral-400 mt-0.5 font-medium">
                         MP4, WEBM, MOV up to 50MB
                       </span>
                       <input
                         type="file"
                         accept="video/*"
-                        onChange={(e) => setReturnVideoFile(e.target.files?.[0] || null)}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            if (file.size > 50 * 1024 * 1024) {
+                              toast.error('Video file size exceeds 50MB limit. Please upload a smaller video.');
+                              return;
+                            }
+                            setReturnVideoFile(file);
+                          }
+                        }}
                         className="hidden"
                       />
                     </label>
                   </div>
                 ) : (
-                  <div>
-                    <input
-                      type="url"
-                      value={returnVideoUrl}
-                      onChange={(e) => setReturnVideoUrl(e.target.value)}
-                      placeholder="e.g. https://drive.google.com/file/d/... or YouTube link"
-                      className="w-full px-3 py-2 border border-neutral-200 rounded text-sm bg-white focus:border-brand-gold focus:outline-none"
-                    />
-                    <p className="text-[10px] text-neutral-500 mt-1">
-                      Ensure link permissions are set to "Anyone with the link can view".
-                    </p>
+                  <div className="bg-white rounded-xl border border-neutral-200 p-3 sm:p-3.5 space-y-2.5 shadow-2xs">
+                    <div className="flex items-center justify-between gap-2 pb-2 border-b border-neutral-100">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-7 h-7 rounded bg-amber-50 text-brand-gold flex items-center justify-center shrink-0">
+                          <Film size={15} />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-neutral-900 truncate max-w-[140px] sm:max-w-[260px]">
+                            {returnVideoFile.name}
+                          </p>
+                          <p className="text-[10px] text-neutral-500 font-mono">
+                            {(returnVideoFile.size / (1024 * 1024)).toFixed(2)} MB
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setReturnVideoFile(null)}
+                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 px-2.5 py-1 rounded-lg transition-colors cursor-pointer shrink-0"
+                        title="Remove video file"
+                      >
+                        <Trash2 size={12} /> Remove
+                      </button>
+                    </div>
+
+                    {/* Video Player Preview */}
+                    {videoPreviewUrl && (
+                      <div className="relative rounded-lg overflow-hidden bg-black aspect-video max-h-52 sm:max-h-60 flex items-center justify-center shadow-inner">
+                        <video
+                          src={videoPreviewUrl}
+                          controls
+                          playsInline
+                          className="w-full h-full object-contain"
+                        />
+                      </div>
+                    )}
                   </div>
                 )}
-              </div>
-
-              {/* Supplementary Photos */}
-              <div>
-                <label className="block text-xs font-semibold text-neutral-700 mb-1 uppercase tracking-wider">
-                  Supplementary Photos (Optional)
-                </label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  onChange={(e) => setReturnImageFiles(e.target.files ? Array.from(e.target.files) : [])}
-                  className="w-full text-xs text-neutral-500 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-neutral-100 file:text-neutral-700 hover:file:bg-neutral-200 cursor-pointer"
-                />
               </div>
 
               {/* Bank Details for COD Refunds */}
               {(order.paymentMethod?.toLowerCase().includes('cod') ||
                 order.paymentMethod?.toLowerCase().includes('cash')) && (
-                <div className="p-3.5 bg-neutral-50 rounded-xl border border-neutral-200/80 space-y-2.5">
+                <div className="p-3 sm:p-3.5 bg-neutral-50 rounded-xl border border-neutral-200/80 space-y-2">
                   <h4 className="text-xs font-bold text-neutral-900 uppercase tracking-wider">
                     Bank / UPI Details for Refund
                   </h4>
@@ -1152,48 +1197,166 @@ const OrderDetailPage = () => {
                       placeholder="Account Holder Name"
                       value={bankAccountName}
                       onChange={(e) => setBankAccountName(e.target.value)}
-                      className="px-3 py-1.5 border border-neutral-200 rounded text-xs focus:border-brand-gold focus:outline-none"
+                      className="px-3 py-2 border border-neutral-200 rounded-lg text-xs focus:border-brand-gold focus:outline-none bg-white"
                     />
                     <input
                       type="text"
                       placeholder="Account Number"
                       value={bankAccountNumber}
                       onChange={(e) => setBankAccountNumber(e.target.value)}
-                      className="px-3 py-1.5 border border-neutral-200 rounded text-xs focus:border-brand-gold focus:outline-none"
+                      className="px-3 py-2 border border-neutral-200 rounded-lg text-xs focus:border-brand-gold focus:outline-none bg-white"
                     />
                     <input
                       type="text"
                       placeholder="Bank IFSC Code"
                       value={bankIfsc}
                       onChange={(e) => setBankIfsc(e.target.value)}
-                      className="px-3 py-1.5 border border-neutral-200 rounded text-xs focus:border-brand-gold focus:outline-none"
+                      className="px-3 py-2 border border-neutral-200 rounded-lg text-xs focus:border-brand-gold focus:outline-none bg-white"
                     />
                     <input
                       type="text"
                       placeholder="UPI ID (e.g. name@upi)"
                       value={bankUpi}
                       onChange={(e) => setBankUpi(e.target.value)}
-                      className="px-3 py-1.5 border border-neutral-200 rounded text-xs focus:border-brand-gold focus:outline-none"
+                      className="px-3 py-2 border border-neutral-200 rounded-lg text-xs focus:border-brand-gold focus:outline-none bg-white"
                     />
                   </div>
                 </div>
               )}
 
-              <div className="flex justify-end gap-3 pt-3 border-t border-neutral-100">
+              {/* Modal Action Buttons */}
+              <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-3 pt-3 border-t border-neutral-100">
                 <button
                   type="button"
                   onClick={() => setReturnModalOpen(false)}
-                  className="px-4 py-2 border border-neutral-200 text-neutral-600 text-xs font-semibold rounded hover:bg-neutral-50"
+                  className="w-full sm:w-auto px-4 py-2.5 sm:py-2 border border-neutral-200 text-neutral-600 text-xs font-semibold rounded-lg hover:bg-neutral-50 text-center transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmittingReturn}
-                  className="btn-primary text-xs py-2 px-6 disabled:opacity-50 inline-flex items-center gap-1.5 shadow-xs"
+                  className="w-full sm:w-auto btn-primary text-xs py-2.5 sm:py-2 px-6 disabled:opacity-50 inline-flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
                 >
                   <RotateCcw size={14} />
                   {isSubmittingReturn ? 'Submitting Return...' : 'Submit Return Request'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Order Cancellation Modal ───────────────────────────────────────── */}
+      {cancelModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-fade-in">
+          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full p-4 sm:p-6 relative border border-neutral-100 max-h-[90vh] flex flex-col">
+            <button
+              onClick={() => !isCancelling && setCancelModalOpen(false)}
+              className="absolute top-4 right-4 text-neutral-400 hover:text-neutral-700 p-1 rounded-full hover:bg-neutral-100 transition-colors"
+              aria-label="Close modal"
+            >
+              <X size={18} />
+            </button>
+
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-50 text-red-600 flex items-center justify-center shrink-0">
+                <AlertTriangle size={20} />
+              </div>
+              <div>
+                <h3 className="font-playfair text-lg font-bold text-neutral-900 leading-tight">
+                  Cancel Order {order.orderNumber}
+                </h3>
+                <p className="text-xs text-neutral-500 mt-0.5">
+                  Please review the cancellation terms and select your reason.
+                </p>
+              </div>
+            </div>
+
+            {/* Policy Highlights Box
+            <div className="bg-amber-50/80 border border-amber-200/80 rounded-lg p-3 text-xs text-amber-950 space-y-1.5 mb-4">
+              <p className="font-semibold text-amber-900 flex items-center gap-1.5">
+                <span>📋 Cancellation & Refund Policies:</span>
+              </p>
+              <ul className="list-disc pl-4 space-y-1 text-[11px] text-amber-900/90 leading-relaxed">
+                <li>
+                  <strong>Same-Day / 24-Hour Free Cancellation:</strong> Orders can only be cancelled within 24 hours of placement (free of charge).
+                </li>
+                <li>
+                  <strong>Packed / Dispatched Orders:</strong> Once the order is packed or dispatched, cancellation is strictly not permitted.
+                </li>
+                <li>
+                  <strong>Refund Process:</strong> If you paid online, 100% full refund will be initiated to your original payment method automatically within <strong>5–7 business days</strong>.
+                </li>
+                <li>
+                  <strong>Promotional/Sale Items:</strong> Orders placed during special sales may have restricted cancellation windows.
+                </li>
+              </ul>
+            </div> */}
+
+            <form onSubmit={handleCancelSubmit} className="space-y-4 overflow-y-auto flex-1 pr-1">
+              {/* Reason Selection */}
+              <div>
+                <label className="block text-xs font-semibold text-neutral-800 mb-1.5 uppercase tracking-wider">
+                  Reason for Cancellation <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={cancelReason}
+                  onChange={(e) => setCancelReason(e.target.value)}
+                  className="w-full border border-neutral-200 rounded-lg px-3 py-2 text-xs bg-white focus:outline-none focus:border-brand-gold font-medium text-neutral-800"
+                  required
+                >
+                  <option value="Ordered by mistake">Ordered by mistake</option>
+                  <option value="Found a better price / alternative elsewhere">Found a better price / alternative elsewhere</option>
+                  <option value="Incorrect delivery address / contact details">Incorrect delivery address / contact details</option>
+                  <option value="Delivery time is too long / delayed">Delivery time is too long / delayed</option>
+                  <option value="Need to change variant, size, or color">Need to change variant, size, or color</option>
+                  <option value="Changed mind / No longer required">Changed mind / No longer required</option>
+                  <option value="Other">Other reason (specify below)</option>
+                </select>
+              </div>
+
+              {/* Reason Details */}
+              <div>
+                <label className="block text-xs font-semibold text-neutral-800 mb-1.5 uppercase tracking-wider">
+                  Additional Details {cancelReason === 'Other' ? <span className="text-red-500">*</span> : <span className="text-neutral-400 font-normal">(Optional)</span>}
+                </label>
+                <textarea
+                  rows={2}
+                  value={cancelReasonDetails}
+                  onChange={(e) => setCancelReasonDetails(e.target.value)}
+                  placeholder={cancelReason === 'Other' ? "Please explain why you wish to cancel this order..." : "Any additional notes for our support team..."}
+                  required={cancelReason === 'Other'}
+                  className="w-full border border-neutral-200 rounded-lg p-2.5 text-xs bg-white focus:outline-none focus:border-brand-gold"
+                />
+              </div>
+
+              <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-3 border-t border-neutral-100">
+                <button
+                  type="button"
+                  disabled={isCancelling}
+                  onClick={() => setCancelModalOpen(false)}
+                  className="w-full sm:w-auto px-4 py-2 border border-neutral-200 text-neutral-600 text-xs font-semibold rounded-lg hover:bg-neutral-50 transition-colors"
+                >
+                  Keep Order
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCancelling}
+                  className="w-full sm:w-auto px-5 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold rounded-lg shadow-sm transition-all inline-flex items-center justify-center gap-1.5 disabled:opacity-50"
+                  id="btn-confirm-cancel-order"
+                >
+                  {isCancelling ? (
+                    <>
+                      <RefreshCw size={13} className="animate-spin text-white" />
+                      <span>Cancelling Order…</span>
+                    </>
+                  ) : (
+                    <>
+                      <XCircle size={14} />
+                      <span>Confirm Cancellation</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>

@@ -256,7 +256,15 @@ const ReturnsAdminPage = () => {
 
       if (res.data?.success) {
         toast.success(res.data.message || 'Return status updated successfully.');
-        setSelectedReturn(res.data.returnRequest || null);
+        const updatedReturn = res.data.returnRequest;
+        if (updatedReturn) {
+          setSelectedReturn(updatedReturn);
+          setNewStatus(updatedReturn.status);
+          setAdminNotes(updatedReturn.adminNotes || '');
+          setRejectedReason(updatedReturn.rejectedReason || '');
+          setPickupDate(updatedReturn.pickupDate ? updatedReturn.pickupDate.slice(0, 10) : '');
+          setRefundTransactionRef(updatedReturn.refundTransactionRef || '');
+        }
         fetchReturns();
       }
     } catch (err) {
@@ -598,7 +606,7 @@ const ReturnsAdminPage = () => {
                             className="inline-flex items-center gap-1 px-3 py-1.5 bg-neutral-900 text-white hover:bg-brand-gold rounded-lg font-semibold text-xs transition-colors shadow-xs cursor-pointer"
                           >
                             <Eye size={13} />
-                            <span>Inspect & Update</span>
+                            <span>Details</span>
                           </button>
                         </td>
                       </tr>
@@ -633,26 +641,26 @@ const ReturnsAdminPage = () => {
               className="bg-white rounded-2xl max-w-5xl xl:max-w-6xl w-full shadow-2xl overflow-hidden my-6 border border-neutral-200 max-h-[92vh] flex flex-col"
               onClick={(e) => e.stopPropagation()}
             >
-              {/* Modal Top Bar */}
-              <div className="bg-neutral-900 text-white px-6 py-4 flex items-center justify-between shrink-0">
+              {/* Modal Top Bar (Clean white background matching Admin standards) */}
+              <div className="sticky top-0 bg-white z-20 px-6 py-4 border-b border-neutral-200 flex items-center justify-between flex-wrap gap-3 shrink-0 text-neutral-900">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 bg-white/10 rounded-lg text-brand-gold">
+                  <div className="p-2 bg-amber-50 text-brand-gold rounded-xl shrink-0">
                     <RotateCcw size={20} />
                   </div>
                   <div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="font-playfair text-lg font-bold">
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                      <h3 className="font-playfair text-lg sm:text-xl font-bold text-neutral-900">
                         Return Claim #{selectedReturn.returnNumber}
                       </h3>
                       <span
-                        className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+                        className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
                           (STATUS_CONFIG[selectedReturn.status] || STATUS_CONFIG.REQUESTED).color
                         }`}
                       >
                         {(STATUS_CONFIG[selectedReturn.status] || STATUS_CONFIG.REQUESTED).label}
                       </span>
                     </div>
-                    <p className="text-xs text-neutral-400 mt-0.5">
+                    <p className="text-xs text-neutral-500 mt-0.5">
                       Order #{selectedReturn.order?.orderNumber || selectedReturn.orderId} · Claim Date:{' '}
                       {new Date(selectedReturn.createdAt).toLocaleString('en-IN')}
                     </p>
@@ -662,7 +670,8 @@ const ReturnsAdminPage = () => {
                 <button
                   type="button"
                   onClick={() => setSelectedReturn(null)}
-                  className="p-1.5 text-neutral-400 hover:text-white rounded-full hover:bg-white/10 transition-colors cursor-pointer"
+                  className="p-1.5 text-neutral-400 hover:text-neutral-700 rounded-full hover:bg-neutral-100 transition-colors cursor-pointer"
+                  title="Close modal"
                 >
                   <X size={20} />
                 </button>
@@ -955,53 +964,96 @@ const ReturnsAdminPage = () => {
                 <div className="lg:col-span-5 space-y-4">
                   {/* Status Lifecycle Progression */}
                   <div className="p-4 bg-neutral-50 rounded-xl border border-neutral-200/80 space-y-3">
-                    <h5 className="font-bold text-neutral-800 uppercase tracking-wider text-[11px]">
-                      Status Lifecycle Progression
+                    <h5 className="font-bold text-neutral-800 uppercase tracking-wider text-[11px] flex items-center justify-between">
+                      <span>Status Lifecycle Progression</span>
+                      {selectedReturn.status === 'REJECTED' && (
+                        <span className="text-[10px] bg-red-100 text-red-800 font-bold px-2 py-0.5 rounded border border-red-200 uppercase">
+                          Claim Rejected
+                        </span>
+                      )}
                     </h5>
-                    <div className="space-y-2.5">
-                      {[
-                        { key: 'REQUESTED', label: '1. Claim Requested' },
-                        { key: 'APPROVED', label: '2. Return Approved' },
-                        { key: 'PICKUP_SCHEDULED', label: '3. Pickup Scheduled' },
-                        { key: 'PICKED_UP', label: '4. Picked Up by Courier' },
-                        { key: 'RECEIVED_AT_WAREHOUSE', label: '5. Received at Warehouse' },
-                        { key: 'REFUNDED', label: '6. Refund Completed' },
-                      ].map((step) => {
-                        const isReached =
-                          selectedReturn.statusTimeline &&
-                          selectedReturn.statusTimeline[step.key];
-                        const dateStr = isReached
-                          ? new Date(selectedReturn.statusTimeline[step.key]).toLocaleDateString(
-                              'en-IN',
-                              {
+                    <div className="space-y-3 relative pl-1">
+                      {(() => {
+                        const STEPS = [
+                          { key: 'REQUESTED', label: '1. Claim Requested' },
+                          { key: 'APPROVED', label: '2. Return Approved' },
+                          { key: 'PICKUP_SCHEDULED', label: '3. Pickup Scheduled' },
+                          { key: 'PICKED_UP', label: '4. Picked Up by Courier' },
+                          { key: 'RECEIVED_AT_WAREHOUSE', label: '5. Received at Warehouse' },
+                          { key: 'REFUNDED', label: '6. Refund Completed' },
+                        ];
+
+                        const STEP_INDEXES = {
+                          REQUESTED: 0,
+                          APPROVED: 1,
+                          PICKUP_SCHEDULED: 2,
+                          PICKED_UP: 3,
+                          RECEIVED_AT_WAREHOUSE: 4,
+                          REFUNDED: 5,
+                        };
+
+                        let timeline = selectedReturn.statusTimeline || {};
+                        if (typeof timeline === 'string') {
+                          try { timeline = JSON.parse(timeline); } catch (e) { timeline = {}; }
+                        }
+
+                        const currentStatusIdx = STEP_INDEXES[selectedReturn.status] ?? -1;
+
+                        return STEPS.map((step, idx) => {
+                          const isExplicitlyRecorded = Boolean(timeline[step.key]);
+                          const isReached = isExplicitlyRecorded || (currentStatusIdx >= idx && selectedReturn.status !== 'REJECTED');
+                          const isCurrent = selectedReturn.status === step.key;
+
+                          const rawDate = timeline[step.key] || (isCurrent ? selectedReturn.updatedAt : null);
+                          const dateStr = rawDate
+                            ? new Date(rawDate).toLocaleDateString('en-IN', {
                                 day: 'numeric',
                                 month: 'short',
                                 hour: '2-digit',
                                 minute: '2-digit',
-                              }
-                            )
-                          : null;
+                              })
+                            : isReached
+                            ? 'Completed'
+                            : null;
 
-                        return (
-                          <div key={step.key} className="flex items-center justify-between text-xs">
-                            <div className="flex items-center gap-2">
-                              <div
-                                className={`w-2.5 h-2.5 rounded-full ${
-                                  isReached ? 'bg-emerald-500' : 'bg-neutral-300'
-                                }`}
-                              />
-                              <span
-                                className={`font-medium ${
-                                  isReached ? 'text-neutral-900 font-semibold' : 'text-neutral-400'
-                                }`}
-                              >
-                                {step.label}
-                              </span>
+                          return (
+                            <div key={step.key} className="flex items-center justify-between text-xs">
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <div
+                                  className={`w-3 h-3 rounded-full flex items-center justify-center transition-all ${
+                                    isReached
+                                      ? isCurrent
+                                        ? 'bg-emerald-600 ring-4 ring-emerald-100 shadow-2xs'
+                                        : 'bg-emerald-500'
+                                      : 'bg-neutral-300'
+                                  }`}
+                                />
+                                <span
+                                  className={`truncate ${
+                                    isCurrent
+                                      ? 'text-emerald-900 font-bold'
+                                      : isReached
+                                      ? 'text-neutral-900 font-semibold'
+                                      : 'text-neutral-400'
+                                  }`}
+                                >
+                                  {step.label}
+                                </span>
+                                {isCurrent && (
+                                  <span className="text-[9px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded-full uppercase">
+                                    Active Stage
+                                  </span>
+                                )}
+                              </div>
+                              {dateStr && (
+                                <span className="text-[10px] text-neutral-500 font-mono shrink-0 ml-2">
+                                  {dateStr}
+                                </span>
+                              )}
                             </div>
-                            {dateStr && <span className="text-[10px] text-neutral-400 font-mono">{dateStr}</span>}
-                          </div>
-                        );
-                      })}
+                          );
+                        });
+                      })()}
                     </div>
                   </div>
 

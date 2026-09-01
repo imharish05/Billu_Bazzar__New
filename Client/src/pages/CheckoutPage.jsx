@@ -409,23 +409,19 @@ const CheckoutPage = () => {
         if (res.data?.success && Array.isArray(res.data.coupons)) {
           active = res.data.coupons.filter(c => c.isActive !== false && String(c.isActive) !== '0' && String(c.isActive) !== 'false');
         }
-        if (active.length === 0) {
-          active = [
-            { id: 'c1', code: 'WELCOME10', type: 'PERCENT', value: 10, minOrderValue: 499, maxDiscount: 500, isActive: true },
-            { id: 'c2', code: 'FESTIVE20', type: 'PERCENT', value: 20, minOrderValue: 999, maxDiscount: 1000, isActive: true },
-            { id: 'c3', code: 'BILLU100', type: 'FLAT', value: 100, minOrderValue: 799, maxDiscount: 100, isActive: true },
-            { id: 'c4', code: 'LUXURY500', type: 'FLAT', value: 500, minOrderValue: 2999, maxDiscount: 500, isActive: true },
-          ];
-        }
         setAvailableCoupons(active);
+        
+        // If an applied coupon from localStorage is no longer in the active list, clear it
+        if (appliedCoupon) {
+          const isStillActive = active.some(c => c.code?.toUpperCase() === appliedCoupon.code?.toUpperCase());
+          if (!isStillActive) {
+            setAppliedCoupon(null);
+            localStorage.removeItem('bb_applied_coupon');
+          }
+        }
       } catch (err) {
-        console.warn('Failed to load coupons from API, using default list:', err.message);
-        setAvailableCoupons([
-          { id: 'c1', code: 'WELCOME10', type: 'PERCENT', value: 10, minOrderValue: 499, maxDiscount: 500, isActive: true },
-          { id: 'c2', code: 'FESTIVE20', type: 'PERCENT', value: 20, minOrderValue: 999, maxDiscount: 1000, isActive: true },
-          { id: 'c3', code: 'BILLU100', type: 'FLAT', value: 100, minOrderValue: 799, maxDiscount: 100, isActive: true },
-          { id: 'c4', code: 'LUXURY500', type: 'FLAT', value: 500, minOrderValue: 2999, maxDiscount: 500, isActive: true },
-        ]);
+        console.warn('Failed to load coupons from API:', err.message);
+        setAvailableCoupons([]);
       }
     };
     fetchCoupons();
@@ -688,15 +684,32 @@ const CheckoutPage = () => {
     }
   };
 
-  // Helper to dynamically load Razorpay checkout script
+  // Preload Razorpay SDK on mount for instant payment popup
+  useEffect(() => {
+    loadRazorpayScript();
+  }, []);
+
+  // Helper to dynamically load Razorpay checkout script with caching & pre-check
   const loadRazorpayScript = () => {
     return new Promise((resolve) => {
+      if (typeof window !== 'undefined' && window.Razorpay) {
+        return resolve(true);
+      }
+      const existingScript = document.querySelector('script[src*="checkout.razorpay.com"]');
+      if (existingScript) {
+        if (typeof window !== 'undefined' && window.Razorpay) return resolve(true);
+        existingScript.addEventListener('load', () => resolve(true), { once: true });
+        existingScript.addEventListener('error', () => resolve(false), { once: true });
+        setTimeout(() => resolve(typeof window !== 'undefined' && !!window.Razorpay), 6000);
+        return;
+      }
       const script = document.createElement('script');
       script.src = 'https://checkout.razorpay.com/v1/checkout.js';
       script.async = true;
       script.onload = () => resolve(true);
       script.onerror = () => resolve(false);
       document.body.appendChild(script);
+      setTimeout(() => resolve(typeof window !== 'undefined' && !!window.Razorpay), 10000);
     });
   };
 
@@ -793,8 +806,8 @@ const CheckoutPage = () => {
       } else if (paymentData.gateway === 'razorpay') {
         // Razorpay: load SDK and open checkout overlay
         const loaded = await loadRazorpayScript();
-        if (!loaded) {
-          toast.error('Failed to load Razorpay SDK. Please check your internet connection.');
+        if (!loaded || typeof window === 'undefined' || !window.Razorpay) {
+          toast.error('Unable to connect to Razorpay payment gateway. Please check your internet connection, disable ad-blockers, or select Cash on Delivery (COD).');
           setPlacing(false);
           return;
         }
@@ -1456,11 +1469,23 @@ const CheckoutPage = () => {
                     </div>
                     <div className="bg-neutral-50 rounded-md p-4">
                       <div className="flex justify-between items-center mb-2">
-                        <h3 className="font-semibold text-xs text-neutral-400 uppercase tracking-wider">Delivery Address</h3>
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-semibold text-xs text-neutral-400 uppercase tracking-wider">Delivery Address</h3>
+                          {deliverySameAsBilling && (
+                            <span className="text-[10px] font-semibold text-amber-800 bg-amber-100/70 border border-amber-200/80 px-1.5 py-0.5 rounded leading-none">
+                              Same as billing
+                            </span>
+                          )}
+                        </div>
                         <button onClick={() => setStep(1)} className="text-xs text-brand-gold hover:underline font-medium">Edit</button>
                       </div>
                       {deliverySameAsBilling ? (
-                        <p className="text-xs text-brand-grey italic">Same as billing address</p>
+                        <>
+                          <p className="text-sm font-medium text-brand-text">{billingAddress.fullName}</p>
+                          <p className="text-xs text-brand-grey">{billingAddress.phone} · {billingAddress.email}</p>
+                          <p className="text-xs text-brand-grey mt-1">{billingAddress.flatHouse}{billingAddress.landmark && `, ${billingAddress.landmark}`}</p>
+                          <p className="text-xs text-brand-grey">{billingAddress.city}, {billingAddress.state} {billingAddress.pincode}</p>
+                        </>
                       ) : (
                         <>
                           <p className="text-sm font-medium text-brand-text">{address.fullName}</p>

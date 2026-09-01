@@ -44,7 +44,13 @@ const OrdersPage = () => {
     dispatch(fetchMyOrders());
   }, [dispatch]);
 
-  const sortedOrders = [...orders].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+  const validOrders = orders.filter(order => {
+    const isCod = order.paymentMethod === 'COD' || (order.paymentMethod || '').includes('Cash on Delivery');
+    const isPaid = order.paymentStatus === 'PAID' || ['CONFIRMED', 'PROCESSING', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED', 'RETURNED', 'REFUNDED'].includes(order.status);
+    return isPaid || isCod;
+  });
+
+  const sortedOrders = [...validOrders].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
 
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
@@ -101,6 +107,20 @@ const OrdersPage = () => {
                   </div>
 
                   <div className="flex items-center gap-2 flex-wrap">
+                    {(() => {
+                      const orderTime = new Date(order.createdAt).getTime();
+                      const hoursOld = (Date.now() - orderTime) / (1000 * 60 * 60);
+                      const canCancelOrder = ['PENDING', 'PENDING_PAYMENT', 'PAID', 'CONFIRMED'].includes(order.status) && hoursOld <= 24;
+                      if (canCancelOrder) {
+                        const hRem = Math.max(0, Math.ceil(24 - hoursOld));
+                        return (
+                          <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-200" title={`Cancellable for next ${hRem} hours`}>
+                            Cancel Available ({hRem}h left)
+                          </span>
+                        );
+                      }
+                      return null;
+                    })()}
                     {((order.returnRequests && order.returnRequests.length > 0) || (order.items && order.items.some(i => i.returnStatus && i.returnStatus !== 'NONE'))) && (
                       <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
                         Return / Refund

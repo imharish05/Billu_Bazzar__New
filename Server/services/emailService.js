@@ -518,8 +518,25 @@ const sendOrderStatusNotification = async (order, statusTypeOverride = null) => 
     const subtotal = parseFloat(order.subtotal || 0);
     const shipping = parseFloat(order.shippingAmount || 0);
     const tax = parseFloat(order.taxAmount || 0);
-    const discount = parseFloat(order.discountAmount || 0);
-    const grandTotal = parseFloat(order.totalAmount || (subtotal + shipping - discount));
+    const totalDiscount = parseFloat(order.discountAmount || 0);
+    const explicitCouponDisc = parseFloat(order.couponDiscount || 0);
+    const explicitLoyaltyDisc = parseFloat(order.loyaltyDiscount || 0);
+
+    let couponAmount = explicitCouponDisc;
+    let loyaltyAmount = explicitLoyaltyDisc;
+
+    if (couponAmount === 0 && loyaltyAmount === 0 && totalDiscount > 0) {
+      if (order.couponId || order.coupon) {
+        couponAmount = totalDiscount;
+      } else {
+        loyaltyAmount = totalDiscount;
+      }
+    }
+
+    const explicitGw = parseFloat(order.giftWrapFee || order.giftWrapPrice || 0);
+    const calculatedGwDiff = Math.round(parseFloat(order.totalAmount || 0) - (subtotal + shipping - totalDiscount));
+    const giftWrap = explicitGw > 0 ? explicitGw : (calculatedGwDiff > 0 ? calculatedGwDiff : 0);
+    const grandTotal = parseFloat(order.totalAmount || (subtotal + shipping + giftWrap - totalDiscount));
 
     const htmlContent = `
       <!DOCTYPE html>
@@ -605,15 +622,25 @@ const sendOrderStatusNotification = async (order, statusTypeOverride = null) => 
                         <td style="padding:4px 0;font-size:13px;color:#6B7280;">Subtotal</td>
                         <td style="padding:4px 0;font-size:13px;color:#1F2937;text-align:right;">${currencySymbol}${subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                       </tr>
-                      ${discount > 0 ? `
+                      ${couponAmount > 0 ? `
                       <tr>
-                        <td style="padding:4px 0;font-size:13px;color:#8A6714;">Discount Applied</td>
-                        <td style="padding:4px 0;font-size:13px;color:#8A6714;text-align:right;">-${currencySymbol}${discount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                        <td style="padding:4px 0;font-size:13px;color:#8A6714;">Coupon Discount${order.coupon?.code ? ` (${order.coupon.code})` : ''}</td>
+                        <td style="padding:4px 0;font-size:13px;color:#8A6714;text-align:right;">-${currencySymbol}${couponAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                      </tr>` : ''}
+                      ${loyaltyAmount > 0 ? `
+                      <tr>
+                        <td style="padding:4px 0;font-size:13px;color:#8A6714;">Loyalty Points Redeemed${order.redeemedPoints ? ` (${order.redeemedPoints} pts)` : ''}</td>
+                        <td style="padding:4px 0;font-size:13px;color:#8A6714;text-align:right;">-${currencySymbol}${loyaltyAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                       </tr>` : ''}
                       <tr>
                         <td style="padding:4px 0;font-size:13px;color:#6B7280;">Shipping Charges</td>
                         <td style="padding:4px 0;font-size:13px;color:#1F2937;text-align:right;">${shipping > 0 ? `${currencySymbol}${shipping.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'FREE'}</td>
                       </tr>
+                      ${giftWrap > 0 ? `
+                      <tr>
+                        <td style="padding:4px 0;font-size:13px;color:#6B7280;">Gift Wrapping</td>
+                        <td style="padding:4px 0;font-size:13px;color:#1F2937;text-align:right;">${currencySymbol}${giftWrap.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                      </tr>` : ''}
                       ${tax > 0 ? `
                       <tr>
                         <td style="padding:4px 0;font-size:13px;color:#6B7280;">GST (${order.taxRate ? `${Number(order.taxRate)}% Included` : 'Included'})</td>

@@ -119,10 +119,25 @@ const start = async () => {
       console.log('⚠️ Manual alter note (Orders columns already exist):', alterErr.message);
     }
 
-    // Clean up past unverified payment attempts that were mistakenly set to PAID
+    // Clean up failed/abandoned online payment attempts that were never paid
     try {
-      await sequelize.query("UPDATE Orders SET status = 'PENDING_PAYMENT', paymentStatus = 'UNPAID' WHERE status = 'PAID' AND razorpay_payment_id IS NULL AND paymentMethod != 'COD' AND (paymentMethod LIKE '%Razorpay%' OR paymentGatewayRef IS NOT NULL)");
-      console.log('✅ Cleaned up unverified payment attempt orders');
+      const { Op } = require('sequelize');
+      const { Order, OrderItem } = require('./models');
+      const unpaidOrders = await Order.findAll({
+        where: {
+          status: 'PENDING_PAYMENT',
+          paymentStatus: 'UNPAID',
+          paymentMethod: { [Op.notLike]: '%COD%' },
+          razorpay_payment_id: { [Op.is]: null }
+        },
+        attributes: ['id']
+      });
+      if (unpaidOrders.length > 0) {
+        const orderIds = unpaidOrders.map(o => o.id);
+        await OrderItem.destroy({ where: { orderId: { [Op.in]: orderIds } } });
+        await Order.destroy({ where: { id: { [Op.in]: orderIds } } });
+        console.log(`✅ Cleaned up ${orderIds.length} unpaid/failed online payment attempt records`);
+      }
     } catch (cleanErr) {
       console.log('⚠️ Order cleanup note:', cleanErr.message);
     }
@@ -207,6 +222,11 @@ const start = async () => {
     await safeAddColumn('ALTER TABLE Customers ADD COLUMN passwordResetExpiry DATETIME NULL DEFAULT NULL');
     await safeAddColumn("ALTER TABLE Orders ADD COLUMN taxRate DECIMAL(5, 2) NULL DEFAULT 0");
     await safeAddColumn("ALTER TABLE Orders ADD COLUMN statusTimeline JSON NULL");
+    await safeAddColumn("ALTER TABLE Orders ADD COLUMN giftWrapFee DECIMAL(10, 2) NULL DEFAULT 0");
+    await safeAddColumn("ALTER TABLE Orders ADD COLUMN isGiftWrap BOOLEAN NOT NULL DEFAULT FALSE");
+    await safeAddColumn("ALTER TABLE Orders ADD COLUMN couponDiscount DECIMAL(12, 2) NULL DEFAULT 0");
+    await safeAddColumn("ALTER TABLE Orders ADD COLUMN loyaltyDiscount DECIMAL(12, 2) NULL DEFAULT 0");
+    await safeAddColumn("ALTER TABLE Orders ADD COLUMN redeemedPoints INT NULL DEFAULT 0");
     await safeAddColumn("ALTER TABLE OrderItems ADD COLUMN gstRate VARCHAR(20) NULL DEFAULT '0%'");
 
     // Ensure Banners table columns exist and migrate legacy type

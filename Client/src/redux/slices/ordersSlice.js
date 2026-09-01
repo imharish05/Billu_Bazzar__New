@@ -33,9 +33,11 @@ export const fetchOrderById = createAsyncThunk('orders/fetchById', async (id, { 
   }
 });
 
-export const cancelCustomerOrder = createAsyncThunk('orders/cancel', async (id, { rejectWithValue }) => {
+export const cancelCustomerOrder = createAsyncThunk('orders/cancel', async (payload, { rejectWithValue }) => {
   try {
-    const res = await api.post(`/orders/my/${id}/cancel`);
+    const id = typeof payload === 'object' ? payload.id : payload;
+    const reason = typeof payload === 'object' ? payload.reason : undefined;
+    const res = await api.post(`/orders/my/${id}/cancel`, { reason });
     return res.data.order;
   } catch (err) {
     return rejectWithValue(err.response?.data?.message || 'Failed to cancel order');

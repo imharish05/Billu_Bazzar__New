@@ -122,13 +122,12 @@ const ORDER_SUB_ITEMS = [
     match: (pathname, statusParam) => pathname === '/orders' && statusParam === 'CANCELLED'
   },
   {
-    to: '/orders?status=RETURNED',
-    status: 'RETURNED',
-    label: 'Returned',
-    icon: Truck,
+    to: '/returns',
+    label: 'Returns & Refunds',
+    icon: RotateCcw,
     badgeKey: 'RETURNED',
     badgeClass: 'bg-pink-100 text-pink-900 font-semibold px-2 py-0.5 rounded-full text-[11px]',
-    match: (pathname, statusParam) => pathname === '/orders' && statusParam === 'RETURNED'
+    match: (pathname, statusParam) => pathname === '/returns' || (pathname === '/orders' && statusParam === 'RETURNED')
   },
 ];
 
@@ -169,7 +168,6 @@ const NAV_SECTIONS = [
       { to: '/stock-alerts', label: 'Restock Requests', icon: Bell },
       { to: '/reviews', label: 'Product Reviews', icon: Star },
       { label: 'Orders', icon: ShoppingBag, isAccordion: true },
-      { to: '/returns', label: 'Returns & Refunds', icon: RotateCcw },
     ],
   },
   {
@@ -396,7 +394,7 @@ const AdminLayout = ({ children, title = '' }) => {
   });
   const [orderCounts, setOrderCounts] = useState({});
   const [ordersOpen, setOrdersOpen] = useState(() => {
-    return location.pathname === '/orders' || location.pathname === '/abandoned-carts';
+    return location.pathname === '/orders' || location.pathname === '/abandoned-carts' || location.pathname === '/returns';
   });
 
   const currentStatusParam = searchParams.get('status');

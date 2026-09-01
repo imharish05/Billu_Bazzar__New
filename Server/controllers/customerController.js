@@ -9,6 +9,7 @@ const getAll = async (req, res) => {
     if (search) where[Op.or] = [{ name: { [Op.like]: `%${search}%` } }, { email: { [Op.like]: `%${search}%` } }];
     const { count, rows } = await Customer.findAndCountAll({
       where,
+      distinct: true,
       limit: parseInt(limit),
       offset: (parseInt(page) - 1) * parseInt(limit),
       order: [['createdAt', 'DESC']],
@@ -95,7 +96,11 @@ const toggleWishlist = async (req, res) => {
 
 const getLoyalty = async (req, res) => {
   try {
-    const ledger = await LoyaltyLedger.findAll({ where: { customerId: req.customer.id }, order: [['createdAt', 'DESC']] });
+    const ledger = await LoyaltyLedger.findAll({
+      where: { customerId: req.customer.id },
+      include: [{ model: Order, as: 'order', attributes: ['id', 'orderNumber', 'totalAmount'] }],
+      order: [['createdAt', 'DESC']],
+    });
     res.json({ success: true, ledger, balance: req.customer.loyaltyPoints });
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 };

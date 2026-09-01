@@ -634,8 +634,43 @@ const resetPassword = async (req, res) => {
   }
 };
 
+/**
+ * Customer changes password while logged in.
+ * Requires: { currentPassword, newPassword }
+ */
+const changePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body || {};
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ success: false, message: 'Current password and new password are required' });
+    }
+
+    const passwordValidation = validatePassword(newPassword);
+    if (!passwordValidation.isValid) {
+      return res.status(400).json({ success: false, message: passwordValidation.message });
+    }
+
+    const customer = await Customer.findByPk(req.customer.id);
+    if (!customer) {
+      return res.status(404).json({ success: false, message: 'Customer not found' });
+    }
+
+    const isMatch = await bcrypt.compare(currentPassword, customer.password);
+    if (!isMatch) {
+      return res.status(400).json({ success: false, message: 'Current password is incorrect' });
+    }
+
+    const hashed = await bcrypt.hash(newPassword, 12);
+    await customer.update({ password: hashed });
+
+    return res.json({ success: true, message: 'Password updated successfully' });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
 module.exports = {
-  register, login, getProfile, updateProfile,
+  register, login, getProfile, updateProfile, changePassword,
   adminLogin, adminRegister,
   refresh, getRefreshToken, getMe,
   forgotPassword, verifyOtp, resetPassword,

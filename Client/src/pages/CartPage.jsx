@@ -25,6 +25,22 @@ const CartPage = () => {
 
   const fmt = (v) => formatPrice(v, currencyCode, currencyRate);
 
+  const countWords = (text) => {
+    if (!text || !text.trim()) return 0;
+    return text.trim().split(/\s+/).filter(Boolean).length;
+  };
+
+  const handleGiftMessageChange = (e) => {
+    const text = e.target.value;
+    const words = text.trim().split(/\s+/).filter(Boolean);
+    if (words.length <= 500) {
+      setGiftMessage(text);
+    } else {
+      const trimmed = text.trim().split(/\s+/).slice(0, 500).join(' ');
+      setGiftMessage(trimmed);
+    }
+  };
+
   const isGiftServiceActive = Boolean(giftService && giftService.isActive !== false);
   const giftWrapAmount = giftService ? Number(giftService.amount || 0) : 0;
 
@@ -216,13 +232,13 @@ const CartPage = () => {
                         id="gift-msg"
                         rows={3}
                         value={giftMessage}
-                        onChange={(e) => setGiftMessage(e.target.value)}
+                        onChange={handleGiftMessageChange}
                         placeholder="Write your special message here... (e.g. Happy Anniversary! With love, Priya)"
                         className="w-full border border-brand-light p-3 text-xs focus:outline-none focus:border-brand-gold bg-transparent resize-none rounded-sm placeholder-brand-grey/40"
-                        maxLength={200}
                       />
-                      <div className="text-right text-[10px] text-brand-grey">
-                        {200 - giftMessage.length} characters remaining
+                      <div className="flex justify-between items-center text-[10px] text-brand-grey">
+                        <span>{countWords(giftMessage)} / 500 words</span>
+                        <span>{Math.max(0, 500 - countWords(giftMessage))} words remaining</span>
                       </div>
                     </motion.div>
                   )}

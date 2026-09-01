@@ -1,19 +1,25 @@
 import React from 'react';
 import { Search, ChevronLeft, ChevronRight } from 'lucide-react';
 
-const LIMIT_OPTIONS = [10, 25, 50, 100];
+const LIMIT_OPTIONS = [10, 15, 25, 50, 100];
 
 export const PaginationTop = ({
   search,
   onSearchChange,
   searchPlaceholder = 'Search records...',
-  totalItems = 0,
+  totalItems,
+  total,
   limit = 10,
-  currentPage = 1,
+  currentPage,
+  page,
   onLimitChange,
 }) => {
-  const startItem = totalItems === 0 ? 0 : (currentPage - 1) * limit + 1;
-  const endItem = Math.min(currentPage * limit, totalItems);
+  const effectiveTotal = Number(total !== undefined ? total : (totalItems !== undefined ? totalItems : 0));
+  const effectivePage = Math.max(1, Number(page !== undefined ? page : (currentPage !== undefined ? currentPage : 1)));
+  const effectiveLimit = Math.max(1, Number(limit || 10));
+
+  const startItem = effectiveTotal === 0 ? 0 : (effectivePage - 1) * effectiveLimit + 1;
+  const endItem = Math.min(effectivePage * effectiveLimit, effectiveTotal);
 
   return (
     <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-5 py-3 bg-white border-b border-neutral-200/80 rounded-t-xl">
@@ -38,7 +44,7 @@ export const PaginationTop = ({
         <div className="flex items-center gap-2">
           <span>Show</span>
           <select
-            value={limit}
+            value={effectiveLimit}
             onChange={(e) => onLimitChange && onLimitChange(Number(e.target.value))}
             className="border border-neutral-300 rounded-lg px-2.5 py-1 text-xs bg-neutral-50 font-semibold text-neutral-800 focus:outline-none focus:border-brand-gold cursor-pointer shadow-2xs"
           >
@@ -54,7 +60,7 @@ export const PaginationTop = ({
         <div>
           Showing <span className="font-semibold text-neutral-900">{startItem}</span> to{' '}
           <span className="font-semibold text-neutral-900">{endItem}</span> of{' '}
-          <span className="font-semibold text-neutral-900">{totalItems}</span> entries
+          <span className="font-semibold text-neutral-900">{effectiveTotal}</span> entries
         </div>
       </div>
     </div>
@@ -62,27 +68,35 @@ export const PaginationTop = ({
 };
 
 export const PaginationBottom = ({
-  currentPage = 1,
-  totalPages = 1,
-  totalItems = 0,
+  currentPage,
+  page,
+  totalPages,
+  totalItems,
+  total,
+  limit = 10,
   onPageChange,
 }) => {
-  if (totalItems === 0) return null;
+  const effectiveTotal = Number(total !== undefined ? total : (totalItems !== undefined ? totalItems : 0));
+  const effectivePage = Math.max(1, Number(page !== undefined ? page : (currentPage !== undefined ? currentPage : 1)));
+  const effectiveLimit = Math.max(1, Number(limit || 10));
+  const effectiveTotalPages = Math.max(1, Number(totalPages || Math.ceil(effectiveTotal / effectiveLimit) || 1));
+
+  if (effectiveTotal === 0 && effectiveTotalPages <= 1) return null;
 
   const getPageNumbers = () => {
     const pages = [];
     const maxVisible = 5;
 
-    if (totalPages <= maxVisible) {
-      for (let i = 1; i <= totalPages; i++) pages.push(i);
+    if (effectiveTotalPages <= maxVisible) {
+      for (let i = 1; i <= effectiveTotalPages; i++) pages.push(i);
     } else {
-      let start = Math.max(1, currentPage - 1);
-      let end = Math.min(totalPages, currentPage + 1);
+      let start = Math.max(1, effectivePage - 1);
+      let end = Math.min(effectiveTotalPages, effectivePage + 1);
 
-      if (currentPage <= 2) {
-        end = Math.min(totalPages, 4);
-      } else if (currentPage >= totalPages - 1) {
-        start = Math.max(1, totalPages - 3);
+      if (effectivePage <= 2) {
+        end = Math.min(effectiveTotalPages, 4);
+      } else if (effectivePage >= effectiveTotalPages - 1) {
+        start = Math.max(1, effectiveTotalPages - 3);
       }
 
       if (start > 1) {
@@ -94,9 +108,9 @@ export const PaginationBottom = ({
         pages.push(i);
       }
 
-      if (end < totalPages) {
-        if (end < totalPages - 1) pages.push('...');
-        pages.push(totalPages);
+      if (end < effectiveTotalPages) {
+        if (end < effectiveTotalPages - 1) pages.push('...');
+        pages.push(effectiveTotalPages);
       }
     }
     return pages;
@@ -105,8 +119,8 @@ export const PaginationBottom = ({
   return (
     <div className="flex items-center justify-start gap-1.5 px-5 py-3 bg-white border-t border-neutral-200/80 rounded-b-xl">
       <button
-        onClick={() => onPageChange && onPageChange(currentPage - 1)}
-        disabled={currentPage <= 1}
+        onClick={() => onPageChange && onPageChange(effectivePage - 1)}
+        disabled={effectivePage <= 1}
         className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-neutral-200 text-neutral-700 bg-white hover:bg-neutral-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         aria-label="Previous Page"
       >
@@ -123,7 +137,7 @@ export const PaginationBottom = ({
               key={p}
               onClick={() => onPageChange && onPageChange(p)}
               className={`min-w-[30px] h-7 px-2 text-xs font-semibold rounded-lg transition-all ${
-                currentPage === p
+                effectivePage === p
                   ? 'bg-brand-gold text-white shadow-xs'
                   : 'bg-white border border-neutral-200 text-neutral-700 hover:bg-neutral-50'
               }`}
@@ -135,8 +149,8 @@ export const PaginationBottom = ({
       </div>
 
       <button
-        onClick={() => onPageChange && onPageChange(currentPage + 1)}
-        disabled={currentPage >= totalPages}
+        onClick={() => onPageChange && onPageChange(effectivePage + 1)}
+        disabled={effectivePage >= effectiveTotalPages}
         className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-neutral-200 text-neutral-700 bg-white hover:bg-neutral-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         aria-label="Next Page"
       >
@@ -151,9 +165,11 @@ const Pagination = ({
   search,
   onSearchChange,
   searchPlaceholder,
-  currentPage = 1,
-  totalPages = 1,
-  totalItems = 0,
+  currentPage,
+  page,
+  totalPages,
+  totalItems,
+  total,
   limit = 10,
   onPageChange,
   onLimitChange,
@@ -166,8 +182,10 @@ const Pagination = ({
         onSearchChange={onSearchChange}
         searchPlaceholder={searchPlaceholder}
         totalItems={totalItems}
+        total={total}
         limit={limit}
         currentPage={currentPage}
+        page={page}
         onLimitChange={onLimitChange}
       />
     );
@@ -176,11 +194,15 @@ const Pagination = ({
   return (
     <PaginationBottom
       currentPage={currentPage}
+      page={page}
       totalPages={totalPages}
       totalItems={totalItems}
+      total={total}
+      limit={limit}
       onPageChange={onPageChange}
     />
   );
 };
 
 export default Pagination;
+

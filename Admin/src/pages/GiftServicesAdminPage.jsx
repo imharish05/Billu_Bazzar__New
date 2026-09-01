@@ -272,11 +272,24 @@ const GiftServicesAdminPage = () => {
                     id="gift-desc"
                     rows={3}
                     value={giftForm.description}
-                    onChange={e => setGiftForm(p => ({ ...p, description: e.target.value }))}
+                    onChange={e => {
+                      const val = e.target.value;
+                      const words = val.trim().split(/\s+/).filter(Boolean);
+                      if (words.length <= 500) {
+                        setGiftForm(p => ({ ...p, description: val }));
+                      } else {
+                        const trimmed = val.trim().split(/\s+/).slice(0, 500).join(' ');
+                        setGiftForm(p => ({ ...p, description: trimmed }));
+                      }
+                    }}
                     required
                     className="w-full border border-brand-light px-3 py-2 text-sm focus:outline-none focus:border-brand-gold rounded resize-none"
                     placeholder="e.g. Meticulously wrapped in our signature gold foil box with a silk ribbon casing."
                   />
+                  <div className="flex justify-between text-[11px] text-brand-grey mt-1">
+                    <span>{giftForm.description ? giftForm.description.trim().split(/\s+/).filter(Boolean).length : 0} / 500 words</span>
+                    <span>{Math.max(0, 500 - (giftForm.description ? giftForm.description.trim().split(/\s+/).filter(Boolean).length : 0))} words remaining</span>
+                  </div>
                 </div>
 
                 <div className="flex items-center gap-2 pt-1">

@@ -241,7 +241,13 @@ export const generateInvoiceHTML = (order) => {
   const billingAddrFormatted = formatAddressBlock(billing);
   const isSameAddress = JSON.stringify(shippingAddrFormatted) === JSON.stringify(billingAddrFormatted);
 
-  // Payment Details & Razorpay info
+  // Parse status timeline
+  let timelineObj = order.statusTimeline || {};
+  if (typeof timelineObj === 'string') {
+    try { timelineObj = JSON.parse(timelineObj); } catch (e) { timelineObj = {}; }
+  }
+
+  // Payment Details & Status Resolution
   let rawPaymentMethod = order.paymentMethod || 'Online Payment';
   const rawLower = String(rawPaymentMethod).toLowerCase();
   if (rawLower.includes('razorpay') || rawLower.includes('online') || rawPaymentMethod === 'CARD' || rawPaymentMethod === 'UPI' || rawPaymentMethod === 'NETBANKING') {
@@ -251,8 +257,36 @@ export const generateInvoiceHTML = (order) => {
   }
 
   const isCod = rawPaymentMethod.includes('Cash on Delivery') || rawPaymentMethod === 'COD';
-  const isPaid = order.paymentStatus === 'PAID' || order.status === 'PAID' || (!isCod && order.paymentStatus !== 'FAILED' && order.paymentStatus !== 'PENDING');
-  const paymentStatusBadge = isPaid ? 'PAID' : (isCod ? 'PAY ON DELIVERY' : (order.paymentStatus || 'PENDING'));
+  const orderStatusUpper = String(order.status || '').toUpperCase();
+  const paymentStatusUpper = String(order.paymentStatus || '').toUpperCase();
+  const isCancelled = orderStatusUpper === 'CANCELLED' || orderStatusUpper === 'CANCELED';
+  const isRefunded = paymentStatusUpper === 'REFUNDED' || Boolean(timelineObj.refundStatus && timelineObj.refundStatus !== 'NONE');
+  const isPaid = paymentStatusUpper === 'PAID' || orderStatusUpper === 'PAID';
+
+  let paymentStatusBadge = 'PENDING';
+  let badgeClass = 'badge-pending';
+
+  if (isCancelled) {
+    if (isRefunded) {
+      paymentStatusBadge = 'CANCELLED · REFUNDED';
+      badgeClass = 'badge-cancelled';
+    } else {
+      paymentStatusBadge = 'CANCELLED';
+      badgeClass = 'badge-cancelled';
+    }
+  } else if (isRefunded) {
+    paymentStatusBadge = 'REFUNDED';
+    badgeClass = 'badge-refunded';
+  } else if (isPaid) {
+    paymentStatusBadge = 'PAID';
+    badgeClass = 'badge-paid';
+  } else if (isCod) {
+    paymentStatusBadge = 'PAY ON DELIVERY';
+    badgeClass = 'badge-pending';
+  } else {
+    paymentStatusBadge = order.paymentStatus || 'PENDING';
+    badgeClass = 'badge-pending';
+  }
 
   // Transaction reference (Razorpay payment ID, Razorpay order ID, or gateway reference)
   const transactionRef = order.razorpay_payment_id || order.razorpayPaymentId || order.razorpay_order_id || order.razorpayOrderId || order.paymentGatewayRef || (isCod ? 'COD-ORDER' : `order_${String(order.id || orderNum).replace(/[^a-zA-Z0-9]/g, '').slice(0, 14)}`);
@@ -294,8 +328,24 @@ export const generateInvoiceHTML = (order) => {
 
   const subtotal = Number(order.subtotal || subtotalCalc);
   const discountAmount = Number(order.discountAmount || order.discount || 0);
+  const couponDiscount = Number(order.couponDiscount || 0);
+  const loyaltyDiscount = Number(order.loyaltyDiscount || 0);
+
+  let resolvedCoupon = couponDiscount;
+  let resolvedLoyalty = loyaltyDiscount;
+
+  if (resolvedCoupon === 0 && resolvedLoyalty === 0 && discountAmount > 0) {
+    if (order.couponId || order.coupon) {
+      resolvedCoupon = discountAmount;
+    } else {
+      resolvedLoyalty = discountAmount;
+    }
+  }
+
   const shippingAmount = Number(order.shippingAmount || 0);
-  const giftWrapFee = Number(order.giftWrapFee || order.giftWrapPrice || 0);
+  const explicitGw = Number(order.giftWrapFee || order.giftWrapPrice || 0);
+  const calculatedGwDiff = Math.round(Number(order.totalAmount || 0) - (subtotal + shippingAmount - discountAmount));
+  const giftWrapFee = explicitGw > 0 ? explicitGw : (calculatedGwDiff > 0 ? calculatedGwDiff : 0);
   const grandTotal = Number(order.totalAmount || (subtotal + shippingAmount + giftWrapFee - discountAmount));
 
   return `
@@ -453,6 +503,44 @@ export const generateInvoiceHTML = (order) => {
       background: #fef3c7;
       color: #b45309;
       border: 1px solid #fde68a;
+    }
+    .badge-cancelled {
+      background: #fee2e2;
+      color: #b91c1c;
+      border: 1px solid #fca5a5;
+    }
+    .badge-refunded {
+      background: #f3e8ff;
+      color: #6b21a8;
+      border: 1px solid #d8b4fe;
+    }
+
+    /* Watermark for Cancelled / Refunded */
+    .watermark-cancelled {
+      position: absolute;
+      top: 45%;
+      left: 50%;
+      transform: translate(-50%, -50%) rotate(-28deg);
+      font-size: 58px;
+      font-weight: 900;
+      color: rgba(220, 38, 38, 0.12);
+      border: 5px solid rgba(220, 38, 38, 0.18);
+      padding: 8px 36px;
+      border-radius: 10px;
+      letter-spacing: 6px;
+      pointer-events: none;
+      text-transform: uppercase;
+      z-index: 5;
+    }
+
+    /* Cancellation & Refund Alert Banner */
+    .cancellation-banner {
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      border-left: 4px solid #ef4444;
+      padding: 12px 16px;
+      border-radius: 6px;
+      margin-bottom: 22px;
     }
 
     /* Gold Divider */
@@ -668,6 +756,27 @@ export const generateInvoiceHTML = (order) => {
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
       }
+      .badge-cancelled {
+        background: #fee2e2 !important;
+        color: #b91c1c !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      .badge-refunded {
+        background: #f3e8ff !important;
+        color: #6b21a8 !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      .watermark-cancelled {
+        display: block !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      .cancellation-banner {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
       @page {
         size: A4 portrait;
         margin: 12mm;
@@ -680,7 +789,7 @@ export const generateInvoiceHTML = (order) => {
   <!-- Action Bar (Screen Only) -->
   <div class="no-print-bar">
     <div style="font-weight: 600; color: #1e293b; font-size: 13px;">
-      Tax Invoice Preview <span style="font-weight: normal; color: #64748b; font-size: 11.5px;">(#${orderNum})</span>
+      ${isCancelled ? 'Cancelled Invoice Preview' : 'Tax Invoice Preview'} <span style="font-weight: normal; color: #64748b; font-size: 11.5px;">(#${orderNum})</span>
     </div>
     <button onclick="window.print()" class="btn-print">
       🖨️ Print / Save as PDF
@@ -688,7 +797,9 @@ export const generateInvoiceHTML = (order) => {
   </div>
 
   <!-- Document Container -->
-  <div class="invoice-wrapper">
+  <div class="invoice-wrapper" style="position: relative; overflow: hidden;">
+
+    ${isCancelled ? `<div class="watermark-cancelled">${isRefunded ? 'CANCELLED' : 'CANCELLED'}</div>` : ''}
 
     <!-- Header Section -->
     <div class="invoice-header">
@@ -707,17 +818,32 @@ export const generateInvoiceHTML = (order) => {
       </div>
 
       <div class="invoice-meta-section">
-        <div class="invoice-heading">TAX INVOICE</div>
+        <div class="invoice-heading" style="${isCancelled ? 'color: #dc2626;' : ''}">
+          ${isCancelled ? 'CANCELLED INVOICE' : 'TAX INVOICE'}
+        </div>
         <div class="meta-line">Invoice No: <strong>${invoiceNum}</strong></div>
         <div class="meta-line">Order Ref: <strong>#${orderNum}</strong></div>
         <div class="meta-line">Date: <strong>${invoiceDate}</strong></div>
         <div>
-          <span class="badge-status ${isPaid ? 'badge-paid' : 'badge-pending'}">
+          <span class="badge-status ${badgeClass}">
             ${paymentStatusBadge}
           </span>
         </div>
       </div>
     </div>
+
+    ${isCancelled ? `
+    <!-- Cancellation & Refund Notice Banner -->
+    <div class="cancellation-banner">
+      <div style="font-weight: 700; font-size: 12px; color: #b91c1c; display: flex; align-items: center; gap: 6px;">
+        ⚠️ ORDER CANCELLED ${isRefunded ? '· FULL REFUND PROCESSED' : ''}
+      </div>
+      <div style="font-size: 11px; color: #7f1d1d; margin-top: 4px; line-height: 1.4;">
+        ${timelineObj.cancelReason ? `<strong>Reason:</strong> ${timelineObj.cancelReason} &nbsp;·&nbsp; ` : ''}
+        ${timelineObj.refundNote || (isRefunded ? '100% refund has been processed to the original payment method.' : 'Order has been cancelled. No payment was collected.')}
+      </div>
+    </div>
+    ` : ''}
 
     <!-- Accent Divider -->
     <div class="divider-gold"></div>
@@ -831,10 +957,17 @@ export const generateInvoiceHTML = (order) => {
           <span style="font-weight: 600; color: #111827;">${fmt(subtotal)}</span>
         </div>
 
-        ${discountAmount > 0 ? `
+        ${resolvedCoupon > 0 ? `
           <div class="totals-row discount">
-            <span>Discount & Rewards</span>
-            <span>-${fmt(discountAmount)}</span>
+            <span>Coupon Discount${order.coupon?.code ? ` (${order.coupon.code})` : ''}</span>
+            <span>-${fmt(resolvedCoupon)}</span>
+          </div>
+        ` : ''}
+
+        ${resolvedLoyalty > 0 ? `
+          <div class="totals-row discount">
+            <span>Loyalty Points Redeemed${order.redeemedPoints ? ` (${order.redeemedPoints} pts)` : ''}</span>
+            <span>-${fmt(resolvedLoyalty)}</span>
           </div>
         ` : ''}
 

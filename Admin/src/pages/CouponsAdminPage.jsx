@@ -9,6 +9,14 @@ import { PaginationTop, PaginationBottom } from '../components/Pagination';
 import api from '../services/api';
 import { checkPermission } from '../utils/rbac';
 
+const getTodayDateStr = () => {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 const CouponsAdminPage = () => {
   const { admin } = useSelector((s) => s.auth);
   const canAddCoupon = checkPermission(admin, 'add_coupon');
@@ -31,6 +39,8 @@ const CouponsAdminPage = () => {
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({ code: '', type: 'PERCENT', value: '', minOrderValue: 0, maxDiscount: '', usageLimit: 1, validFrom: '', validTo: '', isActive: true });
 
+  const todayStr = getTodayDateStr();
+
   const load = async () => {
     try {
       setLoading(true);
@@ -45,7 +55,7 @@ const CouponsAdminPage = () => {
   useEffect(() => { load(); }, [page, limit, search]);
 
   const openAddModal = () => {
-    setForm({ code: '', type: 'PERCENT', value: '', minOrderValue: 0, maxDiscount: '', usageLimit: 1, validFrom: '', validTo: '', isActive: true });
+    setForm({ code: '', type: 'PERCENT', value: '', minOrderValue: 0, maxDiscount: '', usageLimit: 1, validFrom: todayStr, validTo: '', isActive: true });
     setEditingId(null);
     setModalOpen(true);
   };
@@ -128,6 +138,19 @@ const CouponsAdminPage = () => {
   const handleSave = async (e) => {
     e.preventDefault();
     try {
+      if (!editingId && form.validFrom && form.validFrom < todayStr) {
+        toast.error('Valid From date cannot be in the past');
+        return;
+      }
+      if (form.validTo && form.validTo < todayStr) {
+        toast.error('Valid To date cannot be in the past');
+        return;
+      }
+      if (form.validFrom && form.validTo && form.validTo < form.validFrom) {
+        toast.error('Valid To date cannot be earlier than Valid From date');
+        return;
+      }
+
       const payload = {
         ...form,
         usageLimit: form.usageLimit === '' || form.usageLimit === null || form.usageLimit === undefined || form.usageLimit === '0' || form.usageLimit === 0 ? null : Number(form.usageLimit)
@@ -141,7 +164,7 @@ const CouponsAdminPage = () => {
         toast.success('Coupon created successfully.');
       }
       setModalOpen(false);
-      setForm({ code: '', type: 'PERCENT', value: '', minOrderValue: 0, maxDiscount: '', usageLimit: 1, validFrom: '', validTo: '', isActive: true });
+      setForm({ code: '', type: 'PERCENT', value: '', minOrderValue: 0, maxDiscount: '', usageLimit: 1, validFrom: todayStr, validTo: '', isActive: true });
       setEditingId(null);
       load();
     } catch (err) {
@@ -311,11 +334,32 @@ const CouponsAdminPage = () => {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-medium text-brand-grey mb-1.5" htmlFor="coup-from">Valid From</label>
-                      <input id="coup-from" type="date" value={form.validFrom} onChange={e=>setForm(p=>({...p,validFrom:e.target.value}))} className="w-full border border-brand-light px-3 py-2 text-sm focus:outline-none focus:border-brand-gold"/>
+                      <input
+                        id="coup-from"
+                        type="date"
+                        min={editingId && form.validFrom && form.validFrom < todayStr ? form.validFrom : todayStr}
+                        value={form.validFrom}
+                        onChange={e => {
+                          const newFrom = e.target.value;
+                          setForm(p => ({
+                            ...p,
+                            validFrom: newFrom,
+                            validTo: p.validTo && p.validTo < newFrom ? '' : p.validTo
+                          }));
+                        }}
+                        className="w-full border border-brand-light px-3 py-2 text-sm focus:outline-none focus:border-brand-gold"
+                      />
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-brand-grey mb-1.5" htmlFor="coup-to">Valid To</label>
-                      <input id="coup-to" type="date" value={form.validTo} onChange={e=>setForm(p=>({...p,validTo:e.target.value}))} className="w-full border border-brand-light px-3 py-2 text-sm focus:outline-none focus:border-brand-gold"/>
+                      <input
+                        id="coup-to"
+                        type="date"
+                        min={form.validFrom ? (form.validFrom > todayStr ? form.validFrom : todayStr) : todayStr}
+                        value={form.validTo}
+                        onChange={e => setForm(p => ({ ...p, validTo: e.target.value }))}
+                        className="w-full border border-brand-light px-3 py-2 text-sm focus:outline-none focus:border-brand-gold"
+                      />
                     </div>
                   </div>
                   <div className="flex items-center justify-between p-3 bg-brand-light/30 rounded-lg border border-brand-light">

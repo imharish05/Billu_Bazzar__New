@@ -202,11 +202,14 @@ class RazorpayService extends PaymentGatewayInterface {
           const maxAvailablePaisa = Math.max(0, paymentDetails.amount - alreadyRefunded);
 
           if (maxAvailablePaisa === 0) {
+            console.log('[Razorpay refund] Payment was already fully refunded on Razorpay.');
+            const existingRefundId = (paymentDetails.refunds?.items?.[0]?.id) || paymentDetails.id || `rfnd_${Date.now()}`;
             return {
-              success: false,
-              status: 'Payment has already been fully refunded on Razorpay.',
-              amount: 0,
+              success: true,
+              gatewayRef: existingRefundId,
+              amount: parseFloat(amount || 0),
               currency: paymentDetails.currency || 'INR',
+              status: 'REFUNDED',
               raw: paymentDetails,
             };
           }

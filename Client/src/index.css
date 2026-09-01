@@ -334,6 +334,7 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--color-gold); ou
 }
 
 @media (max-width: 767px) {
+  .hero-banner-section .hero-content-wrapper,
   .hero-banner-section .max-w-xl {
     padding: 0.75rem !important;
   }

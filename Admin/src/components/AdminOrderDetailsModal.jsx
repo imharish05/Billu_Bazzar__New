@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { X, MapPin, CreditCard, Truck, FileText, Package, Check, Circle, Phone, Mail, Gift, Copy, Printer } from 'lucide-react';
+import { X, MapPin, CreditCard, Truck, FileText, Package, Check, Circle, Phone, Mail, Gift, Copy, Printer, AlertTriangle, Ban } from 'lucide-react';
 import currencyJs from 'currency.js';
 import toast from 'react-hot-toast';
 import { getImageUrl } from '../utils/imageUrl';
@@ -111,10 +111,30 @@ const AdminOrderDetailsModal = ({ order, onClose, onStatusUpdate }) => {
 
   const shippingObj = parseJsonObj(order.shippingAddress) || {};
   const billingObj = parseJsonObj(order.billingAddress) || {};
+  const timeline = parseJsonObj(order.statusTimeline) || {};
+
+  const isCancelled = order.status === 'CANCELLED' || Boolean(timeline.CANCELLED) || Boolean(timeline.cancelReason);
+  const cancelReason = timeline.cancelReason || (typeof order.notes === 'string' ? (order.notes.match(/\[Cancelled by [^\]]+\]:\s*(.*)/)?.[1] || null) : null);
+  const cancelledBy = timeline.cancelledBy || (typeof order.notes === 'string' && order.notes.includes('[Cancelled by Customer]') ? 'CUSTOMER' : (isCancelled ? 'ADMIN / STORE' : null));
+  const cancelledAt = timeline.CANCELLED || (isCancelled ? order.updatedAt : null);
 
   const customerName = order.customer?.name || billingObj.fullName || billingObj.name || shippingObj.fullName || shippingObj.name || 'Guest / Customer';
   const customerEmail = order.customer?.email || billingObj.email || shippingObj.email || '';
   const customerPhone = order.customer?.phone || billingObj.phone || shippingObj.phone || '';
+
+  const cleanGiftMessage = (() => {
+    if (order.giftMessage && !order.giftMessage.startsWith('[Cancelled by')) return order.giftMessage;
+    if (!order.notes || typeof order.notes !== 'string') return null;
+    const clean = order.notes
+      .split('\n')
+      .filter(line => !line.trim().startsWith('[Cancelled by'))
+      .join('\n')
+      .trim();
+    return clean || null;
+  })();
+
+  const hasGiftWrap = Boolean(order.isGiftWrap || Number(order.giftWrapFee || order.giftWrapPrice || 0) > 0);
+  const showGiftSection = Boolean(cleanGiftMessage || hasGiftWrap);
 
   const handlePrintInvoice = () => {
     toast.success(`Opening Tax Invoice for Order ${order.orderNumber}...`);
@@ -145,15 +165,6 @@ const AdminOrderDetailsModal = ({ order, onClose, onStatusUpdate }) => {
           </div>
 
           <div className="flex items-center gap-2.5">
-            {/* <button
-              onClick={handlePrintInvoice}
-              className="px-3.5 py-1.5 bg-brand-gold text-white hover:bg-amber-600 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm shadow-amber-500/20"
-              title="Print GST Tax Invoice"
-              id="btn-print-tax-invoice"
-            >
-              <Printer size={14} />
-              <span>Print Tax Invoice</span>
-            </button> */}
             <button
               onClick={onClose}
               className="p-1.5 text-neutral-400 hover:text-neutral-700 transition-colors rounded-full hover:bg-neutral-100"
@@ -165,6 +176,58 @@ const AdminOrderDetailsModal = ({ order, onClose, onStatusUpdate }) => {
 
         {/* Modal Body */}
         <div className="p-6 space-y-6">
+
+          {/* Cancellation Information Banner */}
+          {isCancelled && (
+            <div className="bg-red-50/90 border border-red-200 rounded-xl p-4 sm:p-5 text-xs text-red-950 space-y-3 shadow-2xs">
+              <div className="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-red-200/80">
+                <div className="flex items-center gap-2 text-red-700 font-bold text-sm">
+                  <AlertTriangle size={17} />
+                  <span>Order Cancellation Details</span>
+                </div>
+                {cancelledBy && (
+                  <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-red-100 text-red-800 border border-red-300">
+                    Cancelled by: <strong>{cancelledBy === 'CUSTOMER' ? 'Customer' : cancelledBy}</strong>
+                  </span>
+                )}
+              </div>
+
+              <div className="grid sm:grid-cols-2 gap-3">
+                <div className="bg-white p-3 rounded-lg border border-red-200/70">
+                  <span className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider block mb-1">
+                    Cancellation Reason & Notes
+                  </span>
+                  <p className="font-semibold text-neutral-900 text-xs leading-relaxed">
+                    {cancelReason || 'No reason provided'}
+                  </p>
+                </div>
+
+                <div className="bg-white p-3 rounded-lg border border-red-200/70">
+                  <span className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider block mb-1">
+                    Cancelled Date & Time
+                  </span>
+                  <p className="font-semibold text-neutral-900 text-xs">
+                    {cancelledAt 
+                      ? new Date(cancelledAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+                      : 'Recently Cancelled'}
+                  </p>
+                </div>
+              </div>
+
+              {timeline.refundGatewayRef && (
+                <div className="text-[11px] text-emerald-900 bg-emerald-50 p-2.5 rounded-lg border border-emerald-300 flex items-center justify-between flex-wrap gap-2">
+                  <span>💳 <strong>Refund Reference ID:</strong> <span className="font-mono font-bold">{timeline.refundGatewayRef}</span></span>
+                  <span className="text-[10px] bg-emerald-200 text-emerald-900 font-bold px-2 py-0.5 rounded uppercase">Full Refund Processed</span>
+                </div>
+              )}
+
+              {timeline.refundNote && (
+                <div className="text-[11px] text-red-800 bg-red-100/70 p-2.5 rounded-lg border border-red-200 flex items-center gap-2">
+                  <span>ℹ️ <strong>Refund Note:</strong> {timeline.refundNote}</span>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Customer Metadata Card */}
           <div className="bg-neutral-50 p-4 rounded-xl border border-neutral-200/90 flex flex-wrap justify-between items-start gap-5 text-xs">
@@ -307,8 +370,8 @@ const AdminOrderDetailsModal = ({ order, onClose, onStatusUpdate }) => {
             </div>
           </div>
 
-          {/* Gift Services & Personalized Message (Only if selected or message exists) */}
-          {(order.giftMessage || order.notes || order.isGiftWrap || Number(order.giftWrapFee || order.giftWrapPrice || 0) > 0) && (
+          {/* Gift Services & Personalized Message (Only if real gift message exists or gift packaging requested) */}
+          {showGiftSection && (
             <div className="bg-amber-50/50 p-4 rounded-lg border border-amber-200/80 flex items-start gap-3 text-xs">
               <Gift size={20} className="text-brand-gold mt-0.5 flex-shrink-0" />
               <div className="flex-1">
@@ -316,10 +379,10 @@ const AdminOrderDetailsModal = ({ order, onClose, onStatusUpdate }) => {
                   Gift Services & Personalized Message <span className="text-[10px] bg-amber-100 text-amber-800 font-semibold px-2 py-0.5 rounded-full capitalize">Complimentary</span>
                 </h4>
                 
-                {/* Gift Message / Note */}
-                {(order.giftMessage || order.notes) && (
+                {/* Gift Message */}
+                {cleanGiftMessage && (
                   <div className="bg-white p-3 rounded border border-amber-100 text-neutral-800 mb-2 italic font-serif text-sm">
-                    "{order.giftMessage || order.notes}"
+                    "{cleanGiftMessage}"
                   </div>
                 )}
 
@@ -327,7 +390,7 @@ const AdminOrderDetailsModal = ({ order, onClose, onStatusUpdate }) => {
                 <p className="text-neutral-600 font-medium flex items-center gap-1.5">
                   <span className="flex items-center gap-1"><Gift size={14} className="text-brand-gold" /> Gift Packaging:</span> 
                   <span className="font-semibold text-neutral-900">
-                    {Number(order.giftWrapFee || order.giftWrapPrice || 0) > 0 || order.isGiftWrap ? 'Luxury Gift Wrap (Included)' : 'Complimentary Gift Service'}
+                    {hasGiftWrap ? 'Luxury Gift Wrap (Included)' : 'Complimentary Gift Service'}
                   </span>
                 </p>
               </div>
@@ -340,12 +403,39 @@ const AdminOrderDetailsModal = ({ order, onClose, onStatusUpdate }) => {
               <span>Subtotal</span>
               <span>{fmt(order.subtotal || order.totalAmount, currency)}</span>
             </div>
-            {Number(order.discountAmount) > 0 && (
-              <div className="flex justify-between text-emerald-600 font-medium">
-                <span>Coupon Discount</span>
-                <span>-{fmt(order.discountAmount, currency)}</span>
-              </div>
-            )}
+            {(() => {
+              const totalDisc = Number(order.discountAmount || 0);
+              const couponDisc = Number(order.couponDiscount || 0);
+              const loyaltyDisc = Number(order.loyaltyDiscount || 0);
+
+              let resolvedCoupon = couponDisc;
+              let resolvedLoyalty = loyaltyDisc;
+
+              if (resolvedCoupon === 0 && resolvedLoyalty === 0 && totalDisc > 0) {
+                if (order.couponId || order.coupon) {
+                  resolvedCoupon = totalDisc;
+                } else {
+                  resolvedLoyalty = totalDisc;
+                }
+              }
+
+              return (
+                <>
+                  {resolvedCoupon > 0 && (
+                    <div className="flex justify-between text-emerald-600 font-medium">
+                      <span>Coupon Discount{order.coupon?.code ? ` (${order.coupon.code})` : ''}</span>
+                      <span>-{fmt(resolvedCoupon, currency)}</span>
+                    </div>
+                  )}
+                  {resolvedLoyalty > 0 && (
+                    <div className="flex justify-between text-emerald-600 font-medium">
+                      <span>Loyalty Points Redeemed{order.redeemedPoints ? ` (${order.redeemedPoints} pts)` : ''}</span>
+                      <span>-{fmt(resolvedLoyalty, currency)}</span>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
             {(() => {
               const sub = Number(order.subtotal || 0);
               const disc = Number(order.discountAmount || 0);
@@ -385,14 +475,14 @@ const AdminOrderDetailsModal = ({ order, onClose, onStatusUpdate }) => {
             Invoice: <strong className="text-neutral-800">INV-{order.orderNumber}</strong>
           </div>
           <div className="flex items-center gap-2.5">
-            <button
+            {/* <button
               onClick={handlePrintInvoice}
               className="px-4 py-2 bg-neutral-900 hover:bg-neutral-800 text-white rounded-lg text-xs font-bold flex items-center gap-2 transition-all shadow-sm"
               id="btn-footer-print-invoice"
             >
               <Printer size={14} className="text-brand-gold" />
               <span>Print GST Invoice</span>
-            </button>
+            </button> */}
             <button
               onClick={onClose}
               className="px-4 py-2 bg-white hover:bg-neutral-100 text-neutral-700 border border-neutral-300 rounded-lg text-xs font-semibold transition-all"

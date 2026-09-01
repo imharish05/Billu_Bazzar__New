@@ -97,10 +97,10 @@ const HeroBanner = () => {
     return (
       <section ref={sectionRef} className="hero-banner-section relative w-full flex flex-col justify-center bg-brand-text" aria-label="Hero banner">
         <div className="relative z-10 max-w-site mx-auto px-6 md:px-16 w-full py-10 md:py-0">
-          <div className="max-w-xl p-6 md:p-8">
+          <div className="hero-content-wrapper max-w-2xl lg:max-w-3xl xl:max-w-4xl p-6 md:p-8">
             <p className="text-brand-gold text-xs tracking-[0.25em] uppercase mb-4">Billu Bazaar</p>
             <h1 className="font-playfair text-3xl sm:text-4xl md:text-6xl font-bold text-white leading-tight mb-6">Luxury Redefined</h1>
-            <p className="text-white/80 text-base md:text-lg mb-8 max-w-sm">Discover handcrafted elegance from India's finest artisans.</p>
+            <p className="text-white/80 text-base md:text-lg mb-8 max-w-lg">Discover handcrafted elegance from India's finest artisans.</p>
             <Link to="/products" className="btn-primary" id="hero-cta-fallback">Explore Collection</Link>
           </div>
         </div>
@@ -179,7 +179,7 @@ const HeroBanner = () => {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.4 }}
-              className="max-w-xl p-4 sm:p-8"
+              className="hero-content-wrapper max-w-2xl md:max-w-3xl lg:max-w-4xl p-4 sm:p-8"
             >
               {banner.badgeText && banner.badgeText.trim() && (
                 <motion.span
@@ -216,7 +216,7 @@ const HeroBanner = () => {
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: 0.6 }}
-                  className="text-white/80 text-sm md:text-lg mb-6 md:mb-8 max-w-xs sm:max-w-sm"
+                  className="text-white/80 text-sm md:text-lg mb-6 md:mb-8 max-w-sm sm:max-w-md md:max-w-xl"
                 >
                   {banner.subtitle}
                 </motion.p>

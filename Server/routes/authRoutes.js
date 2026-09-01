@@ -2,7 +2,7 @@
 const router = require('express').Router();
 const rateLimit = require('express-rate-limit');
 const {
-  register, login, getProfile, updateProfile,
+  register, login, getProfile, updateProfile, changePassword,
   adminLogin, adminRegister,
   refresh, getRefreshToken, getMe,
   forgotPassword, verifyOtp, resetPassword,
@@ -43,6 +43,7 @@ router.get('/getme',              getMe);
 router.get('/me',                 getMe);
 router.get('/profile',            verifyCustomer, getProfile);
 router.put('/profile',            verifyCustomer, updateProfile);
+router.put('/change-password',    authLimiter, verifyCustomer, changePassword);
 
 // ── Admin Auth ────────────────────────────────────────────────────────────────
 router.post('/admin/login',    authLimiter, adminLogin);
