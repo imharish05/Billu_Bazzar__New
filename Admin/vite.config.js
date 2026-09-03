@@ -9,6 +9,12 @@ export default defineConfig(({ mode }) => {
     plugins: [react()],
     server: {
       port: 5174,
+      host: true,
+      hmr: {
+        host: 'localhost',
+        protocol: 'ws',
+        port: 5174,
+      },
       proxy: {
         '/api': {
           target: backendUrl,

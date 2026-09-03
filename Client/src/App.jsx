@@ -183,6 +183,12 @@ const App = () => {
           <Route path="/shipping" element={<ShippingPage />} />
           <Route path="/cancellation" element={<CancellationPage />} />
           <Route path="/returns" element={<ReturnsPage />} />
+          <Route path="/login" element={<Navigate to="/account?view=login" replace />} />
+          <Route path="/signin" element={<Navigate to="/account?view=login" replace />} />
+          <Route path="/sign-in" element={<Navigate to="/account?view=login" replace />} />
+          <Route path="/register" element={<Navigate to="/account?view=register" replace />} />
+          <Route path="/signup" element={<Navigate to="/account?view=register" replace />} />
+          <Route path="/sign-up" element={<Navigate to="/account?view=register" replace />} />
           <Route path="/forgot-password" element={<Navigate to="/account?view=forgot" replace />} />
           <Route path="/account" element={<AccountLayout />}>
             <Route index element={<ProfilePage />} />

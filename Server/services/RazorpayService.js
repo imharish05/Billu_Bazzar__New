@@ -179,7 +179,7 @@ class RazorpayService extends PaymentGatewayInterface {
                         process.env.RAZORPAY_KEY_SECRET &&
                         !process.env.RAZORPAY_KEY_SECRET.includes('mock');
 
-    if (!hasRealKeys || (typeof paymentId === 'string' && paymentId.startsWith('order_sim_'))) {
+    if (!hasRealKeys || (typeof paymentId === 'string' && (paymentId.startsWith('order_sim_') || paymentId.startsWith('sim_')))) {
       return {
         success: true,
         gatewayRef: `rfnd_sim_${Date.now()}`,
@@ -192,11 +192,37 @@ class RazorpayService extends PaymentGatewayInterface {
 
     try {
       const instance = this._getInstance();
+      let resolvedPaymentId = paymentId;
+
+      // If an Order ID (order_...) was passed instead of a Payment ID (pay_...), fetch the associated captured payment
+      if (typeof resolvedPaymentId === 'string' && resolvedPaymentId.startsWith('order_')) {
+        try {
+          const orderPayments = await instance.orders.fetchPayments(resolvedPaymentId);
+          const capturedPayment = (orderPayments?.items || []).find(p => p.status === 'captured') || (orderPayments?.items || [])[0];
+          if (capturedPayment && capturedPayment.id) {
+            console.log(`[Razorpay refund] Resolved order ID ${resolvedPaymentId} to captured payment ID ${capturedPayment.id}`);
+            resolvedPaymentId = capturedPayment.id;
+          } else {
+            return {
+              success: false,
+              status: `No valid payment found for Razorpay Order ID ${resolvedPaymentId}`,
+            };
+          }
+        } catch (fetchOrderErr) {
+          console.error(`[Razorpay refund] Error fetching payments for order ID ${resolvedPaymentId}:`, fetchOrderErr.message);
+          return {
+            success: false,
+            status: fetchOrderErr?.error?.description || fetchOrderErr.message || 'Failed to retrieve payments for order',
+            error: fetchOrderErr,
+          };
+        }
+      }
+
       let refundAmountInPaisa = amount ? Math.round(amount * 100) : null;
 
       // Check payment status and remaining refundable balance on Razorpay
       try {
-        const paymentDetails = await instance.payments.fetch(paymentId);
+        const paymentDetails = await instance.payments.fetch(resolvedPaymentId);
         if (paymentDetails && paymentDetails.amount) {
           const alreadyRefunded = paymentDetails.amount_refunded || 0;
           const maxAvailablePaisa = Math.max(0, paymentDetails.amount - alreadyRefunded);
@@ -207,10 +233,11 @@ class RazorpayService extends PaymentGatewayInterface {
             return {
               success: true,
               gatewayRef: existingRefundId,
+              gatewayPaymentId: resolvedPaymentId,
               amount: parseFloat(amount || 0),
               currency: paymentDetails.currency || 'INR',
               status: 'REFUNDED',
-              raw: paymentDetails,
+              raw: { ...paymentDetails, payment_id: resolvedPaymentId },
             };
           }
 
@@ -228,18 +255,23 @@ class RazorpayService extends PaymentGatewayInterface {
         options.amount = refundAmountInPaisa;
       }
 
-      const refundObj = await instance.payments.refund(paymentId, options);
+      const refundObj = await instance.payments.refund(resolvedPaymentId, options);
+      const isSuccess = refundObj.status === 'processed' || refundObj.status === 'pending' || !!refundObj.id;
+      if (isSuccess) {
+        console.log(`✅ [Razorpay Refund Success] Refund of ${refundObj.currency || 'INR'} ${refundObj.amount / 100} completed successfully for Payment ID: ${resolvedPaymentId}. Gateway Refund Ref: ${refundObj.id}`);
+      }
       return {
-        success: refundObj.status === 'processed' || refundObj.status === 'pending' || !!refundObj.id,
+        success: isSuccess,
         gatewayRef: refundObj.id,
+        gatewayPaymentId: resolvedPaymentId,
         amount: refundObj.amount / 100,
-        currency: refundObj.currency,
+        currency: refundObj.currency || 'INR',
         status: (refundObj.status || 'PROCESSED').toUpperCase(),
-        raw: refundObj,
+        raw: { ...refundObj, payment_id: resolvedPaymentId },
       };
     } catch (err) {
       const errorDescription = err?.error?.description || err?.message || 'Payment gateway rejected refund request';
-      console.error('[Razorpay refund] Error:', errorDescription);
+      console.error('❌ [Razorpay Refund Error]:', errorDescription);
       return {
         success: false,
         status: errorDescription,

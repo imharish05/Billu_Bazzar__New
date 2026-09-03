@@ -1199,7 +1199,7 @@ const ProductDetailsPage = () => {
                             'Customers who buy this product will be able to review it after delivery!'
                           ) : (
                             <span>
-                              <Link to="/login" className="text-amber-600 font-semibold hover:underline">Sign in</Link> & purchase this item to leave a review after delivery.
+                              <Link to="/account?view=login" className="text-amber-600 font-semibold hover:underline">Sign in</Link> & purchase this item to leave a review after delivery.
                             </span>
                           )}
                         </p>

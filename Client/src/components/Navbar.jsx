@@ -993,109 +993,172 @@ const Navbar = () => {
               <button onClick={() => dispatch(closeMobileMenu())} className="p-2 text-white hover:text-brand-gold focus-visible:outline-brand-gold" aria-label="Close menu"><X size={24} /></button>
             </div>
             
+            {/* Mobile Drawer User / Auth Header */}
+            <div className="py-2 mb-2 flex-shrink-0">
+              {isAuthenticated ? (
+                <Link
+                  to="/account"
+                  onClick={() => dispatch(closeMobileMenu())}
+                  className="flex items-center justify-between p-3 rounded-xl bg-neutral-900/80 border border-neutral-800/80 hover:border-brand-gold/40 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-full bg-brand-gold/20 text-brand-gold flex items-center justify-center font-bold text-sm">
+                      {customer?.name ? customer.name[0].toUpperCase() : <User size={16} />}
+                    </div>
+                    <div>
+                      <p className="text-[11px] text-neutral-400">Welcome,</p>
+                      <p className="text-sm font-semibold text-white truncate max-w-[150px]">{customer?.name || 'My Account'}</p>
+                    </div>
+                  </div>
+                  <span className="text-xs font-medium text-brand-gold flex items-center gap-1">
+                    Account <ChevronRight size={14} />
+                  </span>
+                </Link>
+              ) : (
+                <Link
+                  to="/account?view=login"
+                  onClick={() => dispatch(closeMobileMenu())}
+                  className="flex items-center justify-between p-3 rounded-xl bg-brand-gold/10 border border-brand-gold/20 text-brand-gold hover:bg-brand-gold/20 transition-all"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <User size={18} />
+                    <span className="text-sm font-semibold">Sign In / Register</span>
+                  </div>
+                  <ArrowRight size={15} />
+                </Link>
+              )}
+
+              {/* Quick links: Wishlist & Orders */}
+              <div className="grid grid-cols-2 gap-2 mt-2">
+                <Link
+                  to="/account/wishlist"
+                  onClick={() => dispatch(closeMobileMenu())}
+                  className="flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-neutral-900/60 border border-neutral-800/60 text-xs text-neutral-300 hover:text-brand-gold transition-colors"
+                >
+                  <Heart size={14} className="text-rose-400" />
+                  <span>Wishlist ({wishlistItems?.length || 0})</span>
+                </Link>
+                <Link
+                  to="/account/orders"
+                  onClick={() => dispatch(closeMobileMenu())}
+                  className="flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-neutral-900/60 border border-neutral-800/60 text-xs text-neutral-300 hover:text-brand-gold transition-colors"
+                >
+                  <ShoppingBag size={14} className="text-brand-gold" />
+                  <span>My Orders</span>
+                </Link>
+              </div>
+            </div>
+            
+            {/* Categories Header Label */}
+            <div className="pt-2 pb-1 border-t border-neutral-800/60">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400">Categories</span>
+            </div>
+
             {/* 3-level accordion list */}
-            <ul className="flex flex-col gap-4 mt-4 overflow-y-auto flex-1 pb-6 pr-2 scrollbar-thin">
+            <ul className="flex flex-col gap-1 mt-1 overflow-y-auto flex-1 pb-6 pr-1 scrollbar-thin">
               {activeNavLinks.map(link => {
                 const hasLevel2 = link.children && link.children.length > 0;
                 const isL1Expanded = expandedLevel1 === link.slug;
                 
                 return (
-                  <li key={link.slug || link.label} className="border-b border-neutral-800/60 pb-3">
+                  <li key={link.slug || link.label} className="border-b border-neutral-800/40 last:border-b-0 py-1">
                     <div className="flex items-center justify-between">
                       {hasLevel2 ? (
                         <button
                           onClick={() => setExpandedLevel1(isL1Expanded ? null : link.slug)}
-                          className={`font-playfair text-xl font-semibold text-left flex-1 ${link.highlight ? 'text-brand-gold' : 'text-white'}`}
+                          className={`font-playfair text-lg font-medium text-left flex-1 py-2.5 flex items-center justify-between ${link.highlight ? 'text-brand-gold' : isL1Expanded ? 'text-brand-gold' : 'text-neutral-100'} hover:text-brand-gold transition-colors`}
                         >
-                          {link.label}
+                          <span>{link.label}</span>
+                          <ChevronRight
+                            size={18}
+                            className={`transform transition-transform duration-200 text-neutral-400 ${isL1Expanded ? 'rotate-90 text-brand-gold' : ''}`}
+                          />
                         </button>
                       ) : (
                         <Link
                           to={link.to}
                           onClick={() => dispatch(closeMobileMenu())}
-                          className={`font-playfair text-xl font-semibold flex-1 ${link.highlight ? 'text-brand-gold' : 'text-white'}`}
+                          className={`font-playfair text-lg font-medium flex-1 py-2.5 ${link.highlight ? 'text-brand-gold' : 'text-neutral-100'} hover:text-brand-gold transition-colors`}
                         >
                           {link.label}
                         </Link>
-                      )}
-                      
-                      {hasLevel2 && (
-                        <button
-                          onClick={() => setExpandedLevel1(isL1Expanded ? null : link.slug)}
-                          className="p-2 text-neutral-400 hover:text-white"
-                          aria-label="Toggle subcategories"
-                        >
-                          <ChevronRight
-                            size={16}
-                            className={`transform transition-transform duration-200 ${isL1Expanded ? 'rotate-90' : ''}`}
-                          />
-                        </button>
                       )}
                     </div>
                     
                     {/* Level 2 Subcategories Accordion */}
                     {hasLevel2 && isL1Expanded && (
-                      <ul className="pl-4 mt-2.5 space-y-2.5 border-l border-neutral-800">
+                      <div className="pl-3 pr-1 py-1 space-y-1">
+                        {/* Direct explore all for Level 1 */}
+                        <Link
+                          to={link.to || `/category/${link.slug}`}
+                          onClick={() => dispatch(closeMobileMenu())}
+                          className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-gold hover:text-amber-300 uppercase tracking-wider py-2 px-2 hover:translate-x-1 transition-transform"
+                        >
+                          <span>Explore All {link.label}</span>
+                          <ArrowRight size={13} />
+                        </Link>
 
                         {link.children.map(sub => {
                           const hasLevel3 = sub.children && sub.children.length > 0;
                           const isL2Expanded = expandedLevel2 === sub.slug;
                           
                           return (
-                            <li key={sub.slug || sub.id}>
-                              <div className="flex items-center justify-between">
+                            <div key={sub.slug || sub.id} className="py-0.5">
+                              <div className="flex items-center justify-between rounded-lg hover:bg-neutral-900/60 transition-colors">
                                 {hasLevel3 ? (
                                   <button
                                     onClick={() => setExpandedLevel2(isL2Expanded ? null : sub.slug)}
-                                    className="text-sm font-medium text-neutral-300 hover:text-brand-gold text-left flex-1 py-1"
+                                    className={`text-[15px] font-medium text-left flex-1 py-2.5 px-2.5 flex items-center justify-between ${isL2Expanded ? 'text-brand-gold' : 'text-neutral-200'} hover:text-brand-gold transition-colors`}
                                   >
-                                    {sub.name}
+                                    <span>{sub.name}</span>
+                                    <ChevronRight
+                                      size={16}
+                                      className={`transform transition-transform duration-200 text-neutral-400 ${isL2Expanded ? 'rotate-90 text-brand-gold' : ''}`}
+                                    />
                                   </button>
                                 ) : (
                                   <Link
                                     to={`/category/${link.slug}/${sub.slug}`}
                                     onClick={() => dispatch(closeMobileMenu())}
-                                    className="text-sm font-medium text-neutral-300 hover:text-brand-gold flex-1 py-1"
+                                    className="text-[15px] font-medium text-neutral-200 hover:text-brand-gold flex-1 py-2.5 px-2.5"
                                   >
                                     {sub.name}
                                   </Link>
                                 )}
-                                
-                                {hasLevel3 && (
-                                  <button
-                                    onClick={() => setExpandedLevel2(isL2Expanded ? null : sub.slug)}
-                                    className="p-1.5 text-neutral-500 hover:text-white"
-                                    aria-label="Toggle sub-subcategories"
-                                  >
-                                    <ChevronRight
-                                      size={14}
-                                      className={`transform transition-transform duration-200 ${isL2Expanded ? 'rotate-90' : ''}`}
-                                    />
-                                  </button>
-                                )}
                               </div>
                               
-                              {/* Level 3 Sub-subcategories Accordion */}
+                              {/* Level 3 Sub-subcategories (Child Categories) */}
                               {hasLevel3 && isL2Expanded && (
-                                <ul className="pl-4 mt-1.5 space-y-1 border-l border-neutral-700">
+                                <div className="pl-3 pr-1 py-1.5 space-y-1.5 border-l-2 border-brand-gold/30 ml-2 my-1">
+                                  <Link
+                                    to={`/category/${link.slug}/${sub.slug}`}
+                                    onClick={() => dispatch(closeMobileMenu())}
+                                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-brand-gold/90 hover:text-brand-gold uppercase tracking-wider py-1 px-2"
+                                  >
+                                    <span>View All {sub.name}</span>
+                                    <ArrowRight size={11} />
+                                  </Link>
 
                                   {sub.children.map(ss => (
-                                    <li key={ss.slug || ss.id}>
-                                      <Link
-                                        to={`/category/${link.slug}/${sub.slug}/${ss.slug}`}
-                                        onClick={() => dispatch(closeMobileMenu())}
-                                        className="text-xs text-neutral-400 hover:text-brand-gold block py-1"
-                                      >
-                                        {ss.name}
-                                      </Link>
-                                    </li>
+                                    <Link
+                                      key={ss.slug || ss.id}
+                                      to={`/category/${link.slug}/${sub.slug}/${ss.slug}`}
+                                      onClick={() => dispatch(closeMobileMenu())}
+                                      className="flex items-center justify-between px-3.5 py-3 rounded-lg bg-neutral-900/70 hover:bg-neutral-800 active:bg-neutral-800 border border-neutral-800/60 hover:border-brand-gold/40 text-[14px] font-medium text-neutral-200 hover:text-brand-gold transition-all min-h-[44px] active:scale-[0.98] group"
+                                    >
+                                      <div className="flex items-center gap-2.5">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-brand-gold/70 group-hover:bg-brand-gold group-hover:scale-125 transition-all" />
+                                        <span className="leading-snug">{ss.name}</span>
+                                      </div>
+                                      <ChevronRight size={14} className="text-neutral-500 group-hover:text-brand-gold group-hover:translate-x-0.5 transition-transform" />
+                                    </Link>
                                   ))}
-                                </ul>
+                                </div>
                               )}
-                            </li>
+                            </div>
                           );
                         })}
-                      </ul>
+                      </div>
                     )}
                   </li>
                 );

@@ -257,6 +257,18 @@ const ReturnsAdminPage = () => {
       if (res.data?.success) {
         toast.success(res.data.message || 'Return status updated successfully.');
         const updatedReturn = res.data.returnRequest;
+        if (newStatus === 'REFUNDED') {
+          console.log('✅ [Refund Success] Return status updated to REFUNDED successfully:', {
+            returnId: selectedReturn.id,
+            returnNumber: selectedReturn.returnNumber,
+            refundTransactionRef: updatedReturn?.refundTransactionRef || refundTransactionRef,
+            refundAmount: updatedReturn?.refundAmount || selectedReturn.refundAmount,
+            currency: selectedReturn.currency || 'INR',
+            orderNumber: selectedReturn.order?.orderNumber,
+            paymentId: selectedReturn.order?.razorpay_payment_id,
+            response: res.data,
+          });
+        }
         if (updatedReturn) {
           setSelectedReturn(updatedReturn);
           setNewStatus(updatedReturn.status);
@@ -268,6 +280,7 @@ const ReturnsAdminPage = () => {
         fetchReturns();
       }
     } catch (err) {
+      console.error('❌ [Return Update Error]:', err);
       toast.error(err.response?.data?.message || 'Failed to update return status.');
     } finally {
       setIsUpdating(false);
@@ -286,6 +299,16 @@ const ReturnsAdminPage = () => {
     try {
       const res = await api.post(`/returns/admin/${selectedReturn.id}/refund`);
       if (res.data?.success) {
+        console.log('✅ [Razorpay Refund Success] Refund completed successfully:', {
+          returnId: selectedReturn.id,
+          returnNumber: selectedReturn.returnNumber,
+          refundId: res.data.refundId,
+          refundAmount: selectedReturn.refundAmount,
+          currency: selectedReturn.currency || 'INR',
+          orderNumber: selectedReturn.order?.orderNumber,
+          paymentId: selectedReturn.order?.razorpay_payment_id,
+          response: res.data,
+        });
         toast.success(res.data.message || `Razorpay refund successful! Ref: ${res.data.refundId}`);
         setRefundTransactionRef(res.data.refundId || '');
         setNewStatus('REFUNDED');
@@ -296,6 +319,7 @@ const ReturnsAdminPage = () => {
         setShowRefundConfirm(false);
       }
     } catch (err) {
+      console.error('❌ [Razorpay Refund Error]:', err);
       toast.error(err.response?.data?.message || 'Failed to initiate Razorpay refund.');
     } finally {
       setIsRefunding(false);

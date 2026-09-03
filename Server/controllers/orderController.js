@@ -327,7 +327,7 @@ const cancelMyOrder = async (req, res) => {
     timeline.cancelledBy = 'CUSTOMER';
 
     const isPaidOnline = order.paymentStatus === 'PAID';
-    const paymentId = order.razorpay_payment_id || order.paymentGatewayRef;
+    const paymentId = order.razorpay_payment_id || order.razorpay_order_id || order.paymentGatewayRef;
     const refundAmount = parseFloat(order.totalAmount || 0);
 
     if (isPaidOnline && paymentId && refundAmount > 0) {
@@ -338,6 +338,9 @@ const cancelMyOrder = async (req, res) => {
 
         if (refundResult.success) {
           order.paymentStatus = 'REFUNDED';
+          if (refundResult.gatewayPaymentId && !order.razorpay_payment_id) {
+            order.razorpay_payment_id = refundResult.gatewayPaymentId;
+          }
           timeline.refundStatus = 'COMPLETED';
           timeline.refundGatewayRef = refundResult.gatewayRef || paymentId;
           timeline.refundAmount = refundResult.amount || refundAmount;
@@ -1116,7 +1119,7 @@ const updateStatus = async (req, res) => {
 
     const isCancelOrRefund = status === 'CANCELLED' || status === 'REFUNDED';
     const isPaidOnline = order.paymentStatus === 'PAID';
-    const paymentId = order.razorpay_payment_id || order.paymentGatewayRef;
+    const paymentId = order.razorpay_payment_id || order.razorpay_order_id || order.paymentGatewayRef;
     const refundAmount = parseFloat(order.totalAmount || 0);
 
     let resolvedPaymentStatus = paymentStatus || order.paymentStatus;
@@ -1129,6 +1132,9 @@ const updateStatus = async (req, res) => {
 
         if (refundResult.success) {
           resolvedPaymentStatus = 'REFUNDED';
+          if (refundResult.gatewayPaymentId && !order.razorpay_payment_id) {
+            order.razorpay_payment_id = refundResult.gatewayPaymentId;
+          }
           updatedTimeline.refundStatus = 'COMPLETED';
           updatedTimeline.refundGatewayRef = refundResult.gatewayRef || paymentId;
           updatedTimeline.refundAmount = refundResult.amount || refundAmount;

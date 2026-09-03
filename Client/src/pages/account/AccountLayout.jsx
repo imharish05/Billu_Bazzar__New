@@ -81,6 +81,8 @@ const AccountLayout = () => {
       if (emailParam) setForgotEmail(emailParam);
     } else if (viewParam === 'register') {
       setView(VIEW_REGISTER);
+    } else if (viewParam === 'login') {
+      setView(VIEW_LOGIN);
     }
     if (tabParam) {
       if (tabParam === 'orders' || tabParam === 'returns' || tabParam === 'refunds') navigate('/account/orders', { replace: true });

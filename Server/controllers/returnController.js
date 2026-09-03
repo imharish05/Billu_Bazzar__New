@@ -456,22 +456,53 @@ const updateStatusAdmin = async (req, res) => {
       [status]: new Date().toISOString(),
     };
 
-    await returnRequest.save({ transaction });
-
-    // Update associated order item return status
-    if (returnRequest.orderItem) {
-      if (status === 'REFUNDED') {
-        returnRequest.orderItem.returnStatus = 'REFUNDED';
-      } else if (status === 'REJECTED') {
-        returnRequest.orderItem.returnStatus = 'REJECTED';
-      } else if (['APPROVED', 'PICKUP_SCHEDULED', 'PICKED_UP', 'RECEIVED_AT_WAREHOUSE'].includes(status)) {
-        returnRequest.orderItem.returnStatus = 'APPROVED';
-      }
-      await returnRequest.orderItem.save({ transaction });
-    }
-
-    // If transitioned to REFUNDED, optionally restock item
+    // If transitioned to REFUNDED, process online gateway refund if applicable
     if (status === 'REFUNDED' && prevStatus !== 'REFUNDED') {
+      const order = returnRequest.order;
+      const paymentId = order ? (order.razorpay_payment_id || order.razorpay_order_id || order.paymentGatewayRef) : null;
+      const isOnlinePaid = paymentId && !String(paymentId).startsWith('COD');
+      const alreadyHasGatewayRefund = returnRequest.refundTransactionRef && String(returnRequest.refundTransactionRef).startsWith('rfnd_');
+
+      // Trigger automatic gateway refund for online payments if no manual UTR was provided or if auto-refunding
+      if (isOnlinePaid && !alreadyHasGatewayRefund) {
+        let productRefundAmount = parseFloat(returnRequest.refundAmount) || 0;
+        if (order && returnRequest.orderItem) {
+          const itemGrossTotal = Number(returnRequest.orderItem.totalPrice) || (Number(returnRequest.orderItem.unitPrice || 0) * (returnRequest.orderItem.quantity || 1));
+          const orderSubtotal = Number(order.subtotal) || itemGrossTotal || 1;
+          const orderDiscount = Number(order.discountAmount) || 0;
+          const itemDiscountRatio = orderSubtotal > 0 ? (itemGrossTotal / orderSubtotal) : 0;
+          const itemDiscountShare = Math.min(itemGrossTotal, orderDiscount * itemDiscountRatio);
+          const netItemTotal = Math.max(0, itemGrossTotal - itemDiscountShare);
+          const netUnitPrice = (returnRequest.orderItem.quantity || 1) > 0 ? (netItemTotal / (returnRequest.orderItem.quantity || 1)) : netItemTotal;
+          const calculatedNetRefund = Math.round(netUnitPrice * (returnRequest.quantity || 1) * 100) / 100;
+          if (calculatedNetRefund > 0) {
+            productRefundAmount = calculatedNetRefund;
+          }
+        }
+
+        if (productRefundAmount > 0) {
+          const refundResult = await RazorpayService.refund(paymentId, productRefundAmount);
+          if (!refundResult || !refundResult.success) {
+            await transaction.rollback();
+            return res.status(500).json({
+              success: false,
+              message: `Razorpay refund failed: ${refundResult?.status || 'Payment gateway rejected refund request'}. Return status was NOT updated.`,
+            });
+          }
+
+          returnRequest.refundAmount = refundResult.amount !== undefined ? refundResult.amount : productRefundAmount;
+          returnRequest.refundTransactionRef = refundResult.gatewayRef || `rfnd_${Date.now()}`;
+          if (refundResult.gatewayPaymentId && order && !order.razorpay_payment_id) {
+            order.razorpay_payment_id = refundResult.gatewayPaymentId;
+            await order.save({ transaction });
+          }
+
+          const existingNotes = returnRequest.adminNotes ? `${returnRequest.adminNotes}\n` : '';
+          returnRequest.adminNotes = `${existingNotes}[Razorpay Refund] Product amount ${returnRequest.currency || 'INR'} ${returnRequest.refundAmount} refunded via Payment ID: ${refundResult.gatewayPaymentId || paymentId}. Ref: ${returnRequest.refundTransactionRef}`.trim();
+        }
+      }
+
+      // Restock item
       if (returnRequest.variantId) {
         const variant = await ProductVariant.findByPk(returnRequest.variantId, { transaction });
         if (variant) await variant.increment('stock', { by: returnRequest.quantity, transaction });
@@ -486,7 +517,7 @@ const updateStatusAdmin = async (req, res) => {
         orderId: returnRequest.orderId,
         quantity: returnRequest.quantity,
         type: 'RETURN_RESTOCK',
-        reason: `Return Restock for return ${returnRequest.returnNumber}`,
+        reason: `Return Restock for return ${returnRequest.returnNumber} (Ref: ${returnRequest.refundTransactionRef || 'N/A'})`,
       }, { transaction });
 
       // Loyalty points adjustment on return refund (Negative balance approach)
@@ -514,6 +545,20 @@ const updateStatusAdmin = async (req, res) => {
           await orderInstance.save({ transaction });
         }
       }
+    }
+
+    await returnRequest.save({ transaction });
+
+    // Update associated order item return status
+    if (returnRequest.orderItem) {
+      if (status === 'REFUNDED') {
+        returnRequest.orderItem.returnStatus = 'REFUNDED';
+      } else if (status === 'REJECTED') {
+        returnRequest.orderItem.returnStatus = 'REJECTED';
+      } else if (['APPROVED', 'PICKUP_SCHEDULED', 'PICKED_UP', 'RECEIVED_AT_WAREHOUSE'].includes(status)) {
+        returnRequest.orderItem.returnStatus = 'APPROVED';
+      }
+      await returnRequest.orderItem.save({ transaction });
     }
 
     await transaction.commit();
@@ -578,8 +623,8 @@ const initiateRefundAdmin = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Associated order could not be found.' });
     }
 
-    const paymentId = order.razorpay_payment_id || order.paymentGatewayRef;
-    if (!paymentId || paymentId.startsWith('COD')) {
+    const paymentId = order.razorpay_payment_id || order.razorpay_order_id || order.paymentGatewayRef;
+    if (!paymentId || String(paymentId).startsWith('COD')) {
       await transaction.rollback();
       return res.status(400).json({
         success: false,
@@ -627,8 +672,13 @@ const initiateRefundAdmin = async (req, res) => {
     returnRequest.refundAmount = actualRefundedAmount;
     returnRequest.refundTransactionRef = refundResult.gatewayRef || `rfnd_${Date.now()}`;
 
+    if (refundResult.gatewayPaymentId && order && !order.razorpay_payment_id) {
+      order.razorpay_payment_id = refundResult.gatewayPaymentId;
+      await order.save({ transaction });
+    }
+
     const existingNotes = returnRequest.adminNotes ? `${returnRequest.adminNotes}\n` : '';
-    returnRequest.adminNotes = `${existingNotes}[Razorpay Refund] Product amount ${returnRequest.currency || 'INR'} ${actualRefundedAmount} refunded via Payment ID: ${paymentId}. Gateway Ref: ${returnRequest.refundTransactionRef}`.trim();
+    returnRequest.adminNotes = `${existingNotes}[Razorpay Refund] Product amount ${returnRequest.currency || 'INR'} ${actualRefundedAmount} refunded via Payment ID: ${refundResult.gatewayPaymentId || paymentId}. Gateway Ref: ${returnRequest.refundTransactionRef}`.trim();
 
     let currentTimeline = returnRequest.statusTimeline || {};
     if (typeof currentTimeline === 'string') {
@@ -696,6 +746,8 @@ const initiateRefundAdmin = async (req, res) => {
     }
 
     await transaction.commit();
+
+    console.log(`✅ [Return Refund Success] Return #${returnRequest.returnNumber} refunded ${returnRequest.currency || 'INR'} ${actualRefundedAmount} successfully. Gateway Refund ID: ${returnRequest.refundTransactionRef}`);
 
     // Trigger email notification for refund completion
     sendReturnStatusNotification(returnRequest, returnRequest.customer, returnRequest.order).catch((e) =>

@@ -229,12 +229,12 @@ const ProductListingPage = () => {
   const renderCategoryTree = (cats, currentCatSlug, currentSubSlug, currentSubSubSlug) => {
     return (
       <div className="space-y-4">
-        <h3 className="font-playfair text-base font-bold uppercase tracking-wider text-brand-text mb-4 pb-2 border-b border-brand-light">Categories</h3>
-        <ul className="space-y-3 text-sm">
+        <h3 className="font-playfair text-base font-bold uppercase tracking-wider text-brand-text mb-3 pb-2 border-b border-brand-light">Categories</h3>
+        <ul className="space-y-2 text-sm">
           <li>
             <Link
               to="/products"
-              className={`hover:text-brand-gold transition-colors font-medium ${!currentCatSlug ? 'text-brand-gold font-semibold' : 'text-brand-text'}`}
+              className={`block px-3 py-2 rounded-lg transition-colors font-medium ${!currentCatSlug ? 'bg-brand-gold/15 text-brand-gold font-semibold' : 'text-brand-text hover:bg-neutral-100 hover:text-brand-gold'}`}
             >
               All Products
             </Link>
@@ -245,42 +245,44 @@ const ProductListingPage = () => {
             const hasSubcategories = cat.children && cat.children.length > 0;
             
             return (
-              <li key={cat.id} className="space-y-2">
+              <li key={cat.id} className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <Link
                     to={`/category/${cat.slug}`}
-                    className={`hover:text-brand-gold transition-colors ${isCatActive ? 'text-brand-gold font-semibold' : 'text-brand-text'}`}
+                    className={`block flex-1 px-3 py-2 rounded-lg font-medium text-sm transition-colors ${isCatActive ? 'bg-brand-gold/15 text-brand-gold font-semibold' : 'text-brand-text hover:bg-neutral-100 hover:text-brand-gold'}`}
                   >
                     {cat.name}
                   </Link>
                 </div>
                 
                 {hasSubcategories && (isCatActive || currentCatSlug === cat.slug) && (
-                  <ul className="pl-4 space-y-2 border-l border-brand-light/60 mt-2">
+                  <ul className="pl-3 space-y-1.5 border-l-2 border-brand-gold/30 ml-3 my-1.5">
                     {cat.children.map(subCat => {
                       const isSubActive = currentSubSlug === subCat.slug;
                       const hasSubSub = subCat.children && subCat.children.length > 0;
                       
                       return (
-                        <li key={subCat.id} className="space-y-1.5">
+                        <li key={subCat.id} className="space-y-1">
                           <Link
                             to={`/category/${cat.slug}/${subCat.slug}`}
-                            className={`block hover:text-brand-gold text-xs transition-colors ${isSubActive ? 'text-brand-gold font-semibold' : 'text-brand-grey hover:text-brand-text'}`}
+                            className={`flex items-center justify-between px-3 py-2 rounded-md text-xs sm:text-sm font-medium transition-colors ${isSubActive ? 'bg-brand-gold/20 text-brand-gold font-semibold' : 'text-brand-grey hover:text-brand-text hover:bg-neutral-100'}`}
                           >
-                            {subCat.name}
+                            <span>{subCat.name}</span>
+                            {hasSubSub && <span className="text-[10px] text-neutral-400 font-normal">({subCat.children.length})</span>}
                           </Link>
                           
                           {hasSubSub && isSubActive && (
-                            <ul className="pl-3 space-y-1 mt-1 border-l border-brand-light/40">
+                            <ul className="pl-2 space-y-1 mt-1 border-l-2 border-brand-gold/20 ml-2">
                               {subCat.children.map(subSubCat => {
                                 const isSubSubActive = currentSubSubSlug === subSubCat.slug;
                                 return (
                                   <li key={subSubCat.id}>
                                     <Link
                                       to={`/category/${cat.slug}/${subCat.slug}/${subSubCat.slug}`}
-                                      className={`block hover:text-brand-gold text-[11px] transition-colors ${isSubSubActive ? 'text-brand-gold font-semibold' : 'text-brand-grey/80 hover:text-brand-text'}`}
+                                      className={`flex items-center gap-2 px-3 py-2 rounded-md text-xs font-medium transition-colors min-h-[38px] ${isSubSubActive ? 'bg-brand-gold/25 text-brand-gold font-semibold' : 'text-neutral-600 hover:text-brand-gold hover:bg-neutral-100'}`}
                                     >
-                                      {subSubCat.name}
+                                      <span className={`w-1.5 h-1.5 rounded-full ${isSubSubActive ? 'bg-brand-gold' : 'bg-neutral-400'}`} />
+                                      <span>{subSubCat.name}</span>
                                     </Link>
                                   </li>
                                 );
