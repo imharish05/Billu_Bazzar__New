@@ -188,7 +188,7 @@ const initiatePayment = async (req, res) => {
 };
 
 // Normalized order update logic called after verified signature check
-const processConfirmedPayment = async ({ orderQuery, gatewayPaymentId, signature, paymentAmount, gatewayType, res }) => {
+const processConfirmedPayment = async ({ orderQuery, gatewayPaymentId, signature, paymentAmount, gatewayType, gatewayTransactionRef, res }) => {
   const transaction = await sequelize.transaction();
   try {
     // 1. Configure InnoDB lock wait timeout for this transaction
@@ -337,10 +337,18 @@ const processConfirmedPayment = async ({ orderQuery, gatewayPaymentId, signature
       };
 
       // Update Order PAID status
+      // Telr: store the TRANSACTION ref (tran_ref) in razorpay_payment_id so all
+      // refund call sites (which read razorpay_payment_id first) use the correct ref.
+      const telrTransactionRef = gatewayType === 'telr'
+        ? (gatewayTransactionRef || (String(gatewayPaymentId).startsWith('telr_sim_') ? null : gatewayPaymentId))
+        : null;
+
       await order.update({
         status: 'PAID',
         paymentStatus: 'PAID',
-        razorpay_payment_id: gatewayType === 'razorpay' ? gatewayPaymentId : null,
+        razorpay_payment_id: gatewayType === 'razorpay'
+          ? gatewayPaymentId
+          : (telrTransactionRef || null),
         razorpay_signature: signature || null,
         paymentGatewayRef: order.paymentGatewayRef || gatewayPaymentId,
         inventoryProcessed: true,
@@ -421,10 +429,16 @@ const processConfirmedPayment = async ({ orderQuery, gatewayPaymentId, signature
       return res.json({ success: true, status: 'PAID' });
     } else {
       // Inventory sold out before confirmation! Rollback & Refund
+      const telrStockFailedRef = gatewayType === 'telr'
+        ? (gatewayTransactionRef || (String(gatewayPaymentId).startsWith('telr_sim_') ? null : gatewayPaymentId))
+        : null;
+
       await order.update({
         status: 'PAYMENT_RECEIVED_STOCK_FAILED',
         paymentStatus: 'PAID',
-        razorpay_payment_id: gatewayPaymentId,
+        razorpay_payment_id: gatewayType === 'razorpay'
+          ? gatewayPaymentId
+          : (telrStockFailedRef || null),
         paymentGatewayRef: order.paymentGatewayRef || gatewayPaymentId,
         inventoryProcessed: false
       }, { transaction });
@@ -486,15 +500,25 @@ const handleTelrWebhook = async (req, res) => {
   try {
     const gateway = resolver.getGateway('AED');
 
-    // 1. Webhook authenticity check (performs backchannel check API call to Telr)
+    // 1. Webhook authenticity check (validates tran_check signature + backchannel check API)
     const isValid = await gateway.verifySignature(req.body);
     if (!isValid) {
       return res.status(400).json({ success: false, message: 'Telr IPN signature/authenticity verification failed' });
     }
 
+    // 2. Only authorise transactions that were actually paid/authorised.
+    //    Telr tran_status 'A' = authorised, 'H' = authorised but on hold. Any other value = not authorised.
+    const tranStatus = String(req.body.tran_status || '').toUpperCase();
+    const isAuthorised = tranStatus === 'A' || tranStatus === 'H';
+    if (tranStatus && !isAuthorised) {
+      console.warn(`[handleTelrWebhook] Ignoring non-authorised Telr IPN. tran_status=${tranStatus}`);
+      return res.json({ success: false, message: 'Transaction not authorised', status: tranStatus });
+    }
+
     const orderRef = req.body.tran_order_ref || req.body.order_ref || req.body.ivp_order;
     const cartId = req.body.tran_cartid || req.body.cart_id || req.body.ivp_cart;
     const paymentId = req.body.tran_ref || orderRef;
+    const transactionRef = req.body.tran_ref || null; // Telr transaction ref, used for refunds
     const paymentAmount = parseFloat(req.body.tran_amount || req.body.ivp_amount || 0);
 
     const orConditions = [];
@@ -511,6 +535,7 @@ const handleTelrWebhook = async (req, res) => {
       signature: req.body.tran_ref || '',
       paymentAmount: paymentAmount,
       gatewayType: 'telr',
+      gatewayTransactionRef: transactionRef,
       res
     });
   } catch (err) {
@@ -618,6 +643,7 @@ const verifyPayment = async (req, res) => {
           signature: 'telr_verified',
           paymentAmount: parseFloat(order.totalAmount),
           gatewayType: 'telr',
+          gatewayTransactionRef: checkResult.transactionRef || null,
           res
         });
       } else {

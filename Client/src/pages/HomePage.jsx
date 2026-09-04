@@ -111,7 +111,7 @@ const testimonials = [
  * ══════════════════════════════════════════════════════════════════════════ */
 const HomePage = () => {
   const dispatch = useDispatch();
-  const { items: products, featured, newArrivals, bestSellers, loading } = useSelector(s => s.products);
+  const { items: products, featured, newArrivals, bestSellers, loading, bestSellersLoaded, newArrivalsLoaded } = useSelector(s => s.products);
   const { items: categories } = useSelector(s => s.categories);
   const { items: banners } = useSelector(s => s.banners);
   const [mainTab, setMainTab] = useState('bestsellers');
@@ -355,15 +355,45 @@ const HomePage = () => {
     });
   }, []);
 
-  const productsToRender = useMemo(() => {
-    let list = [];
-    if (mainTab === 'bestsellers') {
-      list = bestSellers.length ? bestSellers : products.filter(p => p.isBestSeller);
-    } else {
-      list = newArrivals.length ? newArrivals : products.filter(p => p.isNewArrival);
+  const bestSellersList = useMemo(() => {
+    if (bestSellers && bestSellers.length > 0) return bestSellers;
+    return (products || []).filter(p => p.isBestSeller);
+  }, [bestSellers, products]);
+
+  const newArrivalsList = useMemo(() => {
+    if (newArrivals && newArrivals.length > 0) return newArrivals;
+    return (products || []).filter(p => p.isNewArrival);
+  }, [newArrivals, products]);
+
+  const hasBestSellers = bestSellersList.length > 0;
+  const hasNewArrivals = newArrivalsList.length > 0;
+  const isCarouselLoading = loading || (!bestSellersLoaded && !newArrivalsLoaded);
+
+  const activeTab = useMemo(() => {
+    if (hasBestSellers && hasNewArrivals) {
+      return mainTab === 'new-arrivals' ? 'new-arrivals' : 'bestsellers';
     }
-    return list.length ? list : products.slice(0, 8);
-  }, [mainTab, bestSellers, newArrivals, products]);
+    if (hasNewArrivals) return 'new-arrivals';
+    if (hasBestSellers) return 'bestsellers';
+    return 'bestsellers';
+  }, [hasBestSellers, hasNewArrivals, mainTab]);
+
+  const productsToRender = useMemo(() => {
+    if (activeTab === 'bestsellers') {
+      return bestSellersList;
+    }
+    if (activeTab === 'new-arrivals') {
+      return newArrivalsList;
+    }
+    return [];
+  }, [activeTab, bestSellersList, newArrivalsList]);
+
+  useEffect(() => {
+    if (carouselScrollRef.current) {
+      carouselScrollRef.current.scrollLeft = 0;
+      updateCarouselArrows();
+    }
+  }, [activeTab, updateCarouselArrows]);
 
   useEffect(() => {
     const el = carouselScrollRef.current;
@@ -515,105 +545,135 @@ const HomePage = () => {
       )}
 
       {/* ── SECTION 4: Bestsellers & New Arrivals Carousel ──────────────── */}
-      <section className="py-10 bg-white" aria-label="Bestsellers and New Arrivals">
-        <div className="max-w-site mx-auto px-6 md:px-8">
-          <ScrollReveal>
-            <div className="text-center mb-12">
-              <p className="text-brand-gold text-xs font-bold tracking-[0.2em] uppercase mb-3">Fresh In</p>
-              <h2 className="font-playfair text-lg sm:text-2xl md:text-h2 font-bold text-brand-text flex items-center justify-center gap-2 sm:gap-4 uppercase tracking-[0.05em] select-none border-b border-neutral-100 pb-6 max-w-xl mx-auto whitespace-nowrap flex-nowrap">
-                <button
-                  type="button"
-                  onClick={() => setMainTab('bestsellers')}
-                  className={`transition-colors duration-200 focus-visible:outline-brand-gold ${
-                    mainTab === 'bestsellers' ? 'text-neutral-950 font-bold' : 'text-neutral-300 hover:text-neutral-400'
-                  }`}
-                >
-                  Best Sellers
-                </button>
-                <span className="text-neutral-300 font-light font-sans">|</span>
-                <button
-                  type="button"
-                  onClick={() => setMainTab('new-arrivals')}
-                  className={`transition-colors duration-200 focus-visible:outline-brand-gold ${
-                    mainTab === 'new-arrivals' ? 'text-neutral-950 font-bold' : 'text-neutral-300 hover:text-neutral-400'
-                  }`}
-                >
-                  New Arrivals
-                </button>
-              </h2>
-            </div>
-          </ScrollReveal>
+      {(isCarouselLoading || hasBestSellers || hasNewArrivals) && (
+        <section className="py-10 bg-white" aria-label="Bestsellers and New Arrivals">
+          <div className="max-w-site mx-auto px-6 md:px-8">
+            <ScrollReveal>
+              <div className="text-center mb-12">
+                <p className="text-brand-gold text-xs font-bold tracking-[0.2em] uppercase mb-3">Fresh In</p>
+                <h2 className="font-playfair text-lg sm:text-2xl md:text-h2 font-bold text-brand-text flex items-center justify-center gap-2 sm:gap-4 uppercase tracking-[0.05em] select-none border-b border-neutral-100 pb-6 max-w-xl mx-auto whitespace-nowrap flex-nowrap min-h-[58px]">
+                  {isCarouselLoading ? (
+                    <span className="inline-block h-6 sm:h-7 w-48 sm:w-64 bg-neutral-100 animate-pulse rounded" />
+                  ) : (
+                    <>
+                      {hasBestSellers && (
+                        hasNewArrivals ? (
+                          <button
+                            type="button"
+                            onClick={() => setMainTab('bestsellers')}
+                            className={`transition-colors duration-200 focus-visible:outline-brand-gold ${
+                              activeTab === 'bestsellers' ? 'text-neutral-950 font-bold' : 'text-neutral-300 hover:text-neutral-400'
+                            }`}
+                          >
+                            Best Sellers
+                          </button>
+                        ) : (
+                          <span className="text-neutral-950 font-bold">
+                            Best Sellers
+                          </span>
+                        )
+                      )}
 
-          {/* Product grid / Carousel */}
-          {loading ? (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 lg:gap-6">
-              {[...Array(4)].map((_, i) => (
-                <div key={i} className="bg-white shadow-sm skeleton-card">
-                  <div className="skeleton aspect-[3/4]" />
-                  <div className="p-4 space-y-2">
-                    <div className="skeleton h-4 w-3/4" />
-                    <div className="skeleton h-4 w-1/2" />
-                    <div className="skeleton h-5 w-1/3" />
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="relative group/carousel px-4">
-              {/* Left Arrow Button */}
-              {showCarouselLeftArrow && (
-                <button
-                  type="button"
-                  onClick={() => scrollCarousel(-1)}
-                  className="absolute -left-2 sm:left-2 top-1/2 -translate-y-1/2 z-10 w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-white hover:bg-neutral-50 border border-neutral-200 text-neutral-800 flex items-center justify-center active:scale-95 transition-all shadow-md hover:text-brand-gold cursor-pointer"
-                  aria-label="Previous products"
-                >
-                  <ChevronLeft size={20} />
-                </button>
-              )}
+                      {hasBestSellers && hasNewArrivals && (
+                        <span className="text-neutral-300 font-light font-sans">|</span>
+                      )}
 
-              {/* Scroll Track */}
-              <div
-                ref={carouselScrollRef}
-                className="flex gap-4 md:gap-6 overflow-x-auto scrollbar-hide py-4 px-1"
-                style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-              >
-                {productsToRender.map((product, i) => (
-                  <div
-                    key={product.id || i}
-                    className="w-[calc(50%-8px)] md:w-[calc(33.333%-16px)] lg:w-[calc(20%-15px)] flex-shrink-0"
-                  >
-                    <ProductCard product={product} index={i} />
+                      {hasNewArrivals && (
+                        hasBestSellers ? (
+                          <button
+                            type="button"
+                            onClick={() => setMainTab('new-arrivals')}
+                            className={`transition-colors duration-200 focus-visible:outline-brand-gold ${
+                              activeTab === 'new-arrivals' ? 'text-neutral-950 font-bold' : 'text-neutral-300 hover:text-neutral-400'
+                            }`}
+                          >
+                            New Arrivals
+                          </button>
+                        ) : (
+                          <span className="text-neutral-950 font-bold">
+                            New Arrivals
+                          </span>
+                        )
+                      )}
+                    </>
+                  )}
+                </h2>
+              </div>
+            </ScrollReveal>
+
+            {/* Product grid / Carousel */}
+            {isCarouselLoading ? (
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 lg:gap-6">
+                {[...Array(4)].map((_, i) => (
+                  <div key={i} className="bg-white shadow-sm skeleton-card">
+                    <div className="skeleton aspect-[3/4]" />
+                    <div className="p-4 space-y-2">
+                      <div className="skeleton h-4 w-3/4" />
+                      <div className="skeleton h-4 w-1/2" />
+                      <div className="skeleton h-5 w-1/3" />
+                    </div>
                   </div>
                 ))}
               </div>
+            ) : (
+              <div className="relative group/carousel px-4">
+                {/* Left Arrow Button */}
+                {showCarouselLeftArrow && (
+                  <button
+                    type="button"
+                    onClick={() => scrollCarousel(-1)}
+                    className="absolute -left-2 sm:left-2 top-1/2 -translate-y-1/2 z-10 w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-white hover:bg-neutral-50 border border-neutral-200 text-neutral-800 flex items-center justify-center active:scale-95 transition-all shadow-md hover:text-brand-gold cursor-pointer"
+                    aria-label="Previous products"
+                  >
+                    <ChevronLeft size={20} />
+                  </button>
+                )}
 
-              {/* Right Arrow Button */}
-              {showCarouselRightArrow && (
-                <button
-                  type="button"
-                  onClick={() => scrollCarousel(1)}
-                  className="absolute -right-2 sm:right-2 top-1/2 -translate-y-1/2 z-10 w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-white hover:bg-neutral-50 border border-neutral-200 text-neutral-800 flex items-center justify-center active:scale-95 transition-all shadow-md hover:text-brand-gold cursor-pointer"
-                  aria-label="Next products"
+                {/* Scroll Track */}
+                <div
+                  ref={carouselScrollRef}
+                  className="flex gap-4 md:gap-6 overflow-x-auto scrollbar-hide py-4 px-1"
+                  style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
                 >
-                  <ChevronRight size={20} />
-                </button>
-              )}
-            </div>
-          )}
+                  {productsToRender.map((product, i) => (
+                    <div
+                      key={product.id || i}
+                      className="w-[calc(50%-8px)] md:w-[calc(33.333%-16px)] lg:w-[calc(20%-15px)] flex-shrink-0"
+                    >
+                      <ProductCard product={product} index={i} />
+                    </div>
+                  ))}
+                </div>
 
-          {/* Centered VIEW ALL button at the bottom */}
-          <div className="flex justify-center mt-5">
-            <Link
-              to={mainTab === 'bestsellers' ? '/products?bestSeller=true' : '/products?newArrival=true'}
-              className="px-10 py-3 border border-neutral-800 text-neutral-800 hover:bg-neutral-900 hover:text-white hover:border-neutral-900 transition-all font-inter text-xs font-semibold uppercase tracking-widest"
-              id="carousel-view-all-btn"
-            >
-              View All
-            </Link>
+                {/* Right Arrow Button */}
+                {showCarouselRightArrow && (
+                  <button
+                    type="button"
+                    onClick={() => scrollCarousel(1)}
+                    className="absolute -right-2 sm:right-2 top-1/2 -translate-y-1/2 z-10 w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-white hover:bg-neutral-50 border border-neutral-200 text-neutral-800 flex items-center justify-center active:scale-95 transition-all shadow-md hover:text-brand-gold cursor-pointer"
+                    aria-label="Next products"
+                  >
+                    <ChevronRight size={20} />
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Centered VIEW ALL button at the bottom */}
+            {!isCarouselLoading && productsToRender.length > 0 && (
+              <div className="flex justify-center mt-5">
+                <Link
+                  to={activeTab === 'bestsellers' ? '/products?bestSeller=true' : '/products?newArrival=true'}
+                  className="px-10 py-3 border border-neutral-800 text-neutral-800 hover:bg-neutral-900 hover:text-white hover:border-neutral-900 transition-all font-inter text-xs font-semibold uppercase tracking-widest"
+                  id="carousel-view-all-btn"
+                >
+                  View All
+                </Link>
+              </div>
+            )}
           </div>
-        </div>
-      </section>
+        </section>
+      )}
 
       {/* ── SECTION 6: Curated Collection Editorial Banner (PROMO Carousel) ── */}
       {promoBanners.length > 0 && (

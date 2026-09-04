@@ -32,6 +32,8 @@ const productsSlice = createSlice({
     items: [], featured: [], newArrivals: [], bestSellers: [], current: null,
     total: 0, page: 1, totalPages: 1,
     loading: false, error: null,
+    bestSellersLoaded: false,
+    newArrivalsLoaded: false,
     filters: { category: '', minPrice: '', maxPrice: '', sort: 'createdAt', order: 'DESC' },
   },
   reducers: {
@@ -46,8 +48,10 @@ const productsSlice = createSlice({
       .addCase(fetchProduct.pending, (state) => { state.loading = true; state.current = null; })
       .addCase(fetchProduct.fulfilled, (state, action) => { state.loading = false; state.current = action.payload; })
       .addCase(fetchFeatured.fulfilled, (state, action) => { state.featured = action.payload; })
-      .addCase(fetchNewArrivals.fulfilled, (state, action) => { state.newArrivals = action.payload; })
-      .addCase(fetchBestSellers.fulfilled, (state, action) => { state.bestSellers = action.payload; });
+      .addCase(fetchNewArrivals.fulfilled, (state, action) => { state.newArrivals = action.payload || []; state.newArrivalsLoaded = true; })
+      .addCase(fetchNewArrivals.rejected, (state) => { state.newArrivalsLoaded = true; })
+      .addCase(fetchBestSellers.fulfilled, (state, action) => { state.bestSellers = action.payload || []; state.bestSellersLoaded = true; })
+      .addCase(fetchBestSellers.rejected, (state) => { state.bestSellersLoaded = true; });
   },
 });
 

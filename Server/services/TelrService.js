@@ -1,9 +1,27 @@
 'use strict';
 
+const crypto = require('crypto');
 const axios = require('axios');
 const PaymentGatewayInterface = require('./PaymentGatewayInterface');
 
 class TelrService extends PaymentGatewayInterface {
+  /**
+   * Secret key used to validate Telr's SHA1 tran_check webhook signature.
+   * Falls back to the auth key if no dedicated TELR_SECRET_KEY is set.
+   * @returns {string|null}
+   */
+  authKeyForSignature() {
+    const secret = process.env.TELR_SECRET_KEY;
+    if (secret && secret.trim() !== '' && secret !== 'mock_secret_key') {
+      return secret;
+    }
+    const authKey = process.env.TELR_AUTH_KEY;
+    if (authKey && authKey.trim() !== '' && authKey !== 'mock_auth_key') {
+      return authKey;
+    }
+    return null;
+  }
+
   /**
    * Helper to check if production / live Telr gateway credentials are configured.
    * @returns {boolean}
@@ -82,27 +100,43 @@ class TelrService extends PaymentGatewayInterface {
         ? `orderId=${orderId}&orderNumber=${receipt}` 
         : `orderId=${receipt}&cartId=${receipt}`;
 
+      const returnUrls = {
+        authorised: `${clientUrl}/order-confirmation?gateway=telr&status=success&${liveOrderParam}`,
+        declined: `${clientUrl}/checkout?gateway=telr&status=declined&${liveOrderParam}`,
+        cancelled: `${clientUrl}/checkout?gateway=telr&status=cancelled&${liveOrderParam}`,
+      };
+
+      // Telr's current order.json API expects a NESTED JSON structure
+      // (method/store/authkey/order/return/customer), not the legacy flat "ivp_" fields.
       const payload = {
-        ivp_method: 'create',
-        ivp_store: storeId,
-        ivp_authkey: authKey,
-        ivp_cart: String(receipt),
-        ivp_test: String(isTestMode),
-        ivp_amount: parseFloat(amount).toFixed(2),
-        ivp_currency: currency,
-        ivp_desc: `Billu Bazzar Payment for Order ${receipt}`,
-        return_auth: `${clientUrl}/order-confirmation?gateway=telr&status=success&${liveOrderParam}`,
-        return_decl: `${clientUrl}/checkout?gateway=telr&status=declined&${liveOrderParam}`,
-        return_can: `${clientUrl}/checkout?gateway=telr&status=cancelled&${liveOrderParam}`,
-        bill_fname: firstName,
-        bill_sname: lastName,
-        bill_addr1: addr1,
-        bill_addr2: addr2,
-        bill_city: city,
-        bill_region: region,
-        bill_country: country,
-        bill_email: email,
-        bill_phone: phone,
+        method: 'create',
+        store: storeId,
+        authkey: authKey,
+        framed: 0,
+        order: {
+          cartid: String(receipt),
+          test: String(isTestMode),
+          amount: parseFloat(amount).toFixed(2),
+          currency: currency,
+          description: `Billu Bazzar Payment for Order ${receipt}`,
+        },
+        return: returnUrls,
+        customer: {
+          email: email,
+          name: {
+            title: '',
+            forenames: firstName,
+            surname: lastName,
+          },
+          address: {
+            line1: addr1,
+            line2: addr2,
+            city: city,
+            state: region,
+            country: country,
+          },
+          phone: phone,
+        },
       };
 
       console.log(`[TelrService] Initiating live Telr order for receipt: ${receipt}, amount: ${amount} ${currency}`);
@@ -138,14 +172,20 @@ class TelrService extends PaymentGatewayInterface {
 
   /**
    * Verify authenticity of a Telr callback or IPN.
-   * Performs a backchannel check API call to Telr to confirm authenticity.
+   * Validates the SHA1 tran_check signature (Telr documented "data security check")
+   * and performs a backchannel order status check via the official check API.
    * @param {any} payload - Incoming webhook/IPN payload
-   * @param {string} [signature] - Optional signature
+   * @param {string} [signature] - Optional signature (not used; tran_check is read from payload)
    * @returns {Promise<boolean>}
    */
   async verifySignature(payload, signature) {
     try {
       if (!this.hasRealCredentials()) {
+        // Simulation mode: refuse unauthenticated confirmation in production.
+        if (process.env.NODE_ENV === 'production') {
+          console.error('[Telr verifySignature] Rejected webhook in production without Telr credentials configured.');
+          return false;
+        }
         return true;
       }
 
@@ -153,9 +193,46 @@ class TelrService extends PaymentGatewayInterface {
       const orderRef = payload.tran_order_ref || payload.order_ref || payload.ivp_order || payload.tran_ref;
       const expectedStoreId = process.env.TELR_STORE_ID;
 
+      // 1. Store ID must match the configured store.
       if (expectedStoreId && storeId && String(storeId) !== String(expectedStoreId)) {
         console.warn(`[Telr verifySignature] Invalid webhook metadata. Expected store ${expectedStoreId}, got ${storeId}.`);
         return false;
+      }
+
+      // 2. Validate the SHA1 tran_check signature if the payload provides it.
+      // Format: SHA1(secret:tran_store:tran_type:tran_class:tran_test:tran_ref:tran_prevref:tran_firstref:tran_currency:tran_amount:tran_cartid:tran_desc:tran_status:tran_authcode:tran_authmessage)
+      if (payload.tran_check) {
+        const secret = this.authKeyForSignature();
+        if (secret) {
+          const value = [
+            secret,
+            payload.tran_store || '',
+            payload.tran_type || '',
+            payload.tran_class || '',
+            payload.tran_test || '',
+            payload.tran_ref || '',
+            payload.tran_prevref || '',
+            payload.tran_firstref || '',
+            payload.tran_currency || '',
+            payload.tran_amount || '',
+            payload.tran_cartid || '',
+            payload.tran_desc || '',
+            payload.tran_status || '',
+            payload.tran_authcode || '',
+            payload.tran_authmessage || '',
+          ].join(':');
+
+          const expected = crypto.createHash('sha1').update(value).digest('hex');
+          const provided = String(payload.tran_check || '').toUpperCase();
+          const match = expected.toUpperCase() === provided;
+
+          if (!match) {
+            console.warn('[Telr verifySignature] tran_check signature mismatch — rejecting webhook.');
+            return false;
+          }
+        }
+      } else {
+        console.warn('[Telr verifySignature] No tran_check signature present in webhook payload.');
       }
 
       if (!orderRef) {
@@ -163,7 +240,7 @@ class TelrService extends PaymentGatewayInterface {
         return false;
       }
 
-      // Query Telr direct backchannel check API to confirm this transaction status
+      // 3. Query Telr direct backchannel check API to confirm this transaction status
       const checkResult = await this.fetchPayment(orderRef);
       return checkResult.success;
     } catch (err) {
@@ -194,11 +271,14 @@ class TelrService extends PaymentGatewayInterface {
       const storeId = process.env.TELR_STORE_ID;
       const authKey = process.env.TELR_AUTH_KEY;
 
+      // Telr's current order.json API uses a NESTED check structure: { method:'check', order:{ ref } }
       const payload = {
-        ivp_method: 'check',
-        ivp_store: storeId,
-        ivp_authkey: authKey,
-        ivp_order: orderRef,
+        method: 'check',
+        store: storeId,
+        authkey: authKey,
+        order: {
+          ref: orderRef,
+        },
       };
 
       const response = await axios.post('https://secure.telr.com/gateway/order.json', payload, {
@@ -214,19 +294,37 @@ class TelrService extends PaymentGatewayInterface {
 
       const orderStatusText = (data.order?.status?.text || '').toLowerCase();
       const orderStatusCode = data.order?.status?.code;
-      const isPaid = orderStatusText === 'paid' || 
-                     orderStatusText === 'authorised' || 
-                     orderStatusCode === 3 || 
-                     orderStatusCode === '3';
+      // Telr order status codes: 3 = Pending/to-be-verified, 4 = Paid/Authorised.
+      // Only treat as PAID when the status indicates an authorised/paid transaction.
+      const isPaid =
+        orderStatusText === 'paid' ||
+        orderStatusText === 'authorised' ||
+        orderStatusCode === 4 ||
+        orderStatusCode === '4' ||
+        (String(data.order?.transaction?.status || '').toUpperCase() === 'A');
+
+      const isPending =
+        orderStatusCode === 3 ||
+        orderStatusCode === '3' ||
+        orderStatusText === 'pending' ||
+        orderStatusText === 'to be verified';
+
+      // Prefer the transaction ref (used for refunds) else fall back to the order ref.
+      const transactionRef =
+        data.order?.transaction?.ref ||
+        data.order?.transaction?.tranref ||
+        data.order?.transaction?.refs?.transaction ||
+        null;
 
       return {
         success: isPaid,
         gatewayRef: data.order?.ref || orderRef,
+        transactionRef: transactionRef || null,
         amount: parseFloat(data.order?.amount || 0),
         currency: data.order?.currency || 'AED',
-        status: isPaid ? 'PAID' : 'FAILED',
+        status: isPaid ? 'PAID' : (isPending ? 'PENDING' : 'FAILED'),
         raw: data,
-      };
+      };    
     } catch (err) {
       console.error('[Telr fetchPayment] Error:', err.message);
       throw err;
@@ -235,7 +333,9 @@ class TelrService extends PaymentGatewayInterface {
 
   /**
    * Refund a captured Telr transaction using Telr Remote XML API.
-   * @param {string} orderRef - Telr transaction reference ID to refund
+   * NOTE: Telr refunds require the TRANSACTION reference (tran_ref), not the order ref.
+   * Callers must pass the stored transaction ref (e.g. razorpay_payment_id for Telr orders).
+   * @param {string} orderRef - Telr TRANSACTION reference ID to refund (tran_ref)
    * @param {number} amount - Amount in AED to refund
    * @param {string} [currency='AED'] - Currency
    * @returns {Promise<import('./PaymentGatewayInterface').PaymentResult>}
@@ -244,6 +344,12 @@ class TelrService extends PaymentGatewayInterface {
     try {
       const isSimRef = typeof orderRef === 'string' && (orderRef.startsWith('telr_sim_') || orderRef.startsWith('telr_ref_'));
       if (!this.hasRealCredentials() || isSimRef) {
+        // Refuse fake simulation refunds in production — money must never be
+        // "refunded" without a real gateway call when running live.
+        if (process.env.NODE_ENV === 'production' && !this.hasRealCredentials()) {
+          console.error('[Telr refund] Refusing simulation refund in production without Telr credentials configured.');
+          throw new Error('Telr refund attempted in production without valid gateway credentials');
+        }
         console.log(`[TelrService] Simulation refund executed for ref: ${orderRef}, amount: AED ${amount}`);
         return {
           success: true,
