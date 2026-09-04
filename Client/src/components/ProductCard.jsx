@@ -62,7 +62,9 @@ const ProductCard = ({ product, index = 0 }) => {
       return {
         variantId: v.id,
         price: v.price !== null && v.price !== undefined ? parseFloat(v.price) : parseFloat(prod.price),
+        priceAED: v.priceAED !== null && v.priceAED !== undefined ? parseFloat(v.priceAED) : (prod.priceAED ? parseFloat(prod.priceAED) : null),
         mrp: v.mrp !== null && v.mrp !== undefined ? parseFloat(v.mrp) : (prod.comparePrice ? parseFloat(prod.comparePrice) : null),
+        mrpAED: v.mrpAED !== null && v.mrpAED !== undefined ? parseFloat(v.mrpAED) : (prod.comparePriceAED ? parseFloat(prod.comparePriceAED) : null),
         image: prod.defaultProductImage || prod.images?.[0] || v.image || '',
         stock: v.stock !== undefined ? parseInt(v.stock, 10) : (prod.stock || 0),
         attributes: attrs
@@ -88,7 +90,9 @@ const ProductCard = ({ product, index = 0 }) => {
     return {
       variantId: null,
       price: parseFloat(prod.price),
+      priceAED: prod.priceAED ? parseFloat(prod.priceAED) : null,
       mrp: prod.comparePrice ? parseFloat(prod.comparePrice) : null,
+      mrpAED: prod.comparePriceAED ? parseFloat(prod.comparePriceAED) : null,
       image: prod.defaultProductImage || prod.images?.[0] || '',
       stock: parseInt(prod.stock, 10) || 0,
       attributes: defaultAttrs
@@ -117,10 +121,12 @@ const ProductCard = ({ product, index = 0 }) => {
     return true;
   });
 
-  const fmt = (v) => formatPrice(v, currencyCode, currencyRate);
-
   const displayPrice = resolvedDefault.price;
   const displayComparePrice = resolvedDefault.mrp;
+  const displayPriceAED = resolvedDefault.priceAED || product.priceAED;
+  const displayComparePriceAED = resolvedDefault.mrpAED || product.comparePriceAED;
+
+  const fmt = (v, aed) => formatPrice(v, currencyCode, currencyRate, aed !== undefined ? aed : (v === displayPrice ? displayPriceAED : (v === displayComparePrice ? displayComparePriceAED : null)));
 
   const discount = (displayComparePrice && Number(displayComparePrice) > Number(displayPrice))
     ? Math.round(((Number(displayComparePrice) - Number(displayPrice)) / Number(displayComparePrice)) * 100)

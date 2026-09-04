@@ -37,10 +37,23 @@ const storage = multer.diskStorage({
 });
 
 const fileFilter = (req, file, cb) => {
-  const allowed = /jpeg|jpg|png|webp|gif|pdf|glb|gltf|mp4|webm|mov|avi|mkv|quicktime|m4v/;
-  const ext = allowed.test(path.extname(file.originalname).toLowerCase());
-  const mime = allowed.test(file.mimetype) || file.mimetype.includes('model') || file.mimetype.includes('video') || file.mimetype.includes('pdf');
-  cb(null, ext || mime);
+  const extName = path.extname(file.originalname).toLowerCase();
+  
+  // Explicitly block executable, HTML, SVG, and script files to prevent Stored XSS / RCE
+  const blocked = /\.(html?|svg|php|phtml|js|ts|sh|bat|cmd|exe|cgi|asp|aspx|py|pl|jar)$/i;
+  if (blocked.test(extName)) {
+    return cb(new Error('File type is not permitted for security reasons.'), false);
+  }
+
+  const allowedExts = /\.(jpe?g|png|webp|gif|pdf|glb|gltf|mp4|webm|mov|avi|mkv)$/i;
+  const ext = allowedExts.test(extName);
+  const allowedMime = /^image\/(jpeg|png|webp|gif)|^application\/pdf|^video\/(mp4|webm|quicktime|x-msvideo)|^model\/(gltf|gltf-binary)/i.test(file.mimetype);
+
+  if (ext && (allowedMime || file.mimetype.includes('octet-stream'))) {
+    cb(null, true);
+  } else {
+    cb(new Error('Invalid file type. Only standard images, videos, 3D models, and PDFs are allowed.'), false);
+  }
 };
 
 const upload = multer({ storage, fileFilter, limits: { fileSize: 50 * 1024 * 1024 } });

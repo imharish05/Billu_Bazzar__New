@@ -1,6 +1,7 @@
 'use strict';
 const { Op } = require('sequelize');
 const { Warehouse, WarehouseStock, Product, ProductVariant, InventoryMovementLog, SiteSetting } = require('../models');
+const { validatePhoneNumber } = require('../utils/phoneValidation');
 
 // Include product and variant information in stock lookups
 const stockInclude = [
@@ -117,12 +118,14 @@ const create = async (req, res) => {
       return res.status(400).json({ success: false, message: 'All warehouse fields (name, code, contact name, contact phone, street address, city, state, pincode, country) are required.' });
     }
 
-    if (req.body.contactPhone && req.body.contactPhone.trim()) {
-      const cleanPhone = req.body.contactPhone.trim().replace(/^\+/, '').replace(/[\s\-()]/g, '');
-      if (!/^\d{7,15}$/.test(cleanPhone)) {
+    let formattedContactPhone = contactPhone;
+    if (contactPhone && contactPhone.trim()) {
+      const phoneVal = validatePhoneNumber(contactPhone, { required: true });
+      if (!phoneVal.isValid) {
         await transaction.rollback();
-        return res.status(400).json({ success: false, message: 'Invalid contact phone number format. Phone number must contain 7 to 15 digits.' });
+        return res.status(400).json({ success: false, message: `Contact Phone: ${phoneVal.message}` });
       }
+      formattedContactPhone = phoneVal.formatted;
     }
 
     const existingCount = await Warehouse.count({ transaction });
@@ -138,6 +141,7 @@ const create = async (req, res) => {
 
     const warehouseData = {
       ...req.body,
+      contactPhone: formattedContactPhone,
       isFulfillment: makeFulfillment,
     };
 
@@ -162,12 +166,14 @@ const update = async (req, res) => {
       return res.status(400).json({ success: false, message: 'All warehouse fields (name, code, contact name, contact phone, street address, city, state, pincode, country) are required.' });
     }
 
-    if (req.body.contactPhone && req.body.contactPhone.trim()) {
-      const cleanPhone = req.body.contactPhone.trim().replace(/^\+/, '').replace(/[\s\-()]/g, '');
-      if (!/^\d{7,15}$/.test(cleanPhone)) {
+    let formattedContactPhone = contactPhone;
+    if (contactPhone && contactPhone.trim()) {
+      const phoneVal = validatePhoneNumber(contactPhone, { required: true });
+      if (!phoneVal.isValid) {
         await transaction.rollback();
-        return res.status(400).json({ success: false, message: 'Invalid contact phone number format. Phone number must contain 7 to 15 digits.' });
+        return res.status(400).json({ success: false, message: `Contact Phone: ${phoneVal.message}` });
       }
+      formattedContactPhone = phoneVal.formatted;
     }
 
     const warehouse = await Warehouse.findByPk(req.params.id, { transaction });
@@ -205,7 +211,7 @@ const update = async (req, res) => {
       await otherWh.update({ isFulfillment: true }, { transaction });
     }
 
-    await warehouse.update(req.body, { transaction });
+    await warehouse.update({ ...req.body, contactPhone: formattedContactPhone }, { transaction });
     await transaction.commit();
     res.json({ success: true, warehouse });
   } catch (err) {

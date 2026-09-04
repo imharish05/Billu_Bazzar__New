@@ -273,7 +273,7 @@ const OptionTypeSelect = ({ value, onChange, usedOptions = [] }) => {
 };
 
 const EMPTY_FORM = {
-  name: '', slug: '', shortDescription: '', description: '', price: '', comparePrice: '',
+  name: '', slug: '', shortDescription: '', description: '', price: '', priceAED: '', comparePrice: '', comparePriceAED: '',
   stock: '', sku: '', categoryId: '', subCategoryId: '', subSubCategoryId: '', vendorId: '', warehouseId: '',
   gstRate: '0%',
   isFeatured: false, isNewArrival: false, isBestSeller: false, hasAuthenticityBadge: false, isActive: true,
@@ -288,6 +288,70 @@ const getFullImageUrl = (src) => {
   }
   const serverUrl = (import.meta.env.VITE_SERVER_URL || 'http://localhost:5000').replace(/\/$/, '');
   return `${serverUrl}${src.startsWith('/') ? '' : '/'}${src}`;
+};
+
+const getVideoPreviewInfo = (file, url) => {
+  if (file) {
+    return {
+      type: 'Local File',
+      isEmbed: false,
+      src: URL.createObjectURL(file),
+    };
+  }
+  if (!url || typeof url !== 'string' || !url.trim()) return null;
+  const trimmed = url.trim();
+
+  // YouTube match (supports youtu.be, watch?v=, embed, shorts)
+  const ytMatch = trimmed.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|shorts)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i);
+  if (ytMatch && ytMatch[1]) {
+    return {
+      type: 'YouTube',
+      isEmbed: true,
+      embedUrl: `https://www.youtube.com/embed/${ytMatch[1]}`,
+    };
+  }
+
+  // Vimeo match
+  const vimeoMatch = trimmed.match(/vimeo\.com\/(?:video\/)?(\d+)/i);
+  if (vimeoMatch && vimeoMatch[1]) {
+    return {
+      type: 'Vimeo',
+      isEmbed: true,
+      embedUrl: `https://player.vimeo.com/video/${vimeoMatch[1]}`,
+    };
+  }
+
+  // Direct MP4 / WebM / local server path
+  return {
+    type: 'Direct Video',
+    isEmbed: false,
+    src: getFullImageUrl(trimmed),
+  };
+};
+
+const VideoPreviewPlayer = ({ file, url, className = 'w-full h-48 rounded border border-neutral-300 bg-black' }) => {
+  const info = getVideoPreviewInfo(file, url);
+  if (!info) return null;
+
+  if (info.isEmbed) {
+    return (
+      <iframe
+        src={info.embedUrl}
+        title="Video Showcase Preview"
+        className={`${className} border-0`}
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+        allowFullScreen
+      />
+    );
+  }
+
+  return (
+    <video
+      src={info.src}
+      controls
+      className={`${className} object-contain`}
+    />
+  );
 };
 
 // ── Interactive 360 Spin Preview Box Component ──────────────────────────────
@@ -501,7 +565,7 @@ const ProductLivePreviewModal = ({ product, onClose }) => {
                 {activeTab === 'video' && (
                   <div className="aspect-video bg-black rounded-lg overflow-hidden flex items-center justify-center border border-neutral-800">
                     {product.videoUrl ? (
-                      <video src={product.videoUrl} controls className="w-full h-full object-contain" />
+                      <VideoPreviewPlayer url={product.videoUrl} className="w-full h-full" />
                     ) : (
                       <p className="text-xs text-neutral-400">Video file attached</p>
                     )}
@@ -581,7 +645,9 @@ const ProductModal = ({ product, onClose, onSave }) => {
     shortDescription: product.shortDescription || '',
     description: product.description || '',
     price: product.price || '',
+    priceAED: product.priceAED || '',
     comparePrice: product.comparePrice || '',
+    comparePriceAED: product.comparePriceAED || '',
     stock: product.stock !== undefined ? product.stock : '0',
     categoryId: product.categoryId || '',
     subCategoryId: product.subCategoryId || '',
@@ -599,6 +665,16 @@ const ProductModal = ({ product, onClose, onSave }) => {
     videoUrl: product.videoUrl || '',
     defaultProductImage: product.defaultProductImage || product.images?.[0] || null,
   } : { ...EMPTY_FORM });
+
+  const [exchangeRate, setExchangeRate] = useState(26.06);
+
+  useEffect(() => {
+    api.get('/currency/rate').then(res => {
+      if (res.data?.success && Number(res.data.rate) > 0) {
+        setExchangeRate(Number(res.data.rate));
+      }
+    }).catch(() => {});
+  }, []);
 
   const [categories, setCategories] = useState([]);
   const [subCategories, setSubCategories] = useState([]);
@@ -667,7 +743,9 @@ const ProductModal = ({ product, onClose, onSave }) => {
         id: primaryVar.id || Date.now(),
         sku: initialSku,
         price: primaryVar.price !== undefined ? String(primaryVar.price) : String(product.price || ''),
+        priceAED: primaryVar.priceAED !== undefined && primaryVar.priceAED !== null ? String(primaryVar.priceAED) : (product.priceAED ? String(product.priceAED) : ''),
         mrp: primaryVar.mrp !== undefined ? String(primaryVar.mrp) : String(product.comparePrice || ''),
+        mrpAED: primaryVar.mrpAED !== undefined && primaryVar.mrpAED !== null ? String(primaryVar.mrpAED) : (product.comparePriceAED ? String(product.comparePriceAED) : ''),
         stock: primaryVar.stock !== undefined ? String(primaryVar.stock) : String(product.stock || '0'),
         lowStockThreshold: primaryVar.lowStockThreshold !== undefined ? String(primaryVar.lowStockThreshold) : '10',
         gstRate: primaryVar.gstRate || product?.gstRate || '0%',
@@ -748,11 +826,18 @@ const ProductModal = ({ product, onClose, onSave }) => {
           return { ...existing, attributes: combo, sku: currentSku };
         }
 
+        const basePrice = form.price || '';
+        const basePriceAED = form.priceAED || (basePrice && exchangeRate > 0 ? (parseFloat(basePrice) / exchangeRate).toFixed(2) : '');
+        const baseMrp = form.comparePrice || '';
+        const baseMrpAED = form.comparePriceAED || (baseMrp && exchangeRate > 0 ? (parseFloat(baseMrp) / exchangeRate).toFixed(2) : '');
+
         return {
           id: Date.now() + Math.random() + idx,
           sku: generatedSku,
-          price: form.price || '',
-          mrp: form.comparePrice || '',
+          price: basePrice,
+          priceAED: basePriceAED,
+          mrp: baseMrp,
+          mrpAED: baseMrpAED,
           stock: form.stock || '0',
           lowStockThreshold: '10',
           gstRate: form.gstRate || '0%',
@@ -762,7 +847,33 @@ const ProductModal = ({ product, onClose, onSave }) => {
         };
       });
     });
-  }, [optionRows, form.sku, form.name, generateAutoVariantSku]);
+  }, [optionRows, form.sku, form.name, form.price, form.priceAED, form.comparePrice, form.comparePriceAED, exchangeRate, generateAutoVariantSku]);
+
+  const handleVariantPriceChange = (variantId, val) => {
+    setProductVariants(prev => prev.map(v => {
+      if (v.id !== variantId) return v;
+      const updated = { ...v, price: val };
+      if (val !== '' && !isNaN(val) && Number(val) > 0 && exchangeRate > 0) {
+        updated.priceAED = (parseFloat(val) / exchangeRate).toFixed(2);
+      } else if (val === '') {
+        updated.priceAED = '';
+      }
+      return updated;
+    }));
+  };
+
+  const handleVariantMrpChange = (variantId, val) => {
+    setProductVariants(prev => prev.map(v => {
+      if (v.id !== variantId) return v;
+      const updated = { ...v, mrp: val };
+      if (val !== '' && !isNaN(val) && Number(val) > 0 && exchangeRate > 0) {
+        updated.mrpAED = (parseFloat(val) / exchangeRate).toFixed(2);
+      } else if (val === '') {
+        updated.mrpAED = '';
+      }
+      return updated;
+    }));
+  };
 
   const removeVariantRow = (variantId) => {
     setProductVariants(prev => prev.filter(v => v.id !== variantId));
@@ -1276,12 +1387,20 @@ const ProductModal = ({ product, onClose, onSave }) => {
 
     const generatedSlug = form.name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 
+    const firstVar = productVariants[0];
+    const topPrice = (firstVar && firstVar.price !== undefined && firstVar.price !== '') ? firstVar.price : (form.price || '0');
+    const topPriceAED = (firstVar && firstVar.priceAED !== undefined && firstVar.priceAED !== '') ? firstVar.priceAED : (form.priceAED || '');
+    const topComparePrice = (firstVar && firstVar.mrp !== undefined && firstVar.mrp !== '') ? firstVar.mrp : (form.comparePrice || '');
+    const topComparePriceAED = (firstVar && firstVar.mrpAED !== undefined && firstVar.mrpAED !== '') ? firstVar.mrpAED : (form.comparePriceAED || '');
+
     const fd = new FormData();
     fd.append('productName', form.name.trim());
     fd.append('sku', finalProductSku);
     fd.append('slug', generatedSlug);
-    fd.append('price', form.price === '' ? '0' : String(form.price));
-    fd.append('comparePrice', form.comparePrice === '' ? '' : String(form.comparePrice));
+    fd.append('price', String(topPrice));
+    fd.append('priceAED', topPriceAED ? String(topPriceAED) : '');
+    fd.append('comparePrice', topComparePrice === '' ? '' : String(topComparePrice));
+    fd.append('comparePriceAED', topComparePriceAED === '' ? '' : String(topComparePriceAED));
     fd.append('stock', form.stock === '' ? '0' : String(form.stock));
     fd.append('shortDescription', form.shortDescription || '');
     fd.append('description', form.description || '');
@@ -1325,7 +1444,9 @@ const ProductModal = ({ product, onClose, onSave }) => {
           id: isValidDbId ? rawId : null,
           sku: autoVariantSku,
           price: v.price,
+          priceAED: (v.priceAED !== undefined && v.priceAED !== '' && v.priceAED !== null) ? v.priceAED : null,
           mrp: v.mrp,
+          mrpAED: (v.mrpAED !== undefined && v.mrpAED !== '' && v.mrpAED !== null) ? v.mrpAED : null,
           stock: v.stock,
           lowStockThreshold: v.lowStockThreshold || '10',
           gstRate: v.gstRate || form.gstRate || '0%',
@@ -1650,7 +1771,7 @@ const ProductModal = ({ product, onClose, onSave }) => {
                       set('description', richEditorRef.current.innerHTML);
                     }
                   }}
-                  data-placeholder="Detailed rich text description..."
+                  data-placeholder="Detailed text description..."
                   className="w-full p-3 text-sm focus:outline-none min-h-[120px] font-sans rich-editor-area"
                   style={{ lineHeight: '1.6' }}
                 />
@@ -1881,8 +2002,8 @@ const ProductModal = ({ product, onClose, onSave }) => {
                         </button>
                       </div>
 
-                      {/* Row 1: SKU CODE & SELLING PRICE (₹) */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {/* Row 1: SKU CODE, STOCK QTY, LOW STOCK THRESHOLD */}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <div>
                           <label className="block text-[10px] font-bold uppercase tracking-wider text-neutral-600 mb-1">SKU CODE</label>
                           <input
@@ -1890,33 +2011,6 @@ const ProductModal = ({ product, onClose, onSave }) => {
                             value={v.sku}
                             onChange={e => updateVariantRow(v.id, 'sku', e.target.value)}
                             placeholder="SKU Code"
-                            className="w-full border border-neutral-300 rounded-lg px-3 py-2 text-xs font-sans font-medium text-neutral-800 focus:outline-none focus:border-brand-gold bg-white"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-[10px] font-bold uppercase tracking-wider text-neutral-600 mb-1">SELLING PRICE (₹)</label>
-                          <input
-                            type="number"
-                            step="0.01"
-                            value={v.price !== undefined ? v.price : ''}
-                            onChange={e => updateVariantRow(v.id, 'price', e.target.value)}
-                            placeholder="0.00"
-                            className="w-full border border-neutral-300 rounded-lg px-3 py-2 text-xs font-sans font-medium text-neutral-800 focus:outline-none focus:border-brand-gold bg-white"
-                          />
-                        </div>
-                      </div>
-
-                      {/* Row 2: MRP (₹), STOCK QTY, LOW STOCK THRESHOLD */}
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                        <div>
-                          <label className="block text-[10px] font-bold uppercase tracking-wider text-neutral-600 mb-1">MRP (₹)</label>
-                          <input
-                            type="number"
-                            step="0.01"
-                            value={v.mrp !== undefined ? v.mrp : ''}
-                            onChange={e => updateVariantRow(v.id, 'mrp', e.target.value)}
-                            placeholder="0.00"
                             className="w-full border border-neutral-300 rounded-lg px-3 py-2 text-xs font-sans font-medium text-neutral-800 focus:outline-none focus:border-brand-gold bg-white"
                           />
                         </div>
@@ -1941,6 +2035,118 @@ const ProductModal = ({ product, onClose, onSave }) => {
                             placeholder="10"
                             className="w-full border border-neutral-300 rounded-lg px-3 py-2 text-xs font-sans font-medium text-neutral-800 focus:outline-none focus:border-brand-gold bg-white"
                           />
+                        </div>
+                      </div>
+
+                      {/* Row 2: Multi-Currency Pricing Grid (₹ & AED with Visual Distinction & Live Auto-fill) */}
+                      <div className="bg-neutral-50/80 p-3.5 rounded-xl border border-neutral-200/80 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-700">
+                            Multi-Currency Pricing (Selling Price & MRP)
+                          </span>
+                          <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-100/70 border border-emerald-300/60 px-2 py-0.5 rounded-full">
+                            1 AED ≈ {exchangeRate} ₹
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+                          {/* 1. SELLING PRICE (₹) */}
+                          <div>
+                            <label className="block text-[10px] font-bold uppercase tracking-wider text-neutral-700 mb-1">
+                              SELLING PRICE (₹) *
+                            </label>
+                            <div className="relative rounded-lg shadow-sm">
+                              <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-2.5">
+                                <span className="text-neutral-500 font-bold text-xs">₹</span>
+                              </div>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={v.price !== undefined ? v.price : ''}
+                                onChange={e => handleVariantPriceChange(v.id, e.target.value)}
+                                placeholder="0.00"
+                                className="w-full pl-7 pr-3 py-2 text-xs font-sans font-semibold text-neutral-900 bg-white border border-neutral-300 focus:border-brand-gold focus:ring-1 focus:ring-brand-gold rounded-lg outline-none transition-all"
+                              />
+                            </div>
+                            <p className="text-[9px] text-neutral-400 mt-1">Base price in INR</p>
+                          </div>
+
+                          {/* 2. SELLING PRICE (AED) — Visually Differentiated in Emerald */}
+                          <div className="bg-emerald-50/40 p-2 rounded-lg border border-emerald-300/80">
+                            <div className="flex items-center justify-between mb-1">
+                              <label className="block text-[10px] font-bold uppercase tracking-wider text-emerald-800">
+                                SELLING PRICE (AED)
+                              </label>
+                              <span className="text-[9px] font-semibold bg-emerald-200/70 text-emerald-800 px-1.5 py-0.2 rounded">
+                                Auto-filled
+                              </span>
+                            </div>
+                            <div className="relative rounded-md shadow-sm">
+                              <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-2">
+                                <span className="text-emerald-700 font-bold text-[11px]">AED</span>
+                              </div>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={v.priceAED !== undefined && v.priceAED !== null ? v.priceAED : ''}
+                                onChange={e => updateVariantRow(v.id, 'priceAED', e.target.value)}
+                                placeholder="0.00"
+                                className="w-full pl-10 pr-2.5 py-1.5 text-xs font-mono font-bold text-emerald-950 bg-white border-2 border-emerald-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-200 rounded-md outline-none transition-all"
+                              />
+                            </div>
+                            <p className="text-[9px] text-emerald-700 font-medium mt-1">
+                              ⚡ Auto-fills from ₹ • Editable
+                            </p>
+                          </div>
+
+                          {/* 3. MRP (₹) */}
+                          <div>
+                            <label className="block text-[10px] font-bold uppercase tracking-wider text-neutral-700 mb-1">
+                              MRP / COMPARE (₹)
+                            </label>
+                            <div className="relative rounded-lg shadow-sm">
+                              <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-2.5">
+                                <span className="text-neutral-500 font-bold text-xs">₹</span>
+                              </div>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={v.mrp !== undefined ? v.mrp : ''}
+                                onChange={e => handleVariantMrpChange(v.id, e.target.value)}
+                                placeholder="0.00"
+                                className="w-full pl-7 pr-3 py-2 text-xs font-sans font-semibold text-neutral-900 bg-white border border-neutral-300 focus:border-brand-gold focus:ring-1 focus:ring-brand-gold rounded-lg outline-none transition-all"
+                              />
+                            </div>
+                            <p className="text-[9px] text-neutral-400 mt-1">Base MRP in INR</p>
+                          </div>
+
+                          {/* 4. MRP (AED) — Visually Differentiated in Emerald */}
+                          <div className="bg-emerald-50/40 p-2 rounded-lg border border-emerald-300/80">
+                            <div className="flex items-center justify-between mb-1">
+                              <label className="block text-[10px] font-bold uppercase tracking-wider text-emerald-800">
+                                MRP (AED)
+                              </label>
+                              <span className="text-[9px] font-semibold bg-emerald-200/70 text-emerald-800 px-1.5 py-0.2 rounded">
+                                Auto-filled
+                              </span>
+                            </div>
+                            <div className="relative rounded-md shadow-sm">
+                              <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-2">
+                                <span className="text-emerald-700 font-bold text-[11px]">AED</span>
+                              </div>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={v.mrpAED !== undefined && v.mrpAED !== null ? v.mrpAED : ''}
+                                onChange={e => updateVariantRow(v.id, 'mrpAED', e.target.value)}
+                                placeholder="0.00"
+                                className="w-full pl-10 pr-2.5 py-1.5 text-xs font-mono font-bold text-emerald-950 bg-white border-2 border-emerald-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-200 rounded-md outline-none transition-all"
+                              />
+                            </div>
+                            <p className="text-[9px] text-emerald-700 font-medium mt-1">
+                              ⚡ Auto-fills from ₹ • Editable
+                            </p>
+                          </div>
                         </div>
                       </div>
 
@@ -2126,12 +2332,14 @@ const ProductModal = ({ product, onClose, onSave }) => {
                 {form.hasVideo && (
                   <div className="pt-2 border-t border-neutral-200 space-y-3">
                     <div>
-                      <label className="block text-[11px] font-semibold text-neutral-700 mb-1">Video URL (MP4 / WebM)</label>
+                      <label className="block text-[11px] font-semibold text-neutral-700 mb-1">
+                        Video URL (YouTube / Vimeo / MP4 / WebM)
+                      </label>
                       <input
                         type="text"
                         value={form.videoUrl}
                         onChange={e => set('videoUrl', e.target.value)}
-                        placeholder="https://example.com/video.mp4 or /uploads/..."
+                        placeholder="https://youtu.be/... or https://youtube.com/watch?v=... or https://example.com/video.mp4"
                         className="w-full border border-neutral-300 px-2.5 py-1.5 text-xs focus:outline-none focus:border-brand-gold rounded-sm"
                       />
                     </div>
@@ -2143,11 +2351,22 @@ const ProductModal = ({ product, onClose, onSave }) => {
                     {/* Inline Video Player Preview */}
                     {(videoFile || form.videoUrl) && (
                       <div className="mt-2 space-y-1">
-                        <label className="block text-[10px] font-bold text-neutral-500 uppercase">Inline Video Preview</label>
-                        <video
-                          src={videoFile ? URL.createObjectURL(videoFile) : form.videoUrl}
-                          controls
-                          className="w-full max-h-48 rounded border border-neutral-300 bg-black object-contain"
+                        <div className="flex items-center justify-between">
+                          <label className="block text-[10px] font-bold text-neutral-500 uppercase">Inline Video Preview</label>
+                          {(() => {
+                            const info = getVideoPreviewInfo(videoFile, form.videoUrl);
+                            if (!info) return null;
+                            return (
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                                {info.type}
+                              </span>
+                            );
+                          })()}
+                        </div>
+                        <VideoPreviewPlayer
+                          file={videoFile}
+                          url={form.videoUrl}
+                          className="w-full max-h-52 rounded border border-neutral-300 bg-black aspect-video"
                         />
                       </div>
                     )}
@@ -2357,7 +2576,34 @@ const ProductsAdminPage = () => {
                   </td>
                   <td className="px-4 py-3 font-medium text-brand-text max-w-xs truncate" title={product.name}>{product.name}</td>
                   <td className="px-4 py-3 text-brand-grey">{product.category?.name || '—'}</td>
-                  <td className="px-4 py-3 font-semibold">{fmt(product.variants?.[0]?.price !== undefined ? product.variants[0].price : product.price)}</td>
+                  <td className="px-4 py-3 font-semibold">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span>{fmt(product.variants?.[0]?.price !== undefined ? product.variants[0].price : product.price)}</span>
+                      {(() => {
+                        const inrMrp = product.variants?.[0]?.mrp || product.comparePrice;
+                        return inrMrp && Number(inrMrp) > 0 ? (
+                          <span className="text-xs text-neutral-400 line-through">{fmt(inrMrp)}</span>
+                        ) : null;
+                      })()}
+                    </div>
+                    {(() => {
+                      const aedPrice = product.variants?.[0]?.priceAED || product.priceAED;
+                      const aedMrp = product.variants?.[0]?.mrpAED || product.comparePriceAED;
+                      if (!aedPrice && !aedMrp) return null;
+                      return (
+                        <div className="flex items-center gap-1.5 text-[11px] font-medium text-emerald-600 whitespace-nowrap mt-0.5">
+                          {aedPrice && Number(aedPrice) > 0 ? (
+                            <span className="whitespace-nowrap">AED {Number(aedPrice).toFixed(2)}</span>
+                          ) : null}
+                          {aedMrp && Number(aedMrp) > 0 ? (
+                            <span className="text-[10px] text-emerald-700/60 line-through whitespace-nowrap">
+                              AED {Number(aedMrp).toFixed(2)}
+                            </span>
+                          ) : null}
+                        </div>
+                      );
+                    })()}
+                  </td>
                   <td className="px-4 py-3">
                     {(() => {
                       const displayStock = product.variants?.[0]?.stock !== undefined

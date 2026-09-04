@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Check, MapPin, CreditCard, Package, ChevronRight, Eye, EyeOff, Tag, Sparkles, ShieldAlert, AlertTriangle, Lightbulb, Truck, Award, Lock } from 'lucide-react';
+import { Check, MapPin, CreditCard, Package, ChevronRight, Eye, EyeOff, Tag, Sparkles, ShieldAlert, ShieldCheck, AlertTriangle, Lightbulb, Truck, Award, Lock } from 'lucide-react';
 import { placeOrder } from '../redux/slices/ordersSlice';
 import { clearLocal, syncCart, clearBuyNowItem, fetchCart } from '../redux/slices/cartSlice';
 import { loginCustomer, registerCustomer, fetchProfile } from '../redux/slices/authSlice';
@@ -13,6 +13,7 @@ import { formatPrice } from '../utils/currency';
 import toast from 'react-hot-toast';
 import { formatVariantName } from '../utils/variantFormatter';
 import { validatePhoneNumber } from '../utils/validation';
+import PhoneInput from '../components/PhoneInput';
 import { getImageUrl } from '../utils/imageUrl';
 
 const STEPS = [
@@ -318,7 +319,9 @@ const CheckoutPage = () => {
             } else {
               setPaymentMethod('Razorpay Secure Online');
             }
-            if (res.data.currency) {
+            // Only set initial display currency if user hasn't explicitly chosen one yet via toggle
+            const savedCurrency = localStorage.getItem('bb_currency');
+            if (!savedCurrency && res.data.currency) {
               dispatch(setCurrency(res.data.currency));
             }
           }
@@ -330,20 +333,40 @@ const CheckoutPage = () => {
   }, [dispatch, location.search]);
 
 
+  const [sameDeliveryError, setSameDeliveryError] = useState('');
+
   const handleToggleDeliverySame = (checked) => {
     if (checked) {
       const bCountry = (billingAddress.country || '').trim().toLowerCase();
       const isIndiaBilling = ['india', 'in', 'ind'].includes(bCountry);
-      if (!isIndiaBilling && bCountry !== '') {
+      const isDubaiCountry = ['uae', 'united arab emirates', 'dubai', 'abu dhabi', 'sharjah', 'ae'].includes(bCountry);
+
+      const bPhone = (billingAddress.phone || '').trim();
+      const digitsOnly = bPhone.replace(/\D/g, '');
+      const isDubaiPhone = bPhone.startsWith('+971') || (digitsOnly.startsWith('971') && digitsOnly.length >= 11) || (digitsOnly.length === 9 && digitsOnly.startsWith('5'));
+
+      if (isDubaiPhone) {
         setDeliverySameAsBilling(false);
-        setAddress(p => ({ ...p, country: 'India' }));
-        toast.error('Delivery is strictly available within India only. Please fill in a valid Indian delivery address for your recipient.');
+        const msg = 'Delivery is available within India only and requires an Indian (+91) mobile number. Your billing mobile is a Dubai/UAE (+971) number, so please enter a separate Indian delivery address and an Indian recipient mobile number.';
+        setSameDeliveryError(msg);
+        toast.error(msg);
         return;
       }
+
+      if ((!isIndiaBilling && bCountry !== '') || isDubaiCountry) {
+        setDeliverySameAsBilling(false);
+        const msg = 'Delivery is strictly available within India only. Because your billing country is outside India, please uncheck and enter an Indian delivery address.';
+        setSameDeliveryError(msg);
+        toast.error(msg);
+        return;
+      }
+
+      setSameDeliveryError('');
       setDeliverySameAsBilling(true);
       setAddress({ ...billingAddress, country: 'India' });
       toast.success('Delivery address set to same as billing address.');
     } else {
+      setSameDeliveryError('');
       setDeliverySameAsBilling(false);
       setAddress({ ...emptyAddr, country: 'India' });
     }
@@ -732,14 +755,16 @@ const CheckoutPage = () => {
     }
     setPlacing(true);
     try {
-      // 1. Sync the client's current cart list to the server database first (concurrency & tampering protection)
-      const itemsToSync = items.map(i => ({
-        productId: i.productId,
-        variantId: i.variantId || i.selectedVariant?.id || null,
-        quantity: i.quantity,
-        selectedVariant: i.selectedVariant || {}
-      }));
-      await dispatch(syncCart(itemsToSync)).unwrap();
+      // 1. If checking out the shopping cart, sync the client's current cart list to the server database first
+      if (!isBuyNowMode) {
+        const itemsToSync = items.map(i => ({
+          productId: i.productId,
+          variantId: i.variantId || i.selectedVariant?.id || null,
+          quantity: i.quantity,
+          selectedVariant: i.selectedVariant || {}
+        }));
+        await dispatch(syncCart(itemsToSync)).unwrap();
+      }
 
       const isWrap = Boolean(location.state?.giftWrap);
       const wrapPrice = isWrap ? Number(location.state?.giftWrapPrice || 99) : 0;
@@ -750,11 +775,12 @@ const CheckoutPage = () => {
         ? 'Cash on Delivery (COD)' 
         : (isUaeRegion ? 'Telr Secure Online' : 'Razorpay Secure Online');
 
-      // 2. Proceed with order placement using server-side cart database truth
+      // 2. Proceed with order placement using server-side cart or isolated Buy Now item
+      const targetCountry = isUaeRegion ? 'United Arab Emirates' : 'India';
       const referralCode = localStorage.getItem('bb_referral') || undefined;
       const order = await dispatch(placeOrder({
-        shippingAddress: deliverySameAsBilling ? billingAddress : address,
-        billingAddress: billingAddress,
+        shippingAddress: { ...(deliverySameAsBilling ? billingAddress : address), country: 'India' },
+        billingAddress: { ...billingAddress, country: targetCountry },
         paymentMethod: effectivePaymentMethod,
         referralCode,
         couponCode: activeDiscountType === 'COUPON' && activeCouponObj ? activeCouponObj.code : undefined,
@@ -766,6 +792,13 @@ const CheckoutPage = () => {
         geoCountry: geoCountry || 'IN',
         requestedCurrency: isUaeRegion ? 'AED' : 'INR',
         currencyRate: currencyRate,         // exchange rate (1 AED = X INR), default 26.06
+        isBuyNow: isBuyNowMode,
+        buyNowItem: isBuyNowMode && buyNowItem ? {
+          productId: buyNowItem.productId,
+          variantId: buyNowItem.variantId || buyNowItem.selectedVariant?.id || null,
+          quantity: buyNowItem.quantity || 1,
+          selectedVariant: buyNowItem.selectedVariant || {}
+        } : undefined,
       })).unwrap();
 
       const finishOrderClear = () => {
@@ -777,7 +810,9 @@ const CheckoutPage = () => {
         sessionStorage.removeItem('bb_checkout_delivery_address');
         sessionStorage.removeItem('bb_checkout_same_delivery');
         dispatch(clearBuyNowItem());
-        dispatch(clearLocal());
+        if (!isBuyNowMode) {
+          dispatch(clearLocal());
+        }
         dispatch(fetchCart());
         dispatch(fetchProfile());
       };
@@ -892,28 +927,62 @@ const CheckoutPage = () => {
 
     if (deliverySameAsBilling) {
       const countryVal = (billingAddress.country || '').trim().toLowerCase();
-      if (countryVal && countryVal !== 'india' && countryVal !== 'in') {
-        errors.country = 'Delivery is strictly available within India. Please uncheck "same as billing" and enter an Indian delivery address.';
-        toast.error('Delivery is strictly available within India only. Please enter a valid Indian delivery address.');
+      const isIndiaBilling = ['india', 'in', 'ind'].includes(countryVal);
+      if (!isIndiaBilling && countryVal !== '') {
+        const msg = 'Delivery is strictly available within India only. Please uncheck "same as billing" and enter an Indian delivery address.';
+        errors.sameDelivery = msg;
+        errors.country = msg;
+        setSameDeliveryError(msg);
+        toast.error(msg);
       }
+
+      const bPhone = (billingAddress.phone || '').trim();
+      const digitsOnly = bPhone.replace(/\D/g, '');
+      const isDubaiPhone = bPhone.startsWith('+971') || (digitsOnly.startsWith('971') && digitsOnly.length >= 11) || (digitsOnly.length === 9 && digitsOnly.startsWith('5'));
+      if (isDubaiPhone) {
+        const msg = 'Delivery requires an Indian (+91) mobile number. Since your billing phone is a Dubai/UAE (+971) number, please uncheck "same as billing" and enter an Indian delivery contact.';
+        errors.phone = 'Billing has a UAE number. Delivery address requires an Indian (+91) mobile number.';
+        errors.sameDelivery = msg;
+        setSameDeliveryError(msg);
+        toast.error(msg);
+      }
+
       if (!/^\d{6}$/.test((billingAddress.pincode || '').trim())) {
-        errors.pincode = 'Pincode must be exactly 6 numeric digits';
+        errors.pincode = 'Indian delivery pincode must be exactly 6 numeric digits';
       }
     }
 
     if (!deliverySameAsBilling) {
       const hasCustomDeliveryDetails = Boolean(address.fullName?.trim() || address.flatHouse?.trim() || address.city?.trim() || address.pincode?.trim());
       if (!hasCustomDeliveryDetails) {
-        // If customer didn't enter a custom delivery address below, use billing address for delivery
-        setDeliverySameAsBilling(true);
-        setAddress({ ...billingAddress, country: 'India' });
+        const countryVal = (billingAddress.country || '').trim().toLowerCase();
+        const isIndiaBilling = ['india', 'in', 'ind'].includes(countryVal);
+        const bPhone = (billingAddress.phone || '').trim();
+        const digitsOnly = bPhone.replace(/\D/g, '');
+        const isDubaiPhone = bPhone.startsWith('+971') || (digitsOnly.startsWith('971') && digitsOnly.length >= 11) || (digitsOnly.length === 9 && digitsOnly.startsWith('5'));
+
+        if (!isIndiaBilling || isDubaiPhone) {
+          errors.del_fullName = 'Please enter Indian recipient Full Name';
+          errors.del_phone = 'Delivery requires a valid 10-digit Indian (+91) mobile number';
+          errors.del_flatHouse = 'Please enter delivery Street / House No.';
+          errors.del_city = 'Please enter delivery City';
+          errors.del_state = 'Please enter delivery State';
+          errors.del_pincode = 'Delivery Pincode must be exactly 6 numeric digits';
+        } else {
+          setDeliverySameAsBilling(true);
+          setAddress({ ...billingAddress, country: 'India' });
+        }
       } else {
         if (!address.fullName?.trim()) errors.del_fullName = 'Please enter delivery Full Name';
         if (!address.phone?.trim()) {
           errors.del_phone = 'Delivery mobile number is required';
         } else {
-          const delPhoneVal = validatePhoneNumber(address.phone);
-          if (!delPhoneVal.isValid) errors.del_phone = 'Delivery Phone: ' + delPhoneVal.message;
+          const delPhoneVal = validatePhoneNumber(address.phone, { defaultCountry: 'IN' });
+          if (!delPhoneVal.isValid) {
+            errors.del_phone = delPhoneVal.message;
+          } else if (delPhoneVal.country !== 'IN') {
+            errors.del_phone = 'Delivery mobile number must be an Indian (+91) number (10 digits starting with 6–9)';
+          }
         }
         if (!address.email?.trim()) errors.del_email = 'Please enter delivery Email Address';
         if (!address.flatHouse?.trim()) errors.del_flatHouse = 'Please enter delivery Street / House No.';
@@ -932,6 +1001,7 @@ const CheckoutPage = () => {
     setFieldErrors(errors);
 
     const elementIdMap = {
+      sameDelivery: 'same-delivery',
       del_pincode: 'd-pincode',
       del_fullName: 'd-fullname',
       del_phone: 'd-phone',
@@ -1121,16 +1191,31 @@ const CheckoutPage = () => {
                           {fieldErrors.fullName && <p className="text-[11px] text-red-500 mt-1 font-medium">{fieldErrors.fullName}</p>}
                         </div>
                         <div>
-                          <label className={labelCls} htmlFor="phone">Mobile Number <span className="text-red-400">*</span></label>
-                          <input id="phone" type="tel" value={billingAddress.phone}
-                            onChange={e => {
-                              const val = e.target.value.replace(/[^\d+]/g, '').slice(0, 15);
+                          <PhoneInput
+                            id="phone"
+                            name="phone"
+                            label="Mobile Number"
+                            value={billingAddress.phone}
+                            onChange={(val, meta) => {
                               setBillingAddress(p => ({ ...p, phone: val }));
-                              if (fieldErrors.phone) setFieldErrors(p => ({ ...p, phone: null }));
+                              if (fieldErrors.phone) {
+                                setFieldErrors(p => ({ ...p, phone: meta.isValid ? null : meta.error }));
+                              }
+                              const digitsOnly = (val || '').replace(/\D/g, '');
+                              const isDubaiPhone = (val || '').startsWith('+971') || (digitsOnly.startsWith('971') && digitsOnly.length >= 11) || (digitsOnly.length === 9 && digitsOnly.startsWith('5'));
+                              if (deliverySameAsBilling && isDubaiPhone) {
+                                setDeliverySameAsBilling(false);
+                                const msg = 'Delivery requires an Indian (+91) mobile number. Since your billing phone is a Dubai/UAE (+971) number, delivery address has been separated.';
+                                setSameDeliveryError(msg);
+                                toast.error(msg);
+                              } else if (sameDeliveryError && !isDubaiPhone) {
+                                setSameDeliveryError('');
+                              }
                             }}
-                            placeholder="10-digit mobile (or with country code)" maxLength={15}
-                            className={`${inputCls} ${fieldErrors.phone ? 'border-red-500 bg-red-50/20 focus:border-red-500 focus:ring-red-200' : ''}`} required />
-                          {fieldErrors.phone && <p className="text-[11px] text-red-500 mt-1 font-medium">{fieldErrors.phone}</p>}
+                            error={fieldErrors.phone}
+                            required
+                            inputClassName="py-2.5"
+                          />
                         </div>
                       </div>
 
@@ -1225,6 +1310,16 @@ const CheckoutPage = () => {
                             const val = e.target.value;
                             setBillingAddress(p => ({ ...p, country: val }));
                             if (fieldErrors.country) setFieldErrors(p => ({ ...p, country: null }));
+                            const valLower = (val || '').trim().toLowerCase();
+                            const isIndia = ['india', 'in', 'ind'].includes(valLower);
+                            if (deliverySameAsBilling && !isIndia && valLower !== '') {
+                              setDeliverySameAsBilling(false);
+                              const msg = 'Delivery is strictly available within India only. Delivery address has been separated.';
+                              setSameDeliveryError(msg);
+                              toast.error(msg);
+                            } else if (sameDeliveryError && isIndia) {
+                              setSameDeliveryError('');
+                            }
                           }}
                           placeholder="Country"
                           className={`${inputCls} ${fieldErrors.country ? 'border-red-500 bg-red-50/20 focus:border-red-500 focus:ring-red-200' : ''}`} required />
@@ -1259,13 +1354,21 @@ const CheckoutPage = () => {
                     </div>
 
                     {/* Same delivery toggle */}
-                    <div className="mt-5 flex items-center gap-3">
-                      <input id="same-delivery" type="checkbox" checked={deliverySameAsBilling}
-                        onChange={e => handleToggleDeliverySame(e.target.checked)}
-                        className="w-4 h-4 accent-brand-gold cursor-pointer" />
-                      <label htmlFor="same-delivery" className="text-sm font-medium text-brand-text cursor-pointer select-none">
-                        Delivery address is same as billing address
-                      </label>
+                    <div className="mt-5">
+                      <div className="flex items-center gap-3">
+                        <input id="same-delivery" type="checkbox" checked={deliverySameAsBilling}
+                          onChange={e => handleToggleDeliverySame(e.target.checked)}
+                          className="w-4 h-4 accent-brand-gold cursor-pointer" />
+                        <label htmlFor="same-delivery" className="text-sm font-medium text-brand-text cursor-pointer select-none">
+                          Delivery address is same as billing address
+                        </label>
+                      </div>
+                      {(sameDeliveryError || fieldErrors.sameDelivery) && (
+                        <div className="mt-2.5 p-3 bg-red-50/90 border border-red-200 rounded text-xs text-red-600 font-medium flex items-start gap-2 animate-in fade-in">
+                          <AlertTriangle size={15} className="shrink-0 text-red-500 mt-0.5" />
+                          <span>{sameDeliveryError || fieldErrors.sameDelivery}</span>
+                        </div>
+                      )}
                     </div>
 
                     {/* Separate delivery address */}
@@ -1284,8 +1387,23 @@ const CheckoutPage = () => {
                                 <input id="d-fullname" type="text" value={address.fullName} onChange={e => setAddress(p => ({...p, fullName: e.target.value}))} placeholder="Full name" className={inputCls} />
                               </div>
                               <div>
-                                <label className={labelCls} htmlFor="d-phone">Mobile *</label>
-                                <input id="d-phone" type="tel" value={address.phone} onChange={e => setAddress(p => ({...p, phone: e.target.value.replace(/\D/g,'').slice(0,10)}))} placeholder="Mobile number" className={inputCls} />
+                                <PhoneInput
+                                  id="d-phone"
+                                  name="del_phone"
+                                  label="Mobile (India +91 only)"
+                                  value={address.phone}
+                                  allowedCountries={['IN']}
+                                  defaultCountry="IN"
+                                  onChange={(val, meta) => {
+                                    setAddress(p => ({ ...p, phone: val }));
+                                    if (fieldErrors.del_phone) {
+                                      setFieldErrors(p => ({ ...p, del_phone: meta.isValid ? null : meta.error }));
+                                    }
+                                  }}
+                                  error={fieldErrors.del_phone}
+                                  required
+                                  inputClassName="py-2.5"
+                                />
                               </div>
                             </div>
                             <div className="sm:col-span-2">
@@ -1540,6 +1658,24 @@ const CheckoutPage = () => {
                     </div>
                   </div> */}
 
+                  {/* Payment Gateway Region Indicator */}
+                  <div className="flex items-center justify-between px-4 py-3 bg-neutral-50 rounded-md border border-neutral-200/80 text-xs">
+                    <div className="flex items-center gap-2 text-neutral-700 font-medium">
+                      <ShieldCheck size={16} className="text-brand-gold shrink-0" />
+                      <span>Payment Gateway:</span>
+                      <span className="font-semibold text-neutral-900">
+                        {paymentMethod === 'Cash on Delivery (COD)'
+                          ? 'Cash on Delivery (COD)'
+                          : geoCountry === 'AE'
+                          ? 'Telr Secure Online (Dubai / UAE)'
+                          : 'Razorpay Secure Online (India)'}
+                      </span>
+                    </div>
+                    <span className="text-[11px] text-neutral-500 hidden sm:inline italic">
+                      Routed via Location
+                    </span>
+                  </div>
+
                   <div className="flex flex-col-reverse sm:flex-row gap-3">
                     <button onClick={() => setStep(1)} className="btn-outline flex-1 py-3 text-sm font-semibold" id="step2-back">Back to Delivery</button>
                     <button
@@ -1552,9 +1688,13 @@ const CheckoutPage = () => {
                         const inrLimit = otpSettings.inrThreshold || 20000;
                         const aedLimit = otpSettings.aedThreshold || 800;
                         const isCod = paymentMethod === 'Cash on Delivery (COD)';
+                        const isLocationUae = geoCountry === 'AE';
 
-                        const isHighValue = currencyCode === 'AED'
-                          ? total >= aedLimit
+                        const effectiveRate = Number(currencyRate) > 0 ? Number(currencyRate) : 26.06;
+                        const totalInAed = total / effectiveRate;
+
+                        const isHighValue = isLocationUae
+                          ? totalInAed >= aedLimit
                           : total >= inrLimit;
 
                         const requiresOtp = isHighValue || (isCod && otpSettings.requireCodOtp !== false);
@@ -1834,7 +1974,7 @@ const CheckoutPage = () => {
                 <h3 className="font-playfair text-lg font-bold text-brand-text flex items-center gap-1.5"><Lock size={18} className="text-brand-gold" /> Security Verification</h3>
               </div>
               <p className="text-xs text-brand-grey leading-relaxed">
-                For security reasons, high-value orders (exceeding {currencyCode === 'AED' ? `AED ${otpSettings.aedThreshold}` : `₹${otpSettings.inrThreshold.toLocaleString('en-IN')}`}) and Cash on Delivery (COD) orders require email verification. We've sent a 6-digit code to <strong className="text-brand-text font-semibold">{billingAddress.email || customer?.email}</strong>.
+                For security reasons, high-value orders (exceeding {geoCountry === 'AE' ? `AED ${otpSettings.aedThreshold}` : `₹${otpSettings.inrThreshold.toLocaleString('en-IN')}`}) and Cash on Delivery (COD) orders require email verification. We've sent a 6-digit code to <strong className="text-brand-text font-semibold">{billingAddress.email || customer?.email}</strong>.
               </p>
 
               <div>

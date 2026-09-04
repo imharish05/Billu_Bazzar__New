@@ -10,6 +10,8 @@ const Product = sequelize.define('Product', {
   shortDescription: { type: DataTypes.STRING(300) },
   price: { type: DataTypes.DECIMAL(10, 2), allowNull: false },
   comparePrice: { type: DataTypes.DECIMAL(10, 2) },
+  priceAED: { type: DataTypes.DECIMAL(10, 2), allowNull: true },
+  comparePriceAED: { type: DataTypes.DECIMAL(10, 2), allowNull: true },
   currency: { type: DataTypes.STRING(5), defaultValue: 'INR' },
   sku: { type: DataTypes.STRING(80), unique: true },
   stock: { type: DataTypes.INTEGER, defaultValue: 0 },

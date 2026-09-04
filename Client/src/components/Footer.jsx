@@ -111,6 +111,17 @@ const Footer = () => {
       <div className="border-t border-white/10">
         <div className="max-w-site mx-auto px-4 sm:px-6 md:px-8 py-5 flex flex-col sm:flex-row items-center justify-between gap-3 text-white/40 text-xs">
           <p>© {new Date().getFullYear()} Billu Bazaar. All rights reserved.</p>
+          <p>
+            Developed by{' '}
+            <a
+              href="https://saitechnosolutions.com/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-white/60 hover:text-brand-gold transition-colors underline underline-offset-2"
+            >
+              Sai Techno Solutions
+            </a>
+          </p>
         </div>
       </div>
     </footer>

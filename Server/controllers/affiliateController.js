@@ -7,7 +7,18 @@ const { deleteLocalFile } = require('../utils/fileHelper');
 
 const getAll = async (req, res) => {
   try {
-    const affiliates = await Affiliate.findAll({ order: [['createdAt', 'DESC']] });
+    // Admin user: return all affiliate details including bankDetails, documents, commissions
+    if (req.admin) {
+      const affiliates = await Affiliate.findAll({ order: [['createdAt', 'DESC']] });
+      return res.json({ success: true, affiliates });
+    }
+
+    // Public / Storefront: return only active affiliates with public marketing display attributes
+    const affiliates = await Affiliate.findAll({
+      where: { isActive: true },
+      attributes: ['id', 'name', 'handle', 'avatar', 'productsCurated', 'followers', 'referralCode', 'isActive'],
+      order: [['createdAt', 'DESC']]
+    });
     res.json({ success: true, affiliates });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });

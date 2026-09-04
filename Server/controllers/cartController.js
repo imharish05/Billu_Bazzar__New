@@ -231,7 +231,14 @@ const addToCart = async (req, res) => {
 const updateCartItem = async (req, res) => {
   try {
     const { quantity } = req.body;
-    const item = await CartItem.findByPk(req.params.itemId, {
+    const selector = getCartSelector(req);
+    if (!selector) return res.status(400).json({ success: false, message: 'No active cart session' });
+
+    const cart = await Cart.findOne({ where: selector });
+    if (!cart) return res.status(404).json({ success: false, message: 'Cart not found' });
+
+    const item = await CartItem.findOne({
+      where: { id: req.params.itemId, cartId: cart.id },
       include: [
         { model: Product, as: 'product' },
         { model: ProductVariant, as: 'variant' }
@@ -276,7 +283,13 @@ const updateCartItem = async (req, res) => {
 // Remove single item from cart
 const removeFromCart = async (req, res) => {
   try {
-    const deletedCount = await CartItem.destroy({ where: { id: req.params.itemId } });
+    const selector = getCartSelector(req);
+    if (!selector) return res.status(400).json({ success: false, message: 'No active cart session' });
+
+    const cart = await Cart.findOne({ where: selector });
+    if (!cart) return res.status(404).json({ success: false, message: 'Cart not found' });
+
+    const deletedCount = await CartItem.destroy({ where: { id: req.params.itemId, cartId: cart.id } });
     if (!deletedCount) {
       return res.status(404).json({ success: false, message: 'Cart item not found' });
     }

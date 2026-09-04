@@ -32,6 +32,7 @@ import PersonalShopperAdminPage from './pages/PersonalShopperAdminPage';
 import RolesPermissionsAdminPage from './pages/RolesPermissionsAdminPage';
 import AdminUsersAdminPage from './pages/AdminUsersAdminPage';
 import NotFoundAdminPage from './pages/NotFoundAdminPage';
+import ServiceUnavailableAdminPage from './pages/ServiceUnavailableAdminPage';
 import AccessDeniedView from './components/AccessDeniedView';
 import AdminLayout from './components/AdminLayout';
 import { canAccessNav } from './utils/rbac';
@@ -117,6 +118,7 @@ const App = () => {
         <Route path="/roles"       element={<Protected><RolesPermissionsAdminPage /></Protected>} />
         <Route path="/admin-users" element={<Protected><AdminUsersAdminPage /></Protected>} />
         <Route path="/site-settings" element={<Protected><SiteSettingsAdminPage /></Protected>} />
+        <Route path="/503"          element={<ServiceUnavailableAdminPage />} />
         <Route path="*"            element={<NotFoundAdminPage />} />
       </Routes>
     </>

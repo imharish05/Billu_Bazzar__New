@@ -128,7 +128,8 @@ const start = async () => {
           status: 'PENDING_PAYMENT',
           paymentStatus: 'UNPAID',
           paymentMethod: { [Op.notLike]: '%COD%' },
-          razorpay_payment_id: { [Op.is]: null }
+          razorpay_payment_id: { [Op.is]: null },
+          createdAt: { [Op.lt]: new Date(Date.now() - 24 * 60 * 60 * 1000) }
         },
         attributes: ['id']
       });
@@ -156,6 +157,34 @@ const start = async () => {
       console.log('✅ OrderItems table productId & variantId columns set to NULLABLE');
     } catch (alterErr) {
       console.log('⚠️ Manual alter note (OrderItems columns already nullable):', alterErr.message);
+    }
+
+    try {
+      await sequelize.query("ALTER TABLE Products ADD COLUMN priceAED DECIMAL(10, 2) NULL AFTER comparePrice");
+      console.log('✅ Products table priceAED column added');
+    } catch (alterErr) {
+      console.log('⚠️ Manual alter note (Products priceAED already exists):', alterErr.message);
+    }
+
+    try {
+      await sequelize.query("ALTER TABLE Products ADD COLUMN comparePriceAED DECIMAL(10, 2) NULL AFTER priceAED");
+      console.log('✅ Products table comparePriceAED column added');
+    } catch (alterErr) {
+      console.log('⚠️ Manual alter note (Products comparePriceAED already exists):', alterErr.message);
+    }
+
+    try {
+      await sequelize.query("ALTER TABLE ProductVariants ADD COLUMN priceAED DECIMAL(10, 2) NULL AFTER mrp");
+      console.log('✅ ProductVariants table priceAED column added');
+    } catch (alterErr) {
+      console.log('⚠️ Manual alter note (ProductVariants priceAED already exists):', alterErr.message);
+    }
+
+    try {
+      await sequelize.query("ALTER TABLE ProductVariants ADD COLUMN mrpAED DECIMAL(10, 2) NULL AFTER priceAED");
+      console.log('✅ ProductVariants table mrpAED column added');
+    } catch (alterErr) {
+      console.log('⚠️ Manual alter note (ProductVariants mrpAED already exists):', alterErr.message);
     }
 
     // Run manual database alters for Carts table to allow guest checkout customerId relaxation

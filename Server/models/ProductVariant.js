@@ -13,6 +13,8 @@ const ProductVariant = sequelize.define('ProductVariant', {
   sku: { type: DataTypes.STRING(80), unique: true, allowNull: false },
   price: { type: DataTypes.DECIMAL(10, 2), allowNull: true }, // Sale price
   mrp: { type: DataTypes.DECIMAL(10, 2), allowNull: true }, // Maximum Retail Price (compare price)
+  priceAED: { type: DataTypes.DECIMAL(10, 2), allowNull: true }, // AED Sale price override
+  mrpAED: { type: DataTypes.DECIMAL(10, 2), allowNull: true }, // AED MRP override
   stock: { type: DataTypes.INTEGER, defaultValue: 0, allowNull: false },
   attributes: {
     type: DataTypes.JSON,

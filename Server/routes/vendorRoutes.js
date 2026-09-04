@@ -4,8 +4,8 @@ const { getAll, getOne, create, update, remove } = require('../controllers/vendo
 const { verifyAdmin } = require('../middleware/auth');
 const { hasPermission } = require('../middleware/rbac');
 
-router.get('/', getAll);
-router.get('/:id', getOne);
+router.get('/', verifyAdmin, hasPermission('view_vendors'), getAll);
+router.get('/:id', verifyAdmin, hasPermission('view_vendors'), getOne);
 router.post('/', verifyAdmin, hasPermission('add_vendor'), create);
 router.put('/:id', verifyAdmin, hasPermission('edit_vendor'), update);
 router.delete('/:id', verifyAdmin, hasPermission('delete_vendor'), remove);

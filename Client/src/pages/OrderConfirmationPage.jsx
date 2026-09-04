@@ -134,8 +134,11 @@ const OrderConfirmationPage = () => {
         const isSuccess = searchParams.get('status') === 'success' || Boolean(searchParams.get('gateway'));
         if (isSuccess) {
           try {
-            await api.post('/payments/verify', { orderId: fetchedOrder.id });
-            if (isMounted) dispatch(fetchOrderById(targetId));
+            const orderRef = searchParams.get('orderRef') || searchParams.get('tran_order_ref') || searchParams.get('cartId') || undefined;
+            const res = await api.post('/payments/verify', { orderId: fetchedOrder.id, orderRef });
+            if (res.data?.success && isMounted) {
+              dispatch(fetchOrderById(targetId));
+            }
           } catch (err) {
             console.warn('[OrderConfirmation] Auto-verify payment failed:', err.message);
           }

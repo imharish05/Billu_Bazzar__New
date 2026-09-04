@@ -8,6 +8,7 @@ import { PaginationTop, PaginationBottom } from '../components/Pagination';
 import api from '../services/api';
 import toast from 'react-hot-toast';
 import { checkPermission } from '../utils/rbac';
+import PhoneInput, { validatePhoneNumber } from '../components/PhoneInput';
 
 const VendorsAdminPage = () => {
   const { admin } = useSelector((s) => s.auth);
@@ -121,13 +122,26 @@ const VendorsAdminPage = () => {
         return;
       }
     }
+    if (!form.phone?.trim()) {
+      setError('Contact Number is required.');
+      toast.error('Contact Number is required.');
+      setSaving(false);
+      return;
+    }
+    const phoneVal = validatePhoneNumber(form.phone, { required: true });
+    if (!phoneVal.isValid) {
+      setError(`Contact Number: ${phoneVal.message}`);
+      toast.error(`Contact Number: ${phoneVal.message}`);
+      setSaving(false);
+      return;
+    }
 
     try {
       const payload = {
         name: form.name.trim(),
         gstin: cleanGst,
         contactPerson: form.contactPerson.trim(),
-        phone: form.phone.trim(),
+        phone: phoneVal.formatted || form.phone.trim(),
         email: form.email.trim(),
         commissionRate: parseFloat(form.commissionRate) || 0.0,
         rating: parseFloat(form.rating) || 4.0,
@@ -360,8 +374,14 @@ const VendorsAdminPage = () => {
                   </div>
 
                   <div className="col-span-2 sm:col-span-1">
-                    <label className="block text-xs font-semibold text-brand-text mb-1" htmlFor="vendor-phone">Contact Number *</label>
-                    <input id="vendor-phone" type="text" value={form.phone} onChange={e => setForm(p => ({ ...p, phone: e.target.value }))} required className="w-full border border-brand-light px-3 py-2 text-sm focus:outline-none focus:border-brand-gold transition-colors rounded-sm" placeholder="e.g. +91 9876543210" />
+                    <PhoneInput
+                      id="vendor-phone"
+                      name="phone"
+                      label="Contact Number"
+                      value={form.phone}
+                      onChange={(val) => setForm(p => ({ ...p, phone: val }))}
+                      required
+                    />
                   </div>
 
                   <div className="col-span-2">

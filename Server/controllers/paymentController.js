@@ -1,6 +1,7 @@
 'use strict';
 
 const crypto = require('crypto');
+const axios = require('axios');
 const { sequelize, Order, OrderItem, Product, ProductVariant, InventoryMovementLog, Customer, Warehouse, WarehouseStock, Cart, CartItem } = require('../models');
 const { Op } = require('sequelize');
 const resolver = require('../services/paymentGatewayResolver');
@@ -114,8 +115,13 @@ const initiatePayment = async (req, res) => {
       return res.status(400).json({ success: false, message: 'orderId is required' });
     }
 
-    // Lookup only by id — customerId can be null for guest orders
-    const order = await Order.findOne({ where: { id: orderId } });
+    // Lookup order with customer details if available
+    const order = await Order.findOne({
+      where: { id: orderId },
+      include: [
+        { model: Customer, as: 'customer', attributes: ['id', 'name', 'email', 'phone'], required: false }
+      ]
+    });
     if (!order) {
       return res.status(404).json({ success: false, message: `Order ${orderId} not found` });
     }
@@ -131,11 +137,23 @@ const initiatePayment = async (req, res) => {
     const gateway = resolver.getGateway(order.currency);
     console.log(`[initiatePayment] Order ${order.orderNumber} | Currency: ${order.currency} | Gateway: ${order.currency === 'INR' ? 'Razorpay' : 'Telr'}`);
 
+    let billingAddr = order.billingAddress;
+    if (typeof billingAddr === 'string') {
+      try { billingAddr = JSON.parse(billingAddr); } catch (e) {}
+    }
+    let shippingAddr = order.shippingAddress;
+    if (typeof shippingAddr === 'string') {
+      try { shippingAddr = JSON.parse(shippingAddr); } catch (e) {}
+    }
+
     const gatewayOrder = await gateway.createOrder({
       amount: parseFloat(order.totalAmount),
       currency: order.currency,
       receipt: order.orderNumber,
       orderId: order.id,
+      customer: order.customer,
+      billingAddress: billingAddr,
+      shippingAddress: shippingAddr,
     });
 
     console.log(`[initiatePayment] Gateway order created: ${gatewayOrder.gatewayRef}`);
@@ -196,16 +214,30 @@ const processConfirmedPayment = async ({ orderQuery, gatewayPaymentId, signature
     }
 
     // Verify duplicate payment ID check at order level (excluding current order)
-    const duplicatePayment = await Order.findOne({
-      where: {
-        razorpay_payment_id: gatewayPaymentId,
-        id: { [Op.ne]: order.id }
-      },
-      transaction
-    });
-    if (duplicatePayment) {
-      await transaction.rollback();
-      return res.json({ success: true, message: 'Duplicate transaction ignored' });
+    if (gatewayType === 'razorpay' && gatewayPaymentId) {
+      const duplicatePayment = await Order.findOne({
+        where: {
+          razorpay_payment_id: gatewayPaymentId,
+          id: { [Op.ne]: order.id }
+        },
+        transaction
+      });
+      if (duplicatePayment) {
+        await transaction.rollback();
+        return res.json({ success: true, message: 'Duplicate transaction ignored' });
+      }
+    } else if (gatewayPaymentId && !String(gatewayPaymentId).startsWith('telr_sim_')) {
+      const duplicatePayment = await Order.findOne({
+        where: {
+          paymentGatewayRef: gatewayPaymentId,
+          id: { [Op.ne]: order.id }
+        },
+        transaction
+      });
+      if (duplicatePayment) {
+        await transaction.rollback();
+        return res.json({ success: true, message: 'Duplicate transaction ignored' });
+      }
     }
 
     // 4. Gather and Sort items in consistent ascending order to prevent deadlocks
@@ -308,15 +340,16 @@ const processConfirmedPayment = async ({ orderQuery, gatewayPaymentId, signature
       await order.update({
         status: 'PAID',
         paymentStatus: 'PAID',
-        razorpay_payment_id: gatewayPaymentId,
+        razorpay_payment_id: gatewayType === 'razorpay' ? gatewayPaymentId : null,
         razorpay_signature: signature || null,
         paymentGatewayRef: order.paymentGatewayRef || gatewayPaymentId,
         inventoryProcessed: true,
         statusTimeline: updatedTimeline
       }, { transaction });
 
-      // Clear server-side cart items upon online payment confirmation
-      const cartWhere = order.customerId ? { customerId: order.customerId } : (order.sessionId ? { sessionId: order.sessionId } : null);
+      // Clear server-side cart items upon online payment confirmation (unless Buy Now order)
+      const isBuyNowOrder = Boolean(order.notes && order.notes.includes('[BUY_NOW]'));
+      const cartWhere = (!isBuyNowOrder && order.customerId) ? { customerId: order.customerId } : ((!isBuyNowOrder && order.sessionId) ? { sessionId: order.sessionId } : null);
       if (cartWhere) {
         const userCart = await Cart.findOne({ where: cartWhere, transaction });
         if (userCart) {
@@ -460,11 +493,20 @@ const handleTelrWebhook = async (req, res) => {
     }
 
     const orderRef = req.body.tran_order_ref || req.body.order_ref || req.body.ivp_order;
+    const cartId = req.body.tran_cartid || req.body.cart_id || req.body.ivp_cart;
     const paymentId = req.body.tran_ref || orderRef;
     const paymentAmount = parseFloat(req.body.tran_amount || req.body.ivp_amount || 0);
 
+    const orConditions = [];
+    if (orderRef) orConditions.push({ paymentGatewayRef: orderRef });
+    if (cartId) orConditions.push({ orderNumber: cartId });
+
+    if (orConditions.length === 0) {
+      return res.status(400).json({ success: false, message: 'Missing order reference or cart ID in Telr IPN payload' });
+    }
+
     return await processConfirmedPayment({
-      orderQuery: { paymentGatewayRef: orderRef },
+      orderQuery: orConditions.length === 1 ? orConditions[0] : { [Op.or]: orConditions },
       gatewayPaymentId: paymentId,
       signature: req.body.tran_ref || '',
       paymentAmount: paymentAmount,
@@ -539,13 +581,16 @@ const getPaymentSummary = async (req, res) => {
   }
 };
 
-// Verify payment signature after client-side Razorpay payment completes
-const verifyRazorpayPayment = async (req, res) => {
+// Unified payment verification endpoint for both Razorpay (INR) and Telr (AED)
+const verifyPayment = async (req, res) => {
   try {
-    const { orderId, razorpayPaymentId, razorpayOrderId, razorpaySignature } = req.body;
+    const { orderId, razorpayPaymentId, razorpayOrderId, razorpaySignature, orderRef } = req.body;
 
     if (!orderId) {
-      return res.status(400).json({ success: false, message: 'orderId is required for payment verification' });
+      return res.status(400).json({ 
+        success: false, 
+        message: 'orderId is required for payment verification' 
+      });
     }
 
     // Fetch the order
@@ -554,66 +599,125 @@ const verifyRazorpayPayment = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Order not found' });
     }
 
-    const payId = razorpayPaymentId || order.razorpay_payment_id || order.paymentGatewayRef || `pay_${Math.floor(Math.random() * 1000000000)}`;
-    const orderRefId = razorpayOrderId || order.razorpay_order_id || order.paymentGatewayRef;
-    const sig = razorpaySignature || 'simulated_signature';
-
-    // Verify signature if secret is configured
-    const secret = process.env.RAZORPAY_KEY_SECRET;
-    let isValid = true;
-    if (secret && secret !== 'YOUR_RAZORPAY_SECRET' && !secret.includes('placeholder') && razorpaySignature && razorpayOrderId && razorpayPaymentId) {
-      const body = razorpayOrderId + '|' + razorpayPaymentId;
-      const expectedSignature = crypto
-        .createHmac('sha256', secret)
-        .update(body)
-        .digest('hex');
-      isValid = (expectedSignature === razorpaySignature) || 
-                razorpaySignature === 'simulated_signature' || 
-                (typeof razorpaySignature === 'string' && razorpaySignature.startsWith('test_')) ||
-                process.env.NODE_ENV !== 'production' ||
-                !process.env.RAZORPAY_KEY_SECRET;
-    }
-
-    if (!isValid) {
-      return res.status(400).json({ success: false, message: 'Invalid payment signature' });
-    }
-
     // If order is already paid, return success immediately
     if (order.status === 'PAID' && order.paymentStatus === 'PAID') {
       return res.json({ success: true, status: 'PAID', message: 'Order is already marked as PAID' });
     }
 
+    // ── 1. TELR / AED ORDER VERIFICATION ─────────────────────────────────
+    if (String(order.currency).toUpperCase() === 'AED') {
+      const gateway = resolver.getGateway('AED');
+      const targetRef = orderRef || order.paymentGatewayRef || `telr_sim_${order.id}`;
+      console.log(`[verifyPayment] Verifying Telr order ${order.orderNumber} with ref: ${targetRef}`);
+      const checkResult = await gateway.fetchPayment(targetRef);
+
+      if (checkResult.success) {
+        return await processConfirmedPayment({
+          orderQuery: { id: order.id },
+          gatewayPaymentId: checkResult.gatewayRef || targetRef,
+          signature: 'telr_verified',
+          paymentAmount: parseFloat(order.totalAmount),
+          gatewayType: 'telr',
+          res
+        });
+      } else {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'Telr payment verification failed. Status: ' + (checkResult.status || 'FAILED') 
+        });
+      }
+    }
+
+    // ── 2. RAZORPAY / INR ORDER VERIFICATION ─────────────────────────────
+    if (!razorpayPaymentId || !razorpayOrderId || !razorpaySignature) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'razorpayPaymentId, razorpayOrderId, and razorpaySignature are all required for INR payment verification' 
+      });
+    }
+
+    // Verify order ID matches razorpay_order_id if recorded
+    if (order.razorpay_order_id && order.razorpay_order_id !== razorpayOrderId) {
+      return res.status(400).json({ success: false, message: 'Razorpay order mismatch for this order record' });
+    }
+
+    // Strictly verify signature using HMAC-SHA256 and constant-time comparison
+    const secret = process.env.RAZORPAY_KEY_SECRET;
+    if (!secret) {
+      return res.status(500).json({ success: false, message: 'Payment gateway secret not configured' });
+    }
+
+    const body = razorpayOrderId + '|' + razorpayPaymentId;
+    const expectedSignature = crypto
+      .createHmac('sha256', secret)
+      .update(body)
+      .digest('hex');
+
+    const expectedBuf = Buffer.from(expectedSignature, 'utf8');
+    const providedBuf = Buffer.from(String(razorpaySignature).trim(), 'utf8');
+
+    if (expectedBuf.length !== providedBuf.length || !crypto.timingSafeEqual(expectedBuf, providedBuf)) {
+      return res.status(400).json({ success: false, message: 'Invalid payment signature' });
+    }
+
     return await processConfirmedPayment({
       orderQuery: { id: orderId },
-      gatewayPaymentId: payId,
-      signature: sig,
+      gatewayPaymentId: razorpayPaymentId,
+      signature: razorpaySignature,
       paymentAmount: parseFloat(order.totalAmount),
-      gatewayType: order.currency === 'AED' ? 'telr' : 'razorpay',
+      gatewayType: 'razorpay',
       res
     });
   } catch (err) {
-    console.error('[verifyRazorpayPayment] Error:', err.message);
+    console.error('[verifyPayment] Error:', err.message);
     res.status(500).json({ success: false, message: err.message });
   }
 };
+
+// In-memory cache for IP country lookups
+const ipCountryCache = new Map();
 
 // Geolocation auto-detection & country restriction handler
 const detectGeoLocation = async (req, res) => {
   try {
     const overrideGeo = req.query.geo ? String(req.query.geo).toUpperCase() : null;
     const cfCountry = req.headers['cf-ipcountry'] ? String(req.headers['cf-ipcountry']).toUpperCase() : null;
-    const xCountry = req.headers['x-appengine-country'] || req.headers['x-country-code'];
+    const xCountry = req.headers['x-appengine-country'] || req.headers['x-country-code'] || req.headers['cloudfront-viewer-country'];
 
     let countryCode = overrideGeo || cfCountry || (xCountry ? String(xCountry).toUpperCase() : null);
 
-    // Default to 'IN' for local development IPs if no override provided
-    const ip = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '';
+    // Extract client IP (handle comma-separated proxies)
+    const rawIp = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '';
+    const clientIp = rawIp.split(',')[0].trim().replace(/^::ffff:/, '');
+
     if (!countryCode) {
-      if (ip.includes('127.0.0.1') || ip.includes('::1') || ip.includes('localhost')) {
-        countryCode = 'IN';
+      const isLocalOrPrivate = !clientIp ||
+        clientIp === '127.0.0.1' ||
+        clientIp === '::1' ||
+        clientIp === 'localhost' ||
+        clientIp.startsWith('10.') ||
+        clientIp.startsWith('192.168.') ||
+        /^172\.(1[6-9]|2\d|3[01])\./.test(clientIp);
+
+      if (isLocalOrPrivate) {
+        countryCode = 'IN'; // Local development default
+      } else if (ipCountryCache.has(clientIp)) {
+        countryCode = ipCountryCache.get(clientIp);
       } else {
-        countryCode = 'IN'; // Default fallback
+        try {
+          const geoRes = await axios.get(`http://ip-api.com/json/${clientIp}?fields=countryCode`, { timeout: 1500 });
+          if (geoRes.data?.countryCode) {
+            countryCode = String(geoRes.data.countryCode).toUpperCase();
+            ipCountryCache.set(clientIp, countryCode);
+          }
+        } catch {
+          countryCode = 'IN';
+        }
       }
+    }
+
+    if (!countryCode) {
+      countryCode = 'IN';
     }
 
     if (countryCode === 'AE') {
@@ -656,7 +760,8 @@ module.exports = {
   handleRazorpayWebhook,
   handleTelrWebhook,
   getPaymentSummary,
-  verifyRazorpayPayment
+  verifyPayment,
+  verifyRazorpayPayment: verifyPayment, // Backward compatibility alias
 };
 
 

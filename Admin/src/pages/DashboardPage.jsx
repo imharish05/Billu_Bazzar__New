@@ -13,10 +13,10 @@ import api from '../services/api';
 import currencyJs from 'currency.js';
 
 const fmtINR = (v) => currencyJs(v, { symbol: '₹', precision: 0 }).format();
-const fmtAED = (v) => `AED ${(typeof v === 'number' ? v : 0).toLocaleString('en-IN')}`;
+const fmtAED = (v) => `AED ${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 /* Animated counter hook */
-const useCounter = (target, duration = 1200) => {
+const useCounter = (target, duration = 1200, decimals = 0) => {
   const [count, setCount] = useState(0);
   useEffect(() => {
     if (!target) {
@@ -27,17 +27,25 @@ const useCounter = (target, duration = 1200) => {
     const step = (ts) => {
       if (!start) start = ts;
       const progress = Math.min((ts - start) / duration, 1);
-      setCount(Math.floor(progress * target));
+      const val = progress * target;
+      setCount(decimals > 0 ? parseFloat(val.toFixed(decimals)) : Math.floor(val));
       if (progress < 1) requestAnimationFrame(step);
+      else setCount(target);
     };
     requestAnimationFrame(step);
-  }, [target]);
+  }, [target, duration, decimals]);
   return count;
 };
 
 /* Stat Card without percentage badges */
-const StatCard = ({ icon: Icon, label, value, prefix = '', suffix = '', color = '#C9A24B', index }) => {
-  const animated = useCounter(typeof value === 'number' ? value : 0);
+const StatCard = ({ icon: Icon, label, value, prefix = '', suffix = '', color = '#C9A24B', index, decimals = 0 }) => {
+  const animated = useCounter(typeof value === 'number' ? value : 0, 1200, decimals);
+  const formattedVal = typeof value === 'number'
+    ? (decimals > 0
+        ? animated.toLocaleString('en-IN', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })
+        : animated.toLocaleString('en-IN'))
+    : value;
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
@@ -51,7 +59,7 @@ const StatCard = ({ icon: Icon, label, value, prefix = '', suffix = '', color = 
       </div>
       <p className="text-brand-grey text-xs font-medium mb-1">{label}</p>
       <p className="font-sans text-2xl font-bold text-brand-text">
-        {prefix}{typeof value === 'number' ? animated.toLocaleString('en-IN') : value}{suffix}
+        {prefix}{formattedVal}{suffix}
       </p>
     </motion.div>
   );
@@ -123,10 +131,10 @@ const DashboardPage = () => {
     dispatch(updateOrderStatus({ id, status }));
   };
 
-  // Stat Cards (AED text prefix!)
+  // Stat Cards (AED text prefix & 2 decimals!)
   const statCards = [
     { icon: TrendingUp, label: 'Total Revenue (INR)', value: stats.totalRevenue || 0, prefix: '₹', color: '#C9A24B' },
-    { icon: Coins, label: 'Total Revenue (AED)', value: stats.totalRevenueAED || 0, prefix: 'AED ', color: '#059669' },
+    { icon: Coins, label: 'Total Revenue (AED)', value: stats.totalRevenueAED || 0, prefix: 'AED ', color: '#059669', decimals: 2 },
     { icon: ShoppingBag, label: 'Total Orders', value: stats.totalOrders || 0, color: '#3B82F6' },
     { icon: Users, label: 'Total Customers', value: stats.totalCustomers || 0, color: '#8B5CF6' },
     { icon: Clock, label: 'Pending Orders', value: stats.pendingOrders || 0, color: '#F59E0B' },
@@ -137,6 +145,7 @@ const DashboardPage = () => {
     const today = new Date();
     const curr = (revenueCurrency || 'INR').toUpperCase();
     const filteredOrders = orders.filter(o => (o.currency || 'INR').toUpperCase() === curr && o.status !== 'CANCELLED');
+    const roundVal = (v) => curr === 'AED' ? parseFloat(Number(v || 0).toFixed(2)) : Math.round(Number(v || 0));
 
     const getLocalDateStr = (dateObj) => {
       const dt = new Date(dateObj);
@@ -165,7 +174,7 @@ const DashboardPage = () => {
         }
       });
 
-      return Object.values(daysMap).map(item => ({ day: item.label, revenue: Math.round(item.revenue) }));
+      return Object.values(daysMap).map(item => ({ day: item.label, revenue: roundVal(item.revenue) }));
     }
 
     if (revenueRange === '30_days') {
@@ -179,7 +188,7 @@ const DashboardPage = () => {
         else if (diffDays > 14 && diffDays <= 21) weeksMap['Week 2'] += amt;
         else if (diffDays > 21 && diffDays <= 30) weeksMap['Week 1'] += amt;
       });
-      return Object.entries(weeksMap).map(([day, revenue]) => ({ day, revenue: Math.round(revenue) }));
+      return Object.entries(weeksMap).map(([day, revenue]) => ({ day, revenue: roundVal(revenue) }));
     }
 
     if (revenueRange === 'this_month') {
@@ -201,7 +210,7 @@ const DashboardPage = () => {
           }
         }
       });
-      return Object.entries(monthDays).map(([day, revenue]) => ({ day, revenue: Math.round(revenue) }));
+      return Object.entries(monthDays).map(([day, revenue]) => ({ day, revenue: roundVal(revenue) }));
     }
 
     // Default 'this_year' (Real monthly totals)
@@ -215,7 +224,7 @@ const DashboardPage = () => {
         }
       }
     });
-    return Object.entries(monthsMap).map(([day, revenue]) => ({ day, revenue: Math.round(revenue) }));
+    return Object.entries(monthsMap).map(([day, revenue]) => ({ day, revenue: roundVal(revenue) }));
   }, [revenueRange, revenueCurrency, orders]);
 
   return (

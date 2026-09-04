@@ -2,6 +2,7 @@
 
 const { PersonalShopperRequest, Customer } = require('../models');
 const { Op } = require('sequelize');
+const { validatePhoneNumber } = require('../utils/phoneValidation');
 
 /**
  * Submit Personal Shopper Request (Customer / Public)
@@ -28,11 +29,20 @@ exports.submitRequest = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Budget is required' });
     }
 
+    let formattedPhone = null;
+    if (customerPhone && String(customerPhone).trim()) {
+      const phoneVal = validatePhoneNumber(customerPhone, { required: false });
+      if (!phoneVal.isValid) {
+        return res.status(400).json({ success: false, message: phoneVal.message });
+      }
+      formattedPhone = phoneVal.formatted;
+    }
+
     const shopperRequest = await PersonalShopperRequest.create({
       customerId,
       name: customerName.trim(),
       email: customerEmail.trim().toLowerCase(),
-      phone: customerPhone ? customerPhone.trim() : null,
+      phone: formattedPhone,
       occasion: occasion.trim(),
       budget: String(budget).trim(),
       style: style ? style.trim() : null,

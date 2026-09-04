@@ -992,70 +992,8 @@ const Navbar = () => {
               </Link>
               <button onClick={() => dispatch(closeMobileMenu())} className="p-2 text-white hover:text-brand-gold focus-visible:outline-brand-gold" aria-label="Close menu"><X size={24} /></button>
             </div>
-            
-            {/* Mobile Drawer User / Auth Header */}
-            <div className="py-2 mb-2 flex-shrink-0">
-              {isAuthenticated ? (
-                <Link
-                  to="/account"
-                  onClick={() => dispatch(closeMobileMenu())}
-                  className="flex items-center justify-between p-3 rounded-xl bg-neutral-900/80 border border-neutral-800/80 hover:border-brand-gold/40 transition-colors"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-full bg-brand-gold/20 text-brand-gold flex items-center justify-center font-bold text-sm">
-                      {customer?.name ? customer.name[0].toUpperCase() : <User size={16} />}
-                    </div>
-                    <div>
-                      <p className="text-[11px] text-neutral-400">Welcome,</p>
-                      <p className="text-sm font-semibold text-white truncate max-w-[150px]">{customer?.name || 'My Account'}</p>
-                    </div>
-                  </div>
-                  <span className="text-xs font-medium text-brand-gold flex items-center gap-1">
-                    Account <ChevronRight size={14} />
-                  </span>
-                </Link>
-              ) : (
-                <Link
-                  to="/account?view=login"
-                  onClick={() => dispatch(closeMobileMenu())}
-                  className="flex items-center justify-between p-3 rounded-xl bg-brand-gold/10 border border-brand-gold/20 text-brand-gold hover:bg-brand-gold/20 transition-all"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <User size={18} />
-                    <span className="text-sm font-semibold">Sign In / Register</span>
-                  </div>
-                  <ArrowRight size={15} />
-                </Link>
-              )}
-
-              {/* Quick links: Wishlist & Orders */}
-              <div className="grid grid-cols-2 gap-2 mt-2">
-                <Link
-                  to="/account/wishlist"
-                  onClick={() => dispatch(closeMobileMenu())}
-                  className="flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-neutral-900/60 border border-neutral-800/60 text-xs text-neutral-300 hover:text-brand-gold transition-colors"
-                >
-                  <Heart size={14} className="text-rose-400" />
-                  <span>Wishlist ({wishlistItems?.length || 0})</span>
-                </Link>
-                <Link
-                  to="/account/orders"
-                  onClick={() => dispatch(closeMobileMenu())}
-                  className="flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-neutral-900/60 border border-neutral-800/60 text-xs text-neutral-300 hover:text-brand-gold transition-colors"
-                >
-                  <ShoppingBag size={14} className="text-brand-gold" />
-                  <span>My Orders</span>
-                </Link>
-              </div>
-            </div>
-            
-            {/* Categories Header Label */}
-            <div className="pt-2 pb-1 border-t border-neutral-800/60">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400">Categories</span>
-            </div>
-
             {/* 3-level accordion list */}
-            <ul className="flex flex-col gap-1 mt-1 overflow-y-auto flex-1 pb-6 pr-1 scrollbar-thin">
+            <ul className="flex flex-col gap-1 mt-2 overflow-y-auto flex-1 pb-6 pr-1 scrollbar-thin">
               {activeNavLinks.map(link => {
                 const hasLevel2 = link.children && link.children.length > 0;
                 const isL1Expanded = expandedLevel1 === link.slug;

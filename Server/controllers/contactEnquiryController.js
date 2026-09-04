@@ -3,6 +3,7 @@
 const { ContactEnquiry } = require('../models');
 const { Op } = require('sequelize');
 const { sendContactEnquiryAdminNotification } = require('../services/emailService');
+const { validatePhoneNumber } = require('../utils/phoneValidation');
 
 /**
  * Submit Contact Enquiry (Public Storefront)
@@ -21,10 +22,19 @@ exports.submitContactEnquiry = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Message is required' });
     }
 
+    let formattedPhone = null;
+    if (phone && String(phone).trim()) {
+      const phoneVal = validatePhoneNumber(phone, { required: false });
+      if (!phoneVal.isValid) {
+        return res.status(400).json({ success: false, message: phoneVal.message });
+      }
+      formattedPhone = phoneVal.formatted;
+    }
+
     const enquiry = await ContactEnquiry.create({
       name: name.trim(),
       email: email.trim().toLowerCase(),
-      phone: phone ? phone.trim() : null,
+      phone: formattedPhone,
       subject: subject ? subject.trim() : 'General Inquiry',
       message: message.trim(),
       status: 'PENDING',

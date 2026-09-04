@@ -5,6 +5,8 @@ import { Mail, Phone, MapPin, Clock, Send, Globe, Star } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import api from '../services/api';
 import Footer from '../components/Footer';
+import PhoneInput from '../components/PhoneInput';
+import { validatePhoneNumber } from '../utils/validation';
 
 const ContactPage = () => {
   const [formData, setFormData] = useState({
@@ -32,6 +34,14 @@ const ContactPage = () => {
     e.preventDefault();
     if (!formData.name.trim() || !formData.email.trim() || !formData.message.trim()) {
       return toast.error('Please fill in all required fields.');
+    }
+
+    if (!formData.phone || !formData.phone.trim()) {
+      return toast.error('Please enter your phone number.');
+    }
+    const phoneVal = validatePhoneNumber(formData.phone, { required: true });
+    if (!phoneVal.isValid) {
+      return toast.error(phoneVal.message);
     }
 
     try {
@@ -217,15 +227,16 @@ const ContactPage = () => {
                   <label className="block text-xs font-semibold uppercase tracking-wider text-brand-grey mb-2" htmlFor="phone">
                     Phone Number <span className="text-brand-gold">*</span>
                   </label>
-                  <input
+                  <PhoneInput
                     id="phone"
                     name="phone"
-                    type="tel"
                     required
                     value={formData.phone}
-                    onChange={handleChange}
-                    placeholder="e.g. +91 98765 43210"
-                    className="w-full border border-brand-light px-4 py-3 text-sm focus:outline-none focus:border-brand-gold bg-transparent transition-colors placeholder-brand-grey/40"
+                    onChange={(val) => {
+                      setFormData(prev => ({ ...prev, phone: val }));
+                    }}
+                    className="w-full"
+                    inputClassName="py-3 text-sm px-4 bg-transparent"
                   />
                 </div>
 

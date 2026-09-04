@@ -12,7 +12,11 @@ import { checkPermission } from '../utils/rbac';
 import { printInvoice } from '../utils/invoiceGenerator';
 import api from '../services/api';
 
-const fmt = (v) => currencyJs(v, { symbol: '₹', precision: 0 }).format();
+const fmt = (v, currency = 'INR') => {
+  const isAed = String(currency).toUpperCase() === 'AED';
+  const sym = isAed ? 'AED\u00A0' : (currency === 'USD' ? '$' : (currency === 'EUR' ? '€' : (currency === 'GBP' ? '£' : '₹')));
+  return currencyJs(v || 0, { symbol: sym, precision: isAed ? 2 : 0 }).format();
+};
 
 const STATUS_TABS = ['All', 'PENDING', 'CONFIRMED', 'PROCESSING', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED', 'RETURNED'];
 const STATUS_LABELS = {
@@ -213,7 +217,7 @@ const OrdersAdminPage = () => {
                       ? order.items.reduce((sum, item) => sum + (Number(item.quantity) || 1), 0)
                       : 1}
                   </td>
-                  <td className="px-4 py-3 font-semibold">{fmt(order.totalAmount)}</td>
+                  <td className="px-4 py-3 font-semibold">{fmt(order.totalAmount, order.currency)}</td>
                   <td className="px-4 py-3"><span className={`text-xs px-2 py-0.5 rounded-full ${PAY_COLORS[order.paymentStatus] || 'bg-gray-100'}`}>{order.paymentStatus}</span></td>
                   {canUpdateOrder && (
                     <td className="px-4 py-3">

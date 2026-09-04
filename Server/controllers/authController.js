@@ -4,133 +4,7 @@ const { signAccessToken, signRefreshToken, verifyAccessToken, verifyRefreshToken
 const { Customer, AdminUser, Role, SiteSetting, LoyaltyLedger } = require('../models');
 const { v4: uuidv4 } = require('uuid');
 
-// ── Phone Number Validation Helper ───────────────────────────────────────────
-const validatePhoneNumber = (phone) => {
-  if (!phone) return { isValid: false, message: 'Phone number is required' };
-  
-  // Clean formatting characters
-  const clean = phone.trim().replace(/^\+/, '').replace(/[\s\-()]/g, '');
-  
-  if (!/^\d+$/.test(clean)) {
-    return { isValid: false, message: 'Phone number must contain only digits' };
-  }
-  
-  const isIndiaPrefix = clean.startsWith('91');
-  const isUaePrefix = clean.startsWith('971');
-  
-  // 1. India checks
-  if (isIndiaPrefix || (/^[6-9]/.test(clean) && clean.length >= 9 && clean.length <= 11)) {
-    if (isIndiaPrefix) {
-      const localPart = clean.slice(2);
-      if (localPart.length !== 10) {
-        return { 
-          isValid: false, 
-          message: 'India number with country code must be 12 digits (+91 followed by 10 digits)' 
-        };
-      }
-      if (!/^[6-9]/.test(localPart)) {
-        return { 
-          isValid: false, 
-          message: 'India mobile numbers must start with 6, 7, 8, or 9' 
-        };
-      }
-      return { isValid: true };
-    } else {
-      if (clean.length !== 10) {
-        return { 
-          isValid: false, 
-          message: 'India mobile number must be exactly 10 digits (excluding country code)' 
-        };
-      }
-      if (!/^[6-9]/.test(clean)) {
-        return { 
-          isValid: false, 
-          message: 'India mobile numbers must start with 6, 7, 8, or 9' 
-        };
-      }
-      return { isValid: true };
-    }
-  }
-  
-  // 2. UAE checks
-  if (isUaePrefix || /^0?5[024568]/.test(clean) || /^0?4/.test(clean)) {
-    if (isUaePrefix) {
-      const localPart = clean.slice(3); // Remove 971
-      
-      if (localPart.startsWith('5')) {
-        if (localPart.length !== 9) {
-          return {
-            isValid: false,
-            message: 'UAE mobile with country code must be 11 digits (+971 50/52/54/55/56/58 followed by 7 digits)'
-          };
-        }
-        if (!/^5[024568]/.test(localPart)) {
-          return {
-            isValid: false,
-            message: 'UAE mobile operator code must be 50, 52, 54, 55, 56, or 58'
-          };
-        }
-        return { isValid: true };
-      } else if (localPart.startsWith('4')) {
-        if (localPart.length !== 8) {
-          return {
-            isValid: false,
-            message: 'Dubai landline with country code must be 10 digits (+971 4 followed by 7 digits)'
-          };
-        }
-        return { isValid: true };
-      } else {
-        return {
-          isValid: false,
-          message: 'Invalid UAE number. Mobile must start with 5 (e.g. 50) and landline must start with 4'
-        };
-      }
-    } else {
-      // Local UAE format (without country code)
-      if (clean.startsWith('05') || clean.startsWith('5')) {
-        const hasLeadingZero = clean.startsWith('0');
-        const expectedLength = hasLeadingZero ? 10 : 9;
-        
-        if (clean.length !== expectedLength) {
-          return {
-            isValid: false,
-            message: hasLeadingZero 
-              ? 'UAE mobile number must be 10 digits when starting with 0 (e.g. 050 123 4567)'
-              : 'UAE mobile number must be 9 digits (excluding leading 0)'
-          };
-        }
-        
-        const operatorCode = hasLeadingZero ? clean.slice(1, 3) : clean.slice(0, 2);
-        const validCodes = ['50', '52', '54', '55', '56', '58'];
-        if (!validCodes.includes(operatorCode)) {
-          return {
-            isValid: false,
-            message: 'UAE mobile operator code must be 50, 52, 54, 55, 56, or 58'
-          };
-        }
-        return { isValid: true };
-      } else if (clean.startsWith('04') || clean.startsWith('4')) {
-        const hasLeadingZero = clean.startsWith('0');
-        const expectedLength = hasLeadingZero ? 9 : 8;
-        
-        if (clean.length !== expectedLength) {
-          return {
-            isValid: false,
-            message: hasLeadingZero
-              ? 'Dubai landline must be 9 digits when starting with 04 (e.g. 04 123 4567)'
-              : 'Dubai landline must be 8 digits (excluding leading 0)'
-          };
-        }
-        return { isValid: true };
-      }
-    }
-  }
-  
-  return {
-    isValid: false,
-    message: 'Please enter a valid India (+91) or UAE (+971) phone number'
-  };
-};
+const { validatePhoneNumber } = require('../utils/phoneValidation');
 
 
 const validateEmail = (email) => {
@@ -188,7 +62,14 @@ const register = async (req, res) => {
 
     const hashed = await bcrypt.hash(password, 12);
     const referralCode = uuidv4().slice(0, 8).toUpperCase();
-    const customer = await Customer.create({ name, email, password: hashed, phone, referralCode, loyaltyPoints: initialPoints });
+    const customer = await Customer.create({
+      name,
+      email,
+      password: hashed,
+      phone: phoneValidation.formatted,
+      referralCode,
+      loyaltyPoints: initialPoints
+    });
 
     if (initialPoints > 0) {
       await LoyaltyLedger.create({
@@ -200,8 +81,8 @@ const register = async (req, res) => {
       });
     }
 
-    const token = signAccessToken({ id: customer.id });
-    const refreshToken = signRefreshToken({ id: customer.id });
+    const token = signAccessToken({ id: customer.id, type: 'CUSTOMER' });
+    const refreshToken = signRefreshToken({ id: customer.id, type: 'CUSTOMER' });
     res.status(201).json({ success: true, token, refreshToken, bonusPointsEarned: initialPoints });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -216,8 +97,8 @@ const login = async (req, res) => {
       return res.status(401).json({ success: false, message: 'Invalid email or password' });
     if (!customer.isActive) return res.status(403).json({ success: false, message: 'Account suspended' });
 
-    const token = signAccessToken({ id: customer.id });
-    const refreshToken = signRefreshToken({ id: customer.id });
+    const token = signAccessToken({ id: customer.id, type: 'CUSTOMER' });
+    const refreshToken = signRefreshToken({ id: customer.id, type: 'CUSTOMER' });
     res.json({ success: true, token, refreshToken });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -231,13 +112,19 @@ const getProfile = async (req, res) => {
 const updateProfile = async (req, res) => {
   try {
     const { name, phone, address, whatsappOptIn } = req.body || {};
-    if (phone) {
-      const phoneValidation = validatePhoneNumber(phone);
-      if (!phoneValidation.isValid) {
-        return res.status(400).json({ success: false, message: phoneValidation.message });
+    let formattedPhone = req.customer.phone;
+    if (phone !== undefined) {
+      if (phone && String(phone).trim()) {
+        const phoneValidation = validatePhoneNumber(phone);
+        if (!phoneValidation.isValid) {
+          return res.status(400).json({ success: false, message: phoneValidation.message });
+        }
+        formattedPhone = phoneValidation.formatted;
+      } else {
+        formattedPhone = null;
       }
     }
-    await req.customer.update({ name, phone, address, whatsappOptIn });
+    await req.customer.update({ name, phone: formattedPhone, address, whatsappOptIn });
     res.json({ success: true, customer: req.customer });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -254,8 +141,8 @@ const adminLogin = async (req, res) => {
     if (!admin.isActive) return res.status(403).json({ success: false, message: 'Account suspended' });
 
     await admin.update({ lastLogin: new Date() });
-    const token = signAccessToken({ id: admin.id });
-    const refreshToken = signRefreshToken({ id: admin.id });
+    const token = signAccessToken({ id: admin.id, type: 'ADMIN' });
+    const refreshToken = signRefreshToken({ id: admin.id, type: 'ADMIN' });
     
     let permissions = admin.role?.permissions || {};
     if (typeof permissions === 'string') {
@@ -284,7 +171,7 @@ const refresh = async (req, res) => {
     }
 
     const decoded = verifyRefreshToken(refreshToken);
-    const newAccessToken = signAccessToken({ id: decoded.id });
+    const newAccessToken = signAccessToken({ id: decoded.id, type: decoded.type });
     return res.json({ success: true, token: newAccessToken });
   } catch (err) {
     return res.status(401).json({ success: false, message: 'Invalid or expired refresh token' });
@@ -300,7 +187,7 @@ const getRefreshToken = async (req, res) => {
 
     const token = authHeader.split(' ')[1];
     const decoded = verifyAccessToken(token);
-    const newRefreshToken = signRefreshToken({ id: decoded.id });
+    const newRefreshToken = signRefreshToken({ id: decoded.id, type: decoded.type });
     return res.json({ success: true, refreshToken: newRefreshToken });
   } catch (err) {
     return res.status(401).json({ success: false, message: 'Invalid or expired access token' });
@@ -317,7 +204,43 @@ const getMe = async (req, res) => {
     const token = authHeader.split(' ')[1];
     const decoded = verifyAccessToken(token);
 
-    // Try finding as Customer (excluding password)
+    // If token explicitly identified as ADMIN
+    if (decoded.type === 'ADMIN') {
+      const admin = await AdminUser.findByPk(decoded.id, {
+        include: [{ association: 'role' }],
+        attributes: { exclude: ['password'] }
+      });
+      if (admin && admin.isActive) {
+        let permissions = admin.role?.permissions || {};
+        if (typeof permissions === 'string') {
+          try { permissions = JSON.parse(permissions); } catch (e) { permissions = {}; }
+        }
+        return res.json({
+          success: true,
+          admin: {
+            id: admin.id,
+            name: admin.name,
+            email: admin.email,
+            role: admin.role?.name || 'Staff User',
+            permissions
+          }
+        });
+      }
+      return res.status(401).json({ success: false, message: 'Admin user not found or inactive' });
+    }
+
+    // If token explicitly identified as CUSTOMER
+    if (decoded.type === 'CUSTOMER') {
+      const customer = await Customer.findByPk(decoded.id, {
+        attributes: { exclude: ['password'] }
+      });
+      if (customer && customer.isActive) {
+        return res.json({ success: true, customer });
+      }
+      return res.status(401).json({ success: false, message: 'Customer not found or inactive' });
+    }
+
+    // Legacy tokens without type property: Check Customer first, then AdminUser
     const customer = await Customer.findByPk(decoded.id, {
       attributes: { exclude: ['password'] }
     });
@@ -325,7 +248,6 @@ const getMe = async (req, res) => {
       return res.json({ success: true, customer });
     }
 
-    // Try finding as AdminUser (excluding password)
     const admin = await AdminUser.findByPk(decoded.id, {
       include: [{ association: 'role' }],
       attributes: { exclude: ['password'] }
@@ -432,27 +354,19 @@ const sendCheckoutOtp = async (req, res) => {
     // Store in-memory for all checkouts (both guest and registered users)
     checkoutOtpStore.set(targetEmail, { hashedOtp, expiry });
 
-    const customer = await Customer.findOne({ where: { email: targetEmail } });
-    if (customer) {
-      await customer.update({ passwordResetToken: hashedOtp, passwordResetExpiry: expiry });
-    }
-
     let emailSent = true;
     try {
-      await sendFraudOtpEmail(targetEmail, name || customer?.name || 'Customer', otp);
+      await sendFraudOtpEmail(targetEmail, name || req.customer?.name || 'Customer', otp);
     } catch (emailErr) {
       emailSent = false;
-      console.warn(`[Checkout OTP] Email delivery failed (${emailErr.message}). OTP for ${targetEmail} is: ${otp}`);
+      console.warn(`[Checkout OTP] Email delivery failed (${emailErr.message}).`);
     }
-
-    // Always log OTP to server console for easy testing/debugging
-    console.log(`[Checkout OTP] Generated OTP for ${targetEmail}: ${otp}`);
 
     return res.json({
       success: true,
       message: emailSent
         ? `Verification OTP sent to ${targetEmail}`
-        : `Verification code generated. (Check server console or use: ${otp})`
+        : `Verification code sent to ${targetEmail}. Please check your spam folder or contact support if not received.`
     });
   } catch (err) {
     console.error('[sendCheckoutOtp] Error:', err.message);
@@ -471,7 +385,7 @@ const verifyCheckoutOtp = async (req, res) => {
     const inputHash = crypto.createHash('sha256').update(otp.toString().trim()).digest('hex');
     let isValid = false;
 
-    // 1. Check in-memory store
+    // Check in-memory store
     const memEntry = checkoutOtpStore.get(targetEmail);
     if (memEntry) {
       if (new Date() > new Date(memEntry.expiry)) {
@@ -481,15 +395,6 @@ const verifyCheckoutOtp = async (req, res) => {
       if (memEntry.hashedOtp === inputHash) {
         isValid = true;
         checkoutOtpStore.delete(targetEmail);
-      }
-    }
-
-    // 2. Check Customer record fallback
-    const customer = await Customer.findOne({ where: { email: targetEmail } });
-    if (customer && customer.passwordResetToken && customer.passwordResetExpiry) {
-      if (new Date() <= new Date(customer.passwordResetExpiry) && customer.passwordResetToken === inputHash) {
-        isValid = true;
-        await customer.update({ passwordResetToken: null, passwordResetExpiry: null });
       }
     }
 

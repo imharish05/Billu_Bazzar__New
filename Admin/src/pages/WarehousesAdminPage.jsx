@@ -8,6 +8,7 @@ import api from '../services/api';
 import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 import { checkPermission } from '../utils/rbac';
+import PhoneInput, { validatePhoneNumber } from '../components/PhoneInput';
 
 const EMPTY_WAREHOUSE_FORM = {
   name: '', code: '', contactName: '', contactPhone: '',
@@ -16,15 +17,7 @@ const EMPTY_WAREHOUSE_FORM = {
 };
 
 const validatePhone = (phone) => {
-  if (!phone || !phone.trim()) return { isValid: true };
-  const clean = phone.trim().replace(/^\+/, '').replace(/[\s\-()]/g, '');
-  if (!/^\d+$/.test(clean)) {
-    return { isValid: false, message: 'Contact Phone must contain only digits, spaces, hyphens, and optional + prefix.' };
-  }
-  if (clean.length < 7 || clean.length > 15) {
-    return { isValid: false, message: 'Contact Phone must be between 7 and 15 digits.' };
-  }
-  return { isValid: true };
+  return validatePhoneNumber(phone, { required: true });
 };
 
 const WarehousesAdminPage = () => {
@@ -178,7 +171,7 @@ const WarehousesAdminPage = () => {
         name: warehouseForm.name,
         code: warehouseForm.code,
         contactName: warehouseForm.contactName,
-        contactPhone: warehouseForm.contactPhone,
+        contactPhone: validatePhone(warehouseForm.contactPhone).formatted || warehouseForm.contactPhone,
         city: warehouseForm.city,
         state: warehouseForm.state,
         pincode: warehouseForm.pincode,
@@ -708,18 +701,14 @@ const WarehousesAdminPage = () => {
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] uppercase tracking-wider font-semibold text-brand-grey mb-1">Contact Phone *</label>
-                    <input
-                      type="tel"
+                    <PhoneInput
+                      id="warehouse-contact-phone"
+                      name="contactPhone"
+                      label="Contact Phone"
                       required
                       value={warehouseForm.contactPhone}
-                      onChange={e => setWarehouseForm(f => ({ ...f, contactPhone: e.target.value }))}
-                      className="w-full border border-brand-light px-3 py-2 text-xs focus:outline-none focus:border-brand-gold rounded-none"
-                      placeholder="e.g. +91 9988776655"
+                      onChange={(val) => setWarehouseForm(f => ({ ...f, contactPhone: val }))}
                     />
-                    {warehouseForm.contactPhone && !validatePhone(warehouseForm.contactPhone).isValid && (
-                      <p className="text-[10px] text-red-500 mt-1">{validatePhone(warehouseForm.contactPhone).message}</p>
-                    )}
                   </div>
                 </div>
 

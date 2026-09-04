@@ -250,7 +250,10 @@ const VariantModal = ({ variant, onClose, onSave, products, warehouses }) => {
   const [selectedProductId, setSelectedProductId] = useState(variant?.productId || '');
   const [sku, setSku] = useState(variant?.sku || '');
   const [price, setPrice] = useState(variant?.price || '');
+  const [priceAED, setPriceAED] = useState(variant?.priceAED || '');
+  const [exchangeRate, setExchangeRate] = useState(26.06);
   const [mrp, setMrp] = useState(variant?.mrp || '');
+  const [mrpAED, setMrpAED] = useState(variant?.mrpAED || '');
   const [stock, setStock] = useState(variant?.stock !== undefined ? String(variant?.stock) : '0');
   const [warehouseId, setWarehouseId] = useState(variant?.warehouseId || '');
   const [attributes, setAttributes] = useState(variant?.attributes || {});
@@ -259,6 +262,32 @@ const VariantModal = ({ variant, onClose, onSave, products, warehouses }) => {
 
   const [mainImageFile, setMainImageFile] = useState(null);
   const [mainImagePreview, setMainImagePreview] = useState(variant?.image || '');
+
+  useEffect(() => {
+    api.get('/currency/rate').then(res => {
+      if (res.data?.success && Number(res.data.rate) > 0) {
+        setExchangeRate(Number(res.data.rate));
+      }
+    }).catch(() => {});
+  }, []);
+
+  const handlePriceChange = (newPrice) => {
+    setPrice(newPrice);
+    if (newPrice !== '' && !isNaN(newPrice) && Number(newPrice) > 0 && exchangeRate > 0) {
+      setPriceAED((parseFloat(newPrice) / exchangeRate).toFixed(2));
+    } else if (newPrice === '') {
+      setPriceAED('');
+    }
+  };
+
+  const handleMrpChange = (newMrp) => {
+    setMrp(newMrp);
+    if (newMrp !== '' && !isNaN(newMrp) && Number(newMrp) > 0 && exchangeRate > 0) {
+      setMrpAED((parseFloat(newMrp) / exchangeRate).toFixed(2));
+    } else if (newMrp === '') {
+      setMrpAED('');
+    }
+  };
 
   // Multi-Image Upload States (Up to 5 Images per Variant)
   const [existingImages, setExistingImages] = useState(() => {
@@ -447,7 +476,9 @@ const VariantModal = ({ variant, onClose, onSave, products, warehouses }) => {
     fd.append('productId', selectedProductId);
     fd.append('sku', finalSku);
     fd.append('price', price);
+    fd.append('priceAED', priceAED || '');
     fd.append('mrp', mrp);
+    fd.append('mrpAED', mrpAED || '');
     fd.append('stock', stock);
     fd.append('lowStockThreshold', lowStockThreshold);
     fd.append('warehouseId', warehouseId || '');
@@ -466,14 +497,22 @@ const VariantModal = ({ variant, onClose, onSave, products, warehouses }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={e => e.target === e.currentTarget && onClose()}>
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto" onClick={e => e.target === e.currentTarget && onClose()}>
       <motion.div
-        initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.96 }}
-        className="bg-white rounded-xl w-full max-w-xl max-h-[90vh] overflow-y-auto shadow-2xl"
+        initial={{ opacity: 0, scale: 0.96, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96, y: 10 }}
+        className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl border border-neutral-200/80 my-auto"
       >
-        <div className="flex items-center justify-between px-6 py-4 border-b border-brand-light sticky top-0 bg-white z-10">
-          <h2 className="font-playfair text-xl font-semibold">{isEdit ? 'Edit Variant' : 'Add Variant'}</h2>
-          <button onClick={onClose} className="p-1.5 hover:text-brand-gold transition-colors focus-visible:outline-brand-gold" aria-label="Close"><X size={20} /></button>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-200/80 sticky top-0 bg-white/95 backdrop-blur-sm z-10">
+          <div>
+            <h2 className="font-playfair text-xl font-bold text-neutral-900">{isEdit ? 'Edit Variant' : 'Add Variant'}</h2>
+            <p className="text-xs text-neutral-500 font-mono mt-0.5">
+              {variant?.product?.name ? `${variant.product.name} ` : ''}
+              {variant?.sku ? `• ${variant.sku}` : ''}
+            </p>
+          </div>
+          <button onClick={onClose} className="p-2 text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100 rounded-lg transition-colors" aria-label="Close">
+            <X size={18} />
+          </button>
         </div>
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
           <div className="space-y-4">
@@ -556,11 +595,13 @@ const VariantModal = ({ variant, onClose, onSave, products, warehouses }) => {
               </div>
             )}
 
-            {/* Core Fields Grid */}
-            <div className="grid grid-cols-2 gap-4">
+            {/* 1. Identification & Location */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {/* SKU Code Input */}
               <div>
-                <label className="block text-xs font-semibold text-brand-grey mb-1.5" htmlFor="var-sku">SKU Code *</label>
+                <label className="block text-xs font-bold text-neutral-700 uppercase tracking-wider mb-1.5" htmlFor="var-sku">
+                  SKU Code *
+                </label>
                 <input
                   id="var-sku"
                   type="text"
@@ -568,18 +609,20 @@ const VariantModal = ({ variant, onClose, onSave, products, warehouses }) => {
                   value={sku}
                   onChange={e => setSku(e.target.value)}
                   placeholder="e.g. VAR-SKU-001"
-                  className="w-full border border-brand-light px-3 py-2 text-sm focus:outline-none focus:border-brand-gold rounded-md font-mono uppercase"
+                  className="w-full border border-neutral-300 focus:border-brand-gold focus:ring-2 focus:ring-brand-gold/15 px-3.5 py-2.5 text-sm rounded-lg font-mono uppercase bg-white text-neutral-900 transition-all outline-none"
                 />
               </div>
 
               {/* Warehouse Dropdown */}
               <div>
-                <label className="block text-xs font-semibold text-brand-grey mb-1.5" htmlFor="var-warehouse">Warehouse</label>
+                <label className="block text-xs font-bold text-neutral-700 uppercase tracking-wider mb-1.5" htmlFor="var-warehouse">
+                  Warehouse Location
+                </label>
                 <select
                   id="var-warehouse"
                   value={warehouseId}
                   onChange={e => setWarehouseId(e.target.value)}
-                  className="w-full border border-brand-light bg-white px-3 py-2 text-sm focus:outline-none focus:border-brand-gold transition-colors rounded-md"
+                  className="w-full border border-neutral-300 bg-white px-3.5 py-2.5 text-sm focus:outline-none focus:border-brand-gold focus:ring-2 focus:ring-brand-gold/15 transition-all rounded-lg text-neutral-800"
                 >
                   <option value="">Select Warehouse</option>
                   {warehouses.map(w => (
@@ -587,34 +630,150 @@ const VariantModal = ({ variant, onClose, onSave, products, warehouses }) => {
                   ))}
                 </select>
               </div>
+            </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-brand-grey mb-1.5" htmlFor="var-price">Selling Price (₹) *</label>
-                <input
-                  id="var-price"
-                  type="number"
-                  required
-                  value={price}
-                  onChange={e => setPrice(e.target.value)}
-                  placeholder="0.00"
-                  className="w-full border border-brand-light px-3 py-2 text-sm focus:outline-none focus:border-brand-gold rounded-md font-sans"
-                />
+            {/* 2. Pricing & Multi-Currency Section (Dedicated Card) */}
+            <div className="rounded-xl border border-neutral-200/90 bg-neutral-50/60 p-4 space-y-4">
+              <div className="flex items-center justify-between pb-2.5 border-b border-neutral-200/70">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-neutral-800">
+                    Pricing & Multi-Currency
+                  </h4>
+                </div>
+                <div className="flex items-center gap-1.5 text-xs text-emerald-700 font-semibold bg-emerald-100/70 border border-emerald-300/60 px-2.5 py-0.5 rounded-full">
+                  <span>Rate:</span>
+                  <span className="font-mono font-bold">1 AED ≈ {exchangeRate} ₹</span>
+                </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-brand-grey mb-1.5" htmlFor="var-mrp">MRP (₹)</label>
-                <input
-                  id="var-mrp"
-                  type="number"
-                  value={mrp}
-                  onChange={e => setMrp(e.target.value)}
-                  placeholder="0.00"
-                  className="w-full border border-brand-light px-3 py-2 text-sm focus:outline-none focus:border-brand-gold rounded-md font-sans"
-                />
-              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Selling Price (₹) */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-neutral-700" htmlFor="var-price">
+                      Selling Price (₹) *
+                    </label>
+                    <span className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wider">INR • Base</span>
+                  </div>
+                  <div className="relative rounded-lg shadow-sm">
+                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                      <span className="text-neutral-500 font-bold text-sm">₹</span>
+                    </div>
+                    <input
+                      id="var-price"
+                      type="number"
+                      step="0.01"
+                      required
+                      value={price}
+                      onChange={e => handlePriceChange(e.target.value)}
+                      placeholder="0.00"
+                      className="w-full pl-8 pr-3 py-2.5 text-sm font-semibold text-neutral-900 bg-white border border-neutral-300 rounded-lg focus:outline-none focus:border-brand-gold focus:ring-2 focus:ring-brand-gold/15 transition-all"
+                    />
+                  </div>
+                  <p className="text-[10px] text-neutral-400">Customer price in India</p>
+                </div>
 
+                {/* Selling Price (AED) */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <label className="text-xs font-bold text-emerald-800" htmlFor="var-price-aed">
+                        Selling Price (AED)
+                      </label>
+                      <span className="text-[9px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-300/70 px-1.5 py-0.5 rounded-full">
+                        Auto-filled
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-semibold text-emerald-700 uppercase tracking-wider">UAE Dirham</span>
+                  </div>
+                  <div className="relative rounded-lg shadow-sm">
+                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                      <span className="text-emerald-700 font-bold text-xs">AED</span>
+                    </div>
+                    <input
+                      id="var-price-aed"
+                      type="number"
+                      step="0.01"
+                      value={priceAED}
+                      onChange={e => setPriceAED(e.target.value)}
+                      placeholder="0.00"
+                      className="w-full pl-12 pr-3 py-2.5 text-sm font-mono font-bold text-emerald-950 bg-emerald-50/40 border border-emerald-400/80 rounded-lg focus:outline-none focus:bg-white focus:border-emerald-600 focus:ring-2 focus:ring-emerald-400/20 transition-all"
+                    />
+                  </div>
+                  {/* <p className="text-[10px] text-emerald-700 font-medium">⚡ Auto-calculated from ₹ • Click to edit</p> */}
+                </div>
+
+                {/* MRP (₹) */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-neutral-700" htmlFor="var-mrp">
+                      MRP / Compare Price (₹)
+                    </label>
+                    <span className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wider">INR • Strikethrough</span>
+                  </div>
+                  <div className="relative rounded-lg shadow-sm">
+                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                      <span className="text-neutral-500 font-bold text-sm">₹</span>
+                    </div>
+                    <input
+                      id="var-mrp"
+                      type="number"
+                      step="0.01"
+                      value={mrp}
+                      onChange={e => handleMrpChange(e.target.value)}
+                      placeholder="0.00"
+                      className="w-full pl-8 pr-3 py-2.5 text-sm font-semibold text-neutral-900 bg-white border border-neutral-300 rounded-lg focus:outline-none focus:border-brand-gold focus:ring-2 focus:ring-brand-gold/15 transition-all"
+                    />
+                  </div>
+                  <p className="text-[10px] text-neutral-400">Original price before discount</p>
+                </div>
+
+                {/* MRP (AED) */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <label className="text-xs font-bold text-emerald-800" htmlFor="var-mrp-aed">
+                        MRP (AED)
+                      </label>
+                      <span className="text-[9px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-300/70 px-1.5 py-0.5 rounded-full">
+                        Auto-filled
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-semibold text-emerald-700 uppercase tracking-wider">UAE Dirham</span>
+                  </div>
+                  <div className="relative rounded-lg shadow-sm">
+                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                      <span className="text-emerald-700 font-bold text-xs">AED</span>
+                    </div>
+                    <input
+                      id="var-mrp-aed"
+                      type="number"
+                      step="0.01"
+                      value={mrpAED}
+                      onChange={e => setMrpAED(e.target.value)}
+                      placeholder="0.00"
+                      className="w-full pl-12 pr-3 py-2.5 text-sm font-mono font-bold text-emerald-950 bg-emerald-50/40 border border-emerald-400/80 rounded-lg focus:outline-none focus:bg-white focus:border-emerald-600 focus:ring-2 focus:ring-emerald-400/20 transition-all"
+                    />
+                  </div>
+                  {/* <p className="text-[10px] text-emerald-700 font-medium">⚡ Auto-calculated from ₹ • Click to edit</p> */}
+                </div>
+              </div>
+            </div>
+
+            {/* 3. Inventory Controls */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-semibold text-brand-grey mb-1.5" htmlFor="var-stock">Stock QTY *</label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-bold text-neutral-700 uppercase tracking-wider" htmlFor="var-stock">
+                    Stock Quantity *
+                  </label>
+                  {Number(stock) > 0 ? (
+                    <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">In Stock</span>
+                  ) : (
+                    <span className="text-[10px] font-semibold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full">Out of Stock</span>
+                  )}
+                </div>
                 <input
                   id="var-stock"
                   type="number"
@@ -622,23 +781,28 @@ const VariantModal = ({ variant, onClose, onSave, products, warehouses }) => {
                   value={stock}
                   onChange={e => setStock(e.target.value)}
                   placeholder="0"
-                  className="w-full border border-brand-light px-3 py-2 text-sm focus:outline-none focus:border-brand-gold rounded-md font-sans"
+                  className="w-full border border-neutral-300 focus:border-brand-gold focus:ring-2 focus:ring-brand-gold/15 px-3.5 py-2.5 text-sm font-semibold rounded-lg bg-white text-neutral-900 transition-all outline-none"
                 />
+                <p className="text-[10px] text-neutral-400 mt-1">Available inventory units</p>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-brand-grey mb-1.5" htmlFor="var-threshold">Low Stock Threshold</label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-bold text-neutral-700 uppercase tracking-wider" htmlFor="var-threshold">
+                    Low Stock Threshold
+                  </label>
+                  <span className="text-[10px] text-neutral-400 font-mono">Default: 10</span>
+                </div>
                 <input
                   id="var-threshold"
                   type="number"
                   value={lowStockThreshold}
                   onChange={e => setLowStockThreshold(e.target.value)}
                   placeholder="10"
-                  className="w-full border border-brand-light px-3 py-2 text-sm focus:outline-none focus:border-brand-gold rounded-md font-sans"
+                  className="w-full border border-neutral-300 focus:border-brand-gold focus:ring-2 focus:ring-brand-gold/15 px-3.5 py-2.5 text-sm font-semibold rounded-lg bg-white text-neutral-900 transition-all outline-none"
                 />
+                <p className="text-[10px] text-neutral-400 mt-1">Alerts when inventory falls below this</p>
               </div>
-
-
             </div>
 
             {/* Main Variant Image Input (Dashed Dropzone & Rounded Preview Card) */}
@@ -938,9 +1102,19 @@ const VariantsAdminPage = () => {
           <table className="w-full text-sm" aria-label="Variants table">
             <thead>
               <tr className="bg-brand-light/40 text-left">
-                {variantHeaders.map(h => (
-                  <th key={h} className="px-4 py-3 text-xs font-semibold text-brand-grey uppercase tracking-wider">{h}</th>
-                ))}
+                {variantHeaders.map(h => {
+                  const isPrice = h === 'Selling Price' || h === 'MRP';
+                  return (
+                    <th 
+                      key={h} 
+                      className={`px-4 py-3 text-xs font-semibold text-brand-grey uppercase tracking-wider whitespace-nowrap ${
+                        isPrice ? 'min-w-[130px]' : ''
+                      }`}
+                    >
+                      {h}
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody>
@@ -993,8 +1167,24 @@ const VariantsAdminPage = () => {
                     <td className="px-4 py-3 text-brand-grey">
                       {variant.warehouse?.name || '—'}
                     </td>
-                    <td className="px-4 py-3 font-semibold">{fmt(variant.price)}</td>
-                    <td className="px-4 py-3 font-medium text-brand-grey">{variant.mrp ? fmt(variant.mrp) : '—'}</td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="font-semibold text-neutral-900 leading-tight">{fmt(variant.price)}</div>
+                      {variant.priceAED && Number(variant.priceAED) > 0 ? (
+                        <div className="text-[11px] font-medium text-emerald-600 whitespace-nowrap mt-0.5">
+                          AED {Number(variant.priceAED).toFixed(2)}
+                        </div>
+                      ) : null}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="font-medium text-neutral-500 leading-tight">
+                        {variant.mrp ? fmt(variant.mrp) : '—'}
+                      </div>
+                      {variant.mrpAED && Number(variant.mrpAED) > 0 ? (
+                        <div className="text-[11px] font-medium text-emerald-600 whitespace-nowrap mt-0.5">
+                          AED {Number(variant.mrpAED).toFixed(2)}
+                        </div>
+                      ) : null}
+                    </td>
                     <td className="px-4 py-3">
                       <span className={`text-xs font-semibold ${variant.stock <= 5 ? 'text-red-500' : 'text-green-600'}`}>
                         {variant.stock}

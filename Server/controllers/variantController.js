@@ -81,10 +81,20 @@ const syncProductVariants = async (productId) => {
       // Clean up any orphan parent-level stock entries so they don't double count
       await WarehouseStock.destroy({ where: { productId, variantId: null } });
 
-      // Find the lowest active price, or the first variant price
-      const price = parseFloat(variants[0].price) || product.price;
-      const primaryStock = parseInt(variants[0].stock, 10);
-      const stock = !isNaN(primaryStock) ? primaryStock : variants.reduce((sum, v) => sum + (parseInt(v.stock, 10) || 0), 0);
+      // Find the lowest active variant price, or fallback to product price
+      const validPrices = variants.map(v => parseFloat(v.price)).filter(p => !isNaN(p) && p > 0);
+      const price = validPrices.length > 0 ? Math.min(...validPrices) : (parseFloat(product.price) || 0);
+
+      const validAedPrices = variants.map(v => parseFloat(v.priceAED)).filter(p => !isNaN(p) && p > 0);
+      const priceAED = validAedPrices.length > 0 ? Math.min(...validAedPrices) : (product.priceAED !== null && product.priceAED !== undefined ? parseFloat(product.priceAED) : null);
+
+      const validMrps = variants.map(v => parseFloat(v.mrp)).filter(p => !isNaN(p) && p > 0);
+      const comparePrice = validMrps.length > 0 ? Math.max(...validMrps) : (product.comparePrice ? parseFloat(product.comparePrice) : null);
+
+      const validAedMrps = variants.map(v => parseFloat(v.mrpAED)).filter(p => !isNaN(p) && p > 0);
+      const comparePriceAED = validAedMrps.length > 0 ? Math.max(...validAedMrps) : (product.comparePriceAED !== null && product.comparePriceAED !== undefined ? parseFloat(product.comparePriceAED) : null);
+
+      const stock = variants.reduce((sum, v) => sum + (parseInt(v.stock, 10) || 0), 0);
       const gstRate = variants[0].gstRate || product.gstRate || '0%';
 
       // Collect and aggregate attributes from all active variants
@@ -110,7 +120,7 @@ const syncProductVariants = async (productId) => {
         finalAttributes[k] = vals.join(', ');
       });
 
-      await product.update({ price, stock, gstRate, attributes: finalAttributes });
+      await product.update({ price, priceAED, comparePrice, comparePriceAED, stock, gstRate, attributes: finalAttributes });
     }
   } catch (err) {
     console.error('[syncProductVariants] Error:', err.message);
@@ -165,7 +175,7 @@ const getByProduct = async (req, res) => {
 // POST /api/variants/add
 const add = async (req, res) => {
   try {
-    const { productId, sku, price, mrp, stock, attributes, warehouseId } = req.body;
+    const { productId, sku, price, priceAED, mrp, mrpAED, stock, attributes, warehouseId } = req.body;
 
     if (!productId) return res.status(400).json({ success: false, message: 'productId is required' });
     if (price !== undefined && Number(price) < 0) return res.status(400).json({ success: false, message: 'Price cannot be negative' });
@@ -229,7 +239,9 @@ const add = async (req, res) => {
       productId: parseInt(productId, 10),
       sku: finalSku,
       price: price === '' || price === undefined ? null : parseFloat(price),
+      priceAED: priceAED === '' || priceAED === undefined || priceAED === null ? null : parseFloat(priceAED),
       mrp: mrp === '' || mrp === undefined ? null : parseFloat(mrp),
+      mrpAED: mrpAED === '' || mrpAED === undefined || mrpAED === null ? null : parseFloat(mrpAED),
       stock: stock === '' || stock === undefined ? 0 : parseInt(stock, 10),
       lowStockThreshold: lowStockThreshold ? parseInt(lowStockThreshold, 10) : 10,
       gstRate: inheritedGstRate,
@@ -257,7 +269,7 @@ const update = async (req, res) => {
     const variant = await ProductVariant.findByPk(req.params.id);
     if (!variant) return res.status(404).json({ success: false, message: 'Variant not found' });
 
-    const { sku, price, mrp, stock, attributes, warehouseId, lowStockThreshold } = req.body;
+    const { sku, price, priceAED, mrp, mrpAED, stock, attributes, warehouseId, lowStockThreshold } = req.body;
 
     // Always re-inherit GST from parent product on update
     const parentProduct = await Product.findByPk(variant.productId);
@@ -276,7 +288,9 @@ const update = async (req, res) => {
     const updates = {
       ...(sku !== undefined && { sku: sku.trim() }),
       ...(price !== undefined && { price: price === '' ? null : parseFloat(price) }),
+      ...(priceAED !== undefined && { priceAED: (priceAED === '' || priceAED === 'null' || priceAED === null) ? null : parseFloat(priceAED) }),
       ...(mrp !== undefined && { mrp: mrp === '' ? null : parseFloat(mrp) }),
+      ...(mrpAED !== undefined && { mrpAED: (mrpAED === '' || mrpAED === 'null' || mrpAED === null) ? null : parseFloat(mrpAED) }),
       ...(stock !== undefined && { stock: stock === '' ? 0 : parseInt(stock, 10) }),
       ...(lowStockThreshold !== undefined && { lowStockThreshold: parseInt(lowStockThreshold, 10) }),
       gstRate: inheritedGstRate,

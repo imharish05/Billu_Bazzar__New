@@ -140,7 +140,7 @@ api.interceptors.request.use(async (config) => {
 }, (error) => Promise.reject(error));
 
 
-// ── Response interceptor — handle 401 ──────────────────────────────────────
+// ── Response interceptor — handle 401 & 503 ───────────────────────────────
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -148,6 +148,10 @@ api.interceptors.response.use(
       clearTokens();
       const storeInstance = await getStore();
       storeInstance.dispatch(logout());
+    } else if (error.response?.status === 503) {
+      if (typeof window !== 'undefined' && window.location.pathname !== '/503') {
+        window.location.href = '/503';
+      }
     }
     return Promise.reject(error);
   }

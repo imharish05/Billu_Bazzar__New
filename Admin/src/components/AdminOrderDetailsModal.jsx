@@ -7,7 +7,8 @@ import { getPlaceholderSvg } from '../utils/placeholder';
 import { printInvoice } from '../utils/invoiceGenerator';
 
 const fmt = (v, currency = 'INR') => {
-  const sym = currency === 'USD' ? '$' : (currency === 'EUR' ? '€' : (currency === 'GBP' ? '£' : '₹'));
+  const isAed = String(currency).toUpperCase() === 'AED';
+  const sym = isAed ? 'AED\u00A0' : (currency === 'USD' ? '$' : (currency === 'EUR' ? '€' : (currency === 'GBP' ? '£' : '₹')));
   return currencyJs(v || 0, { symbol: sym, precision: 2 }).format();
 };
 

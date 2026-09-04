@@ -52,7 +52,7 @@ const ProductDetailsPage = () => {
   const { items: cartItems } = useSelector(s => s.cart);
   const { code: currencyCode, rate: currencyRate } = useSelector(s => s.currency);
 
-  const fmt = (v) => formatPrice(v, currencyCode, currencyRate);
+  const fmt = (v, aed) => formatPrice(v, currencyCode, currencyRate, aed);
 
   const [selectedImage, setSelectedImage] = useState(0);
   const [selectedSize, setSelectedSize] = useState('');
@@ -579,9 +579,17 @@ const ProductDetailsPage = () => {
     ? parseFloat(selectedVariant.price)
     : parseFloat(product.price);
 
+  const displayPriceAED = (selectedVariant && selectedVariant.priceAED !== null && selectedVariant.priceAED !== undefined && selectedVariant.priceAED !== '')
+    ? selectedVariant.priceAED
+    : (product.priceAED || null);
+
   const displayComparePrice = selectedVariant && selectedVariant.mrp !== null
     ? parseFloat(selectedVariant.mrp)
     : (product.comparePrice ? parseFloat(product.comparePrice) : null);
+
+  const displayComparePriceAED = (selectedVariant && selectedVariant.mrpAED !== null && selectedVariant.mrpAED !== undefined && selectedVariant.mrpAED !== '')
+    ? selectedVariant.mrpAED
+    : (product.comparePriceAED || null);
 
   const displayStock = selectedVariant
     ? parseInt(selectedVariant.stock, 10)
@@ -790,9 +798,9 @@ const ProductDetailsPage = () => {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5 }}
             >
-              <span className="font-playfair text-2xl sm:text-3xl md:text-4xl font-bold text-brand-text whitespace-nowrap">{fmt(displayPrice)}</span>
+              <span className="font-playfair text-2xl sm:text-3xl md:text-4xl font-bold text-brand-text whitespace-nowrap">{fmt(displayPrice, displayPriceAED)}</span>
               {displayComparePrice && (
-                <span className="text-base sm:text-lg md:text-xl text-brand-grey line-through whitespace-nowrap">{fmt(displayComparePrice)}</span>
+                <span className="text-base sm:text-lg md:text-xl text-brand-grey line-through whitespace-nowrap">{fmt(displayComparePrice, displayComparePriceAED)}</span>
               )}
               {discount && (
                 <span className="text-brand-gold font-semibold text-xs sm:text-sm bg-brand-gold/10 px-2.5 py-0.5 rounded-sm whitespace-nowrap">Save {discount}%</span>
@@ -1455,7 +1463,7 @@ const ProductDetailsPage = () => {
 
                 // Check YouTube / Vimeo / Direct file
                 const urlStr = (rawUrl || '').trim();
-                const ytMatch = urlStr.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/);
+                const ytMatch = urlStr.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|shorts)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i);
                 if (ytMatch && ytMatch[1]) {
                   return (
                     <iframe

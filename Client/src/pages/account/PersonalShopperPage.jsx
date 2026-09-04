@@ -4,6 +4,8 @@ import { Gift, CheckCircle2, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useSelector } from 'react-redux';
 import api from '../../services/api';
+import PhoneInput from '../../components/PhoneInput';
+import { validatePhoneNumber } from '../../utils/validation';
 
 /**
  * PersonalShopperPage — /account/personal-shopper
@@ -41,6 +43,13 @@ const PersonalShopperPage = () => {
     if (!form.occasion.trim() || !form.budget.trim()) {
       toast.error('Please specify occasion and budget');
       return;
+    }
+    if (form.phone && form.phone.trim()) {
+      const phoneVal = validatePhoneNumber(form.phone, { required: false });
+      if (!phoneVal.isValid) {
+        toast.error(phoneVal.message);
+        return;
+      }
     }
 
     try {
@@ -125,16 +134,14 @@ const PersonalShopperPage = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium mb-1.5 text-brand-text" htmlFor="shopper-phone">
-                Phone Number
-              </label>
-              <input
+              <PhoneInput
                 id="shopper-phone"
-                type="tel"
-                placeholder="+91 98765 43210"
+                name="phone"
+                label="Phone Number"
                 value={form.phone}
-                onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
-                className="w-full border border-brand-light px-3 py-2.5 text-sm focus:outline-none focus:border-brand-gold"
+                onChange={(val) => setForm((f) => ({ ...f, phone: val }))}
+                className="w-full"
+                inputClassName="py-2.5 text-sm"
               />
             </div>
             <div>

@@ -52,6 +52,8 @@ const processProductData = (req) => {
   // Cast values from FormData strings
   if (data.price !== undefined) data.price = data.price === '' ? null : parseFloat(data.price);
   if (data.comparePrice !== undefined) data.comparePrice = data.comparePrice === '' || data.comparePrice === 'null' ? null : parseFloat(data.comparePrice);
+  if (data.priceAED !== undefined) data.priceAED = (data.priceAED === '' || data.priceAED === 'null' || data.priceAED === null) ? null : parseFloat(data.priceAED);
+  if (data.comparePriceAED !== undefined) data.comparePriceAED = (data.comparePriceAED === '' || data.comparePriceAED === 'null' || data.comparePriceAED === null) ? null : parseFloat(data.comparePriceAED);
   if (data.stock !== undefined) data.stock = data.stock === '' ? 0 : parseInt(data.stock, 10);
   if (data.categoryId !== undefined) data.categoryId = data.categoryId === '' || data.categoryId === 'null' ? null : parseInt(data.categoryId, 10);
   if (data.subCategoryId !== undefined) data.subCategoryId = data.subCategoryId === '' || data.subCategoryId === 'null' ? null : parseInt(data.subCategoryId, 10);
@@ -252,7 +254,7 @@ const getAll = async (req, res) => {
         { model: SubSubCategory, as: 'subsubcategory', attributes: ['id', 'name', 'slug'] },
         { model: Vendor, as: 'vendor', attributes: ['id', 'name', 'logo', 'gstin'] },
         { model: Warehouse, as: 'warehouse', attributes: ['id', 'name'] },
-        { model: ProductVariant, as: 'variants', attributes: ['id', 'sku', 'price', 'mrp', 'stock', 'attributes', 'image', 'images', 'warehouseId', 'lowStockThreshold', 'gstRate'], include: [{ model: Warehouse, as: 'warehouse', attributes: ['id', 'name'] }] }
+        { model: ProductVariant, as: 'variants', attributes: ['id', 'sku', 'price', 'priceAED', 'mrp', 'mrpAED', 'stock', 'attributes', 'image', 'images', 'warehouseId', 'lowStockThreshold', 'gstRate'], include: [{ model: Warehouse, as: 'warehouse', attributes: ['id', 'name'] }] }
       ],
     });
 
@@ -273,7 +275,7 @@ const getOne = async (req, res) => {
         { model: SubSubCategory, as: 'subsubcategory' },
         { model: Vendor, as: 'vendor', attributes: ['id', 'name', 'rating', 'logo', 'gstin'] },
         { model: Warehouse, as: 'warehouse', attributes: ['id', 'name'] },
-        { model: ProductVariant, as: 'variants', attributes: ['id', 'sku', 'price', 'mrp', 'stock', 'attributes', 'image', 'images', 'warehouseId', 'lowStockThreshold', 'gstRate'], include: [{ model: Warehouse, as: 'warehouse', attributes: ['id', 'name'] }] }
+        { model: ProductVariant, as: 'variants', attributes: ['id', 'sku', 'price', 'priceAED', 'mrp', 'mrpAED', 'stock', 'attributes', 'image', 'images', 'warehouseId', 'lowStockThreshold', 'gstRate'], include: [{ model: Warehouse, as: 'warehouse', attributes: ['id', 'name'] }] }
       ],
     });
     if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
@@ -301,7 +303,9 @@ const create = async (req, res) => {
         defaults: {
           sku: product.sku || `PV-${product.id}-${Date.now()}`,
           price: product.price,
+          priceAED: product.priceAED || null,
           mrp: product.comparePrice,
+          mrpAED: product.comparePriceAED || null,
           stock: product.stock,
           attributes: product.attributes || {},
           image: product.defaultProductImage || product.images?.[0] || null,
@@ -314,7 +318,9 @@ const create = async (req, res) => {
         await defaultVar.update({
           sku: product.sku || defaultVar.sku,
           price: product.price,
+          priceAED: product.priceAED || null,
           mrp: product.comparePrice,
+          mrpAED: product.comparePriceAED || null,
           stock: product.stock,
           attributes: product.attributes || {},
           image: product.defaultProductImage || product.images?.[0] || defaultVar.image,
@@ -366,7 +372,9 @@ const create = async (req, res) => {
             productId: product.id,
             sku: (v.sku && v.sku.trim() !== '') ? v.sku.trim() : fallbackSku,
             price: (v.price !== undefined && v.price !== '') ? parseFloat(v.price) : parseFloat(product.price || 0),
+            priceAED: (v.priceAED !== undefined && v.priceAED !== '' && v.priceAED !== null) ? parseFloat(v.priceAED) : (product.priceAED ? parseFloat(product.priceAED) : null),
             mrp: (v.mrp !== undefined && v.mrp !== '') ? parseFloat(v.mrp) : (product.comparePrice ? parseFloat(product.comparePrice) : null),
+            mrpAED: (v.mrpAED !== undefined && v.mrpAED !== '' && v.mrpAED !== null) ? parseFloat(v.mrpAED) : (product.comparePriceAED ? parseFloat(product.comparePriceAED) : null),
             stock: (v.stock !== undefined && v.stock !== '') ? parseInt(v.stock, 10) : parseInt(product.stock || 0, 10),
             lowStockThreshold: v.lowStockThreshold ? parseInt(v.lowStockThreshold, 10) : (product.lowStockThreshold || 10),
             gstRate: (v.gstRate !== undefined && v.gstRate !== null && v.gstRate !== '') ? v.gstRate : (product.gstRate || '0%'),
@@ -389,7 +397,7 @@ const create = async (req, res) => {
         { model: SubSubCategory, as: 'subsubcategory', attributes: ['id', 'name', 'slug'] },
         { model: Vendor, as: 'vendor', attributes: ['id', 'name', 'logo', 'gstin'] },
         { model: Warehouse, as: 'warehouse', attributes: ['id', 'name'] },
-        { model: ProductVariant, as: 'variants', attributes: ['id', 'sku', 'price', 'mrp', 'stock', 'attributes', 'image', 'images', 'warehouseId', 'lowStockThreshold', 'gstRate'], include: [{ model: Warehouse, as: 'warehouse', attributes: ['id', 'name'] }] }
+        { model: ProductVariant, as: 'variants', attributes: ['id', 'sku', 'price', 'priceAED', 'mrp', 'mrpAED', 'stock', 'attributes', 'image', 'images', 'warehouseId', 'lowStockThreshold', 'gstRate'], include: [{ model: Warehouse, as: 'warehouse', attributes: ['id', 'name'] }] }
       ]
     });
 
@@ -478,7 +486,9 @@ const update = async (req, res) => {
 
           const variantWarehouseId = v.warehouseId ? parseInt(v.warehouseId, 10) : (product.warehouseId ? parseInt(product.warehouseId, 10) : null);
           const varPrice = (v.price !== undefined && v.price !== '') ? parseFloat(v.price) : parseFloat(product.price || 0);
+          const varPriceAED = (v.priceAED !== undefined && v.priceAED !== '' && v.priceAED !== null) ? parseFloat(v.priceAED) : (product.priceAED ? parseFloat(product.priceAED) : null);
           const varMrp = (v.mrp !== undefined && v.mrp !== '') ? parseFloat(v.mrp) : (product.comparePrice ? parseFloat(product.comparePrice) : null);
+          const varMrpAED = (v.mrpAED !== undefined && v.mrpAED !== '' && v.mrpAED !== null) ? parseFloat(v.mrpAED) : (product.comparePriceAED ? parseFloat(product.comparePriceAED) : null);
           const varStock = (v.stock !== undefined && v.stock !== '') ? parseInt(v.stock, 10) : parseInt(product.stock || 0, 10);
           const varLowStock = v.lowStockThreshold ? parseInt(v.lowStockThreshold, 10) : (product.lowStockThreshold || 10);
           const varGst = (v.gstRate !== undefined && v.gstRate !== null && v.gstRate !== '') ? v.gstRate : (product.gstRate || '0%');
@@ -491,7 +501,9 @@ const update = async (req, res) => {
             await existingVariant.update({
               sku: (v.sku && v.sku.trim() !== '') ? v.sku.trim() : (existingVariant.sku || fallbackSku),
               price: varPrice,
+              priceAED: varPriceAED,
               mrp: varMrp,
+              mrpAED: varMrpAED,
               stock: varStock,
               lowStockThreshold: varLowStock,
               gstRate: varGst,
@@ -507,7 +519,9 @@ const update = async (req, res) => {
               productId: product.id,
               sku: (v.sku && v.sku.trim() !== '') ? v.sku.trim() : fallbackSku,
               price: varPrice,
+              priceAED: varPriceAED,
               mrp: varMrp,
+              mrpAED: varMrpAED,
               stock: varStock,
               lowStockThreshold: varLowStock,
               gstRate: varGst,
@@ -536,7 +550,14 @@ const update = async (req, res) => {
     } else {
       const existingVariants = await ProductVariant.findAll({ where: { productId: product.id } });
       if (existingVariants.length === 1) {
-        await existingVariants[0].update({ stock: product.stock, gstRate: product.gstRate || existingVariants[0].gstRate || '0%' });
+        await existingVariants[0].update({
+          stock: product.stock,
+          price: product.price,
+          priceAED: product.priceAED || null,
+          mrp: product.comparePrice,
+          mrpAED: product.comparePriceAED || null,
+          gstRate: product.gstRate || existingVariants[0].gstRate || '0%'
+        });
       }
 
       const targetWhId = product.warehouseId || (await Warehouse.findOne({ where: { isFulfillment: true, isActive: true } }))?.id;
@@ -567,7 +588,7 @@ const update = async (req, res) => {
         { model: SubSubCategory, as: 'subsubcategory', attributes: ['id', 'name', 'slug'] },
         { model: Vendor, as: 'vendor', attributes: ['id', 'name', 'logo', 'gstin'] },
         { model: Warehouse, as: 'warehouse', attributes: ['id', 'name'] },
-        { model: ProductVariant, as: 'variants', attributes: ['id', 'sku', 'price', 'mrp', 'stock', 'attributes', 'image', 'images', 'warehouseId', 'lowStockThreshold', 'gstRate'], include: [{ model: Warehouse, as: 'warehouse', attributes: ['id', 'name'] }] }
+        { model: ProductVariant, as: 'variants', attributes: ['id', 'sku', 'price', 'priceAED', 'mrp', 'mrpAED', 'stock', 'attributes', 'image', 'images', 'warehouseId', 'lowStockThreshold', 'gstRate'], include: [{ model: Warehouse, as: 'warehouse', attributes: ['id', 'name'] }] }
       ]
     });
 

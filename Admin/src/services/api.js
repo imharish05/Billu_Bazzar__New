@@ -51,12 +51,28 @@ api.interceptors.response.use(
   async err => {
     const originalRequest = err.config;
 
-    // Prevent loop if the request to refresh token itself fails
-    if (originalRequest.url === '/auth/refresh') {
+    // Never intercept auth endpoints (login, refresh) with token refresh logic
+    if (
+      !originalRequest ||
+      originalRequest.url?.includes('/auth/refresh') ||
+      originalRequest.url?.includes('/auth/admin/login') ||
+      originalRequest.url?.includes('/auth/login')
+    ) {
       return Promise.reject(err);
     }
 
     if (err.response?.status === 401 && !originalRequest._retry) {
+      const refreshToken = localStorage.getItem('bb_admin_refresh_token');
+      if (!refreshToken) {
+        isRefreshing = false;
+        processQueue(err, null);
+        localStorage.removeItem('bb_admin_token');
+        localStorage.removeItem('bb_admin_refresh_token');
+        const storeInstance = await getStore();
+        storeInstance.dispatch(logout());
+        return Promise.reject(err);
+      }
+
       if (isRefreshing) {
         try {
           const newToken = await new Promise((resolve, reject) => {
@@ -71,15 +87,6 @@ api.interceptors.response.use(
 
       originalRequest._retry = true;
       isRefreshing = true;
-
-      const refreshToken = localStorage.getItem('bb_admin_refresh_token');
-      if (!refreshToken) {
-        localStorage.removeItem('bb_admin_token');
-        localStorage.removeItem('bb_admin_refresh_token');
-        const storeInstance = await getStore();
-        storeInstance.dispatch(logout());
-        return Promise.reject(err);
-      }
 
       try {
         const res = await axios.post(`${baseURL}/auth/refresh`, { refreshToken });
@@ -105,6 +112,12 @@ api.interceptors.response.use(
         storeInstance.dispatch(logout());
         
         return Promise.reject(refreshErr);
+      }
+    }
+
+    if (err.response?.status === 503) {
+      if (typeof window !== 'undefined' && window.location.pathname !== '/503') {
+        window.location.href = '/503';
       }
     }
 

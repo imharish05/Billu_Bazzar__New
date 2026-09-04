@@ -6,6 +6,7 @@ import Footer from '../../components/Footer';
 import { loginCustomer, registerCustomer, logout, clearError, fetchProfile } from '../../redux/slices/authSlice';
 import toast from 'react-hot-toast';
 import { validatePhoneNumber, validateEmail, validatePassword } from '../../utils/validation';
+import PhoneInput from '../../components/PhoneInput';
 import api from '../../services/api';
 
 const NAV_ITEMS = [
@@ -491,15 +492,22 @@ const AccountLayout = () => {
 
                     {/* Phone */}
                     <div>
-                      <label className="block text-xs font-semibold text-neutral-700 mb-1.5" htmlFor="auth-phone">
-                        Phone Number <span className="font-normal text-neutral-400">(India or UAE)</span>
-                      </label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-3.5 text-neutral-400"><Phone size={16} /></span>
-                        <input id="auth-phone" type="tel" value={phone} onChange={e => onPhoneChange(e.target.value)} placeholder="+91 98765 43210 or +971 50 123 4567"
-                          className={`w-full border ${errors.phone ? 'border-red-400 focus:border-red-500' : 'border-neutral-200/80 focus:border-brand-gold'} rounded-lg pl-10 pr-4 py-3 text-sm focus:outline-none bg-neutral-50/30 transition-colors`} />
-                      </div>
-                      {errors.phone && <p className="text-xs text-red-500 mt-1">{errors.phone}</p>}
+                      <PhoneInput
+                        id="auth-phone"
+                        name="phone"
+                        label="Phone Number"
+                        value={phone}
+                        onChange={(val, meta) => {
+                          setPhone(val);
+                          if (errors.phone) {
+                            setErrors(p => ({ ...p, phone: meta.isValid ? '' : meta.error }));
+                          }
+                        }}
+                        error={errors.phone}
+                        required
+                        className="w-full"
+                        inputClassName="py-3 text-sm"
+                      />
                     </div>
                   </>
                 )}
@@ -509,7 +517,7 @@ const AccountLayout = () => {
                   <label className="block text-xs font-semibold text-neutral-700 mb-1.5" htmlFor="auth-email">Email Address</label>
                   <div className="relative">
                     <span className="absolute left-3 top-3.5 text-neutral-400"><Mail size={16} /></span>
-                    <input id="auth-email" type="email" value={email} onChange={e => onEmailChange(e.target.value)} placeholder="yourname@domain.com"
+                    <input id="auth-email" type="email" value={email} onChange={e => onEmailChange(e.target.value)} placeholder="example@gmail.com"
                       className={`w-full border ${errors.email ? 'border-red-400 focus:border-red-500' : 'border-neutral-200/80 focus:border-brand-gold'} rounded-lg pl-10 pr-4 py-3 text-sm focus:outline-none bg-neutral-50/30 transition-colors`} />
                   </div>
                   {errors.email && <p className="text-xs text-red-500 mt-1">{errors.email}</p>}

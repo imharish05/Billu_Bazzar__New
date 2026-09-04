@@ -1,5 +1,5 @@
-'use strict';
 const { Vendor, Product } = require('../models');
+const { validatePhoneNumber } = require('../utils/phoneValidation');
 
 const handleDBError = (err, res, type = 'item') => {
   if (err.name === 'SequelizeUniqueConstraintError') {
@@ -124,6 +124,18 @@ const create = async (req, res) => {
       }
     }
 
+    if (data.phone !== undefined) {
+      if (data.phone && String(data.phone).trim()) {
+        const phoneVal = validatePhoneNumber(data.phone, { required: false });
+        if (!phoneVal.isValid) {
+          return res.status(400).json({ success: false, message: `Contact Number: ${phoneVal.message}` });
+        }
+        data.phone = phoneVal.formatted;
+      } else {
+        data.phone = null;
+      }
+    }
+
     const vendor = await Vendor.create(data);
     res.status(201).json({ success: true, vendor });
   } catch (err) {
@@ -167,6 +179,18 @@ const update = async (req, res) => {
         data.gstin = cleanGst;
       } else {
         data.gstin = null;
+      }
+    }
+
+    if (data.phone !== undefined) {
+      if (data.phone && String(data.phone).trim()) {
+        const phoneVal = validatePhoneNumber(data.phone, { required: false });
+        if (!phoneVal.isValid) {
+          return res.status(400).json({ success: false, message: `Contact Number: ${phoneVal.message}` });
+        }
+        data.phone = phoneVal.formatted;
+      } else {
+        data.phone = null;
       }
     }
 

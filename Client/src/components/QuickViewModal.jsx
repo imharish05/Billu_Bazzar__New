@@ -227,16 +227,23 @@ const QuickViewModal = () => {
 
   if (!product) return null;
 
-  const fmt = (v) => formatPrice(v, currencyCode, currencyRate);
-
-  // Dynamic pricing based on selected variant
   const displayPrice = selectedVariant && selectedVariant.price !== null && selectedVariant.price !== undefined
     ? parseFloat(selectedVariant.price)
     : parseFloat(product.price || 0);
 
+  const displayPriceAED = (selectedVariant && selectedVariant.priceAED !== null && selectedVariant.priceAED !== undefined && selectedVariant.priceAED !== '')
+    ? selectedVariant.priceAED
+    : (product.priceAED || null);
+
   const displayComparePrice = selectedVariant && selectedVariant.mrp !== null && selectedVariant.mrp !== undefined
     ? parseFloat(selectedVariant.mrp)
     : (product.comparePrice ? parseFloat(product.comparePrice) : null);
+
+  const displayComparePriceAED = (selectedVariant && selectedVariant.mrpAED !== null && selectedVariant.mrpAED !== undefined && selectedVariant.mrpAED !== '')
+    ? selectedVariant.mrpAED
+    : (product.comparePriceAED || null);
+
+  const fmt = (v, aed) => formatPrice(v, currencyCode, currencyRate, aed !== undefined ? aed : (v === displayPrice ? displayPriceAED : (v === displayComparePrice ? displayComparePriceAED : null)));
 
   const inStock = selectedVariant
     ? (selectedVariant.stock !== undefined ? selectedVariant.stock > 0 : true)
@@ -544,11 +551,11 @@ const QuickViewModal = () => {
                 {/* Price Display Block */}
                 <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 py-3 px-4 bg-neutral-50 rounded-2xl border border-neutral-200/80 mb-4">
                   <span className="font-playfair text-2xl sm:text-3xl font-extrabold text-neutral-950">
-                    {fmt(displayPrice)}
+                    {fmt(displayPrice, displayPriceAED)}
                   </span>
                   {displayComparePrice && displayComparePrice > displayPrice && (
                     <span className="text-neutral-400 text-base line-through font-medium">
-                      {fmt(displayComparePrice)}
+                      {fmt(displayComparePrice, displayComparePriceAED)}
                     </span>
                   )}
                   {discount > 0 && (

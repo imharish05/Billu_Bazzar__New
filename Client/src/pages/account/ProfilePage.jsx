@@ -7,7 +7,8 @@ import { useSelector, useDispatch } from 'react-redux';
 import toast from 'react-hot-toast';
 import { updateProfile } from '../../redux/slices/authSlice';
 import api from '../../services/api';
-import { validatePassword } from '../../utils/validation';
+import { validatePassword, validatePhoneNumber } from '../../utils/validation';
+import PhoneInput from '../../components/PhoneInput';
 
 const ProfilePage = () => {
   const dispatch = useDispatch();
@@ -41,7 +42,14 @@ const ProfilePage = () => {
       toast.error('Name cannot be empty.');
       return;
     }
-    const result = await dispatch(updateProfile({ name: form.name.trim(), phone: form.phone.trim() }));
+    if (form.phone && form.phone.trim()) {
+      const phoneVal = validatePhoneNumber(form.phone, { required: false });
+      if (!phoneVal.isValid) {
+        toast.error(phoneVal.message);
+        return;
+      }
+    }
+    const result = await dispatch(updateProfile({ name: form.name.trim(), phone: form.phone ? form.phone.trim() : '' }));
     if (updateProfile.fulfilled.match(result)) {
       toast.success('Profile updated successfully.');
       setEditing(false);
@@ -201,13 +209,13 @@ const ProfilePage = () => {
           <div>
             <label className="block text-xs text-brand-grey mb-1 font-medium">Phone Number</label>
             {editing ? (
-              <input
-                value={form.phone}
-                onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
-                className="w-full border border-brand-light px-3 py-2 text-sm focus:outline-none focus:border-brand-gold rounded"
+              <PhoneInput
                 id="profile-phone"
-                aria-label="Phone Number"
-                placeholder="+91 98765 43210"
+                name="phone"
+                value={form.phone}
+                onChange={(val) => setForm(f => ({ ...f, phone: val }))}
+                className="w-full"
+                inputClassName="py-2 text-sm"
               />
             ) : (
               <p className="font-medium text-sm text-neutral-800 break-words">{display.phone}</p>

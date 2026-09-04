@@ -56,51 +56,122 @@ const hasPermission = (permissionKey) => (req, res, next) => {
   }
 
   // 1. Direct boolean key check (e.g. parsedPerms.view_products === true)
-  if (parsedPerms[permissionKey] === true) {
+  if (parsedPerms[permissionKey] === true || parsedPerms[permissionKey] === 'true') {
     return next();
   }
 
-  // 2. Module object mapping fallback (e.g. parsedPerms.products?.read === true)
+  // 2. Comprehensive Module & Role Mapping Aliases
   const keyMap = {
+    // Categories & Structure
+    view_categories: ['view_products', 'add_product', 'categories.read', 'categories.create', 'categories.update'],
+    add_category: ['categories.create'],
+    edit_category: ['add_category', 'categories.update'],
+    delete_category: ['categories.delete'],
+    view_sub_categories: ['view_categories', 'view_products', 'add_product', 'categories.read', 'sub_categories.read'],
+    add_sub_category: ['add_category', 'categories.create', 'sub_categories.create'],
+    edit_sub_category: ['add_category', 'categories.update', 'sub_categories.update'],
+    delete_sub_category: ['delete_category', 'categories.delete', 'sub_categories.delete'],
+    view_sub_sub_categories: ['view_categories', 'view_products', 'add_product', 'categories.read'],
+    add_sub_sub_category: ['add_category', 'categories.create'],
+    edit_sub_sub_category: ['add_category', 'categories.update'],
+    delete_sub_sub_category: ['delete_category', 'categories.delete'],
+
+    // Products & Catalog
     view_products: ['products.read', 'products.create', 'products.update', 'products.delete'],
     add_product: ['products.create'],
-    edit_product: ['products.update'],
+    edit_product: ['add_product', 'products.update'],
     delete_product: ['products.delete'],
+    view_variants: ['view_products', 'variants.read', 'products.read'],
+    add_variant: ['add_product', 'variants.create', 'products.create'],
+    edit_variant: ['add_product', 'variants.update', 'products.update'],
+    delete_variant: ['delete_product', 'variants.delete', 'products.delete'],
+    view_reviews: ['view_products', 'reviews.read', 'products.read'],
+    delete_review: ['delete_product', 'reviews.delete', 'products.delete'],
+    view_stock_alerts: ['view_products', 'manage_operations', 'stock_alerts.read', 'products.read'],
+
+    // Orders & Carts
     view_orders: ['orders.read', 'orders.update'],
-    update_orders: ['orders.update'],
-    cancel_orders: ['orders.delete'],
-    view_categories: ['categories.read', 'categories.create', 'categories.update'],
-    add_category: ['categories.create'],
-    edit_category: ['categories.update'],
-    delete_category: ['categories.delete'],
-    view_coupons: ['coupons.read', 'coupons.create', 'coupons.update'],
-    add_coupon: ['coupons.create'],
-    edit_coupon: ['coupons.update'],
-    delete_coupon: ['coupons.delete'],
-    view_vendors: ['vendors.read', 'vendors.create'],
-    add_vendor: ['vendors.create'],
-    edit_vendor: ['vendors.update'],
-    view_warehouses: ['warehouses.read', 'inventory.read'],
-    add_warehouse: ['warehouses.create', 'inventory.create'],
-    edit_warehouse: ['warehouses.update', 'inventory.update'],
+    update_orders: ['view_orders', 'orders.update'],
+    cancel_orders: ['update_orders', 'orders.delete'],
+    view_abandoned_carts: ['view_orders', 'orders.read', 'abandoned_carts.read'],
+    delete_abandoned_cart: ['cancel_orders', 'orders.delete', 'abandoned_carts.delete'],
+
+    // Marketing & Promotions
+    view_marketing: ['view_coupons', 'view_banners', 'view_slider_messages', 'view_gift_services', 'manage_affiliates', 'manage_loyalty'],
+    manage_marketing: ['view_marketing', 'add_coupon', 'edit_coupon', 'delete_coupon', 'add_banner', 'delete_banner', 'add_slider_message', 'delete_slider_message'],
+    view_coupons: ['view_marketing', 'coupons.read', 'coupons.create', 'coupons.update'],
+    add_coupon: ['manage_marketing', 'coupons.create'],
+    edit_coupon: ['manage_marketing', 'coupons.update'],
+    delete_coupon: ['manage_marketing', 'coupons.delete'],
+    view_banners: ['view_marketing', 'banners.read'],
+    add_banner: ['manage_marketing', 'banners.create'],
+    delete_banner: ['manage_marketing', 'banners.delete'],
+    view_slider_messages: ['view_marketing', 'slider_messages.read', 'banners.read'],
+    add_slider_message: ['manage_marketing', 'slider_messages.create', 'banners.create'],
+    delete_slider_message: ['manage_marketing', 'slider_messages.delete', 'banners.delete'],
+    view_gift_services: ['view_marketing', 'manage_marketing', 'gift_services.read', 'marketing.read'],
+    manage_affiliates: ['view_marketing', 'manage_marketing', 'affiliates.manage'],
+    manage_loyalty: ['view_marketing', 'manage_marketing', 'loyalty.manage', 'marketing.update'],
+    view_loyalty: ['view_marketing', 'loyalty.manage', 'marketing.read'],
+
+    // Operations & Logistics
+    view_operations: ['view_vendors', 'view_warehouses', 'view_delivery_zones'],
+    manage_operations: ['view_operations', 'add_vendor', 'edit_vendor', 'delete_vendor', 'add_warehouse', 'edit_warehouse', 'delete_warehouse', 'add_delivery_zone', 'edit_delivery_zone', 'delete_delivery_zone'],
+    view_vendors: ['view_operations', 'vendors.read', 'vendors.create'],
+    add_vendor: ['manage_operations', 'vendors.create'],
+    edit_vendor: ['manage_operations', 'vendors.update'],
+    delete_vendor: ['manage_operations', 'vendors.delete'],
+    view_warehouses: ['view_operations', 'warehouses.read', 'inventory.read'],
+    add_warehouse: ['manage_operations', 'warehouses.create', 'inventory.create'],
+    edit_warehouse: ['manage_operations', 'warehouses.update', 'inventory.update'],
+    delete_warehouse: ['manage_operations', 'warehouses.delete', 'inventory.delete'],
+    view_delivery_zones: ['view_operations', 'delivery_zones.read', 'warehouses.read'],
+    add_delivery_zone: ['manage_operations', 'delivery_zones.create', 'warehouses.create'],
+    edit_delivery_zone: ['manage_operations', 'delivery_zones.update', 'warehouses.update'],
+    delete_delivery_zone: ['manage_operations', 'delivery_zones.delete', 'warehouses.delete'],
+
+    // Customers & Support
     view_customers: ['customers.read'],
-    edit_customer: ['customers.update'],
-    delete_customer: ['customers.delete'],
-    view_reports: ['reports.read'],
-    manage_roles: ['settings.update', 'settings.read'],
-    manage_admin_users: ['settings.update', 'settings.read'],
-    view_admin_users: ['settings.update', 'settings.read'],
-    manage_loyalty: ['marketing.update', 'marketing.read', 'loyalty.manage', 'settings.update'],
-    view_loyalty: ['marketing.read', 'loyalty.manage', 'settings.read'],
-    edit_site_settings: ['settings.update', 'settings.edit', 'settings.create'],
-    view_site_settings: ['settings.read'],
+    manage_customers: ['view_customers', 'edit_customer', 'delete_customer', 'delete_contact_enquiry'],
+    edit_customer: ['manage_customers', 'customers.update'],
+    delete_customer: ['manage_customers', 'customers.delete'],
+    view_contact_enquiries: ['view_customers', 'manage_customers', 'enquiries.read', 'customers.read'],
+    delete_contact_enquiry: ['manage_customers', 'enquiries.delete', 'customers.delete'],
+    view_personal_shopper: ['view_customers', 'manage_customers', 'personal_shopper.read', 'customers.read'],
+    delete_personal_shopper: ['manage_customers', 'personal_shopper.delete', 'customers.delete'],
+
+    // Finance & Analytics
+    view_finance: ['view_payments', 'view_reports'],
+    manage_finance: ['view_finance', 'refund_payment', 'export_reports'],
+    view_payments: ['view_finance', 'payments.read'],
+    refund_payment: ['manage_finance', 'payments.refund'],
+    view_reports: ['view_finance', 'reports.read'],
+    export_reports: ['manage_finance', 'reports.export'],
+
+    // Settings & Access Control
+    view_settings: ['view_site_settings', 'view_system_settings', 'view_admin_users'],
+    manage_settings: ['view_settings', 'edit_site_settings', 'edit_system_settings', 'manage_roles', 'manage_admin_users'],
+    view_site_settings: ['view_settings', 'settings.read'],
+    edit_site_settings: ['manage_settings', 'settings.update', 'settings.edit', 'settings.create'],
+    view_system_settings: ['view_settings', 'settings.read'],
+    edit_system_settings: ['manage_settings', 'settings.update'],
+    manage_roles: ['manage_settings', 'settings.update', 'settings.read'],
+    manage_admin_users: ['manage_settings', 'settings.update', 'settings.read'],
+    view_admin_users: ['view_settings', 'manage_settings', 'settings.read'],
   };
 
   const aliases = keyMap[permissionKey] || [];
   for (const alias of aliases) {
-    const [mod, act] = alias.split('.');
-    if (parsedPerms[mod] && typeof parsedPerms[mod] === 'object' && parsedPerms[mod][act] === true) {
+    // Check direct boolean key match (e.g. parsedPerms.view_marketing === true)
+    if (parsedPerms[alias] === true || parsedPerms[alias] === 'true') {
       return next();
+    }
+    // Check nested modular permission match (e.g. parsedPerms.products?.read === true)
+    if (alias.includes('.')) {
+      const [mod, act] = alias.split('.');
+      if (parsedPerms[mod] && typeof parsedPerms[mod] === 'object' && (parsedPerms[mod][act] === true || parsedPerms[mod][act] === 'true')) {
+        return next();
+      }
     }
   }
 

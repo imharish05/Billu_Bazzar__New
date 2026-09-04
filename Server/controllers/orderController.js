@@ -5,6 +5,7 @@ const { v4: uuidv4 } = require('uuid');
 const { sendOrderStatusNotification } = require('../services/emailService');
 const currencyRateService = require('../services/currencyRateService');
 const { toAbsoluteUrl } = require('../utils/imageUrl');
+const { validatePhoneNumber } = require('../utils/phoneValidation');
 
 const orderItemInclude = {
   model: OrderItem,
@@ -486,6 +487,31 @@ const trackOrder = async (req, res) => {
     });
 
     if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
+
+    // IDOR Protection: Verify ownership or access credentials
+    const reqSessionId = req.cookies?.sessionId || req.headers['x-session-id'];
+    const isCustomerOwner = req.customer && order.customerId && req.customer.id === order.customerId;
+    const isGuestSessionOwner = order.sessionId && reqSessionId && order.sessionId === reqSessionId;
+    const isAdmin = Boolean(req.admin);
+
+    if (isNum) {
+      if (!isCustomerOwner && !isGuestSessionOwner && !isAdmin) {
+        return res.status(404).json({ success: false, message: 'Order not found' });
+      }
+    } else {
+      if (order.customerId && !isCustomerOwner && !isGuestSessionOwner && !isAdmin) {
+        const qEmail = (req.query.email || '').trim().toLowerCase();
+        const qPhone = (req.query.phone || '').trim().replace(/[^0-9]/g, '');
+        const orderPhone = (order.shippingAddress?.phone || '').replace(/[^0-9]/g, '');
+        const orderEmail = (order.customer?.email || order.billingAddress?.email || '').trim().toLowerCase();
+
+        const matchesContact = (qEmail && qEmail === orderEmail) || (qPhone && orderPhone && orderPhone.endsWith(qPhone.slice(-10)));
+        if (!matchesContact) {
+          return res.status(404).json({ success: false, message: 'Order not found' });
+        }
+      }
+    }
+
     res.json({ success: true, order: formatOrder(order, req) });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -501,76 +527,75 @@ const placeOrder = async (req, res) => {
     // 1. Force session lock wait timeout to protect against locking bottlenecks
     await sequelize.query('SET SESSION innodb_lock_wait_timeout = 5', { transaction });
 
-    const { shippingAddress, billingAddress, paymentMethod, couponCode, referralCode, redeemPoints, isGiftWrap, giftWrapPrice: reqGiftWrapPrice, requestedCurrency: reqCurrency, currencyRate: reqRate } = req.body;
+    const { shippingAddress, billingAddress, paymentMethod, couponCode, referralCode, redeemPoints, isGiftWrap, giftWrapPrice: reqGiftWrapPrice, requestedCurrency: reqCurrency, currencyRate: reqRate, isBuyNow, buyNowItem } = req.body;
+    const isCod = paymentMethod === 'COD' || paymentMethod === 'Cash on Delivery (COD)' || (typeof paymentMethod === 'string' && paymentMethod.includes('Cash on Delivery'));
 
-    // 2. Fetch server-side cart based on customer or guest sessionId (NEVER trust req.body.items)
-    let cartWhere = {};
-    if (req.customer && req.customer.id) {
-      cartWhere = { customerId: req.customer.id };
+    // 2. Fetch server-side cart or process isolated Buy Now item
+    let cart = null;
+    let itemsToLock = [];
+
+    if (isBuyNow && buyNowItem && buyNowItem.productId) {
+      const p = await Product.findOne({ where: { id: buyNowItem.productId, isActive: true }, transaction });
+      if (!p) {
+        await transaction.rollback();
+        return res.status(404).json({ success: false, message: 'Selected product is no longer available' });
+      }
+      let v = null;
+      if (buyNowItem.variantId) {
+        v = await ProductVariant.findOne({ where: { id: buyNowItem.variantId, productId: p.id }, transaction });
+        if (!v) {
+          await transaction.rollback();
+          return res.status(404).json({ success: false, message: 'Selected product variant is no longer available' });
+        }
+      }
+      const itemPrice = v && v.price ? parseFloat(v.price) : parseFloat(p.price);
+      itemsToLock = [{
+        productId: p.id,
+        variantId: v ? v.id : null,
+        quantity: Math.max(1, parseInt(buyNowItem.quantity, 10) || 1),
+        price: itemPrice,
+        name: p.name,
+        image: v?.image || p.defaultProductImage || (Array.isArray(p.images) ? p.images[0] : '') || '',
+        selectedVariant: v?.attributes || buyNowItem.selectedVariant || {}
+      }];
     } else {
-      const sessionId = req.cookies?.sessionId || req.headers['x-session-id'];
-      if (!sessionId) {
+      let cartWhere = {};
+      if (req.customer && req.customer.id) {
+        cartWhere = { customerId: req.customer.id };
+      } else {
+        const sessionId = req.cookies?.sessionId || req.headers['x-session-id'];
+        if (!sessionId) {
+          await transaction.rollback();
+          return res.status(400).json({ success: false, message: 'Cart session is missing' });
+        }
+        cartWhere = { sessionId };
+      }
+
+      cart = await Cart.findOne({
+        where: cartWhere,
+        include: [{
+          model: CartItem,
+          as: 'items',
+          include: [{ model: Product, as: 'product' }]
+        }],
+        transaction
+      });
+
+      if (!cart || !cart.items || cart.items.length === 0) {
         await transaction.rollback();
-        return res.status(400).json({ success: false, message: 'Cart session is missing' });
+        return res.status(400).json({ success: false, message: 'Cart is empty' });
       }
-      cartWhere = { sessionId };
+
+      itemsToLock = cart.items.map(item => ({
+        productId: item.productId,
+        variantId: item.variantId || null,
+        quantity: item.quantity,
+        price: parseFloat(item.priceAtAdd),
+        name: item.product?.name || 'Product',
+        image: item.variant?.image || item.variantImage || item.image || item.product?.defaultProductImage || item.product?.images?.[0] || '',
+        selectedVariant: item.selectedVariant || {}
+      }));
     }
-
-    const cart = await Cart.findOne({
-      where: cartWhere,
-      include: [{
-        model: CartItem,
-        as: 'items',
-        include: [{ model: Product, as: 'product' }]
-      }],
-      transaction
-    });
-
-    console.log('[placeOrder] Cart search criteria:', JSON.stringify(cartWhere));
-    console.log('[placeOrder] Resolved Cart:', cart ? `ID ${cart.id}` : 'None');
-    if (cart) {
-      console.log('[placeOrder] Cart items length:', cart.items ? cart.items.length : 0);
-      if (cart.items) {
-        cart.items.forEach(item => {
-          console.log(`  - CartItem ID: ${item.id}, Product ID: ${item.productId}, Qty: ${item.quantity}`);
-        });
-      }
-    }
-
-    // 2. Validate Order Basics
-    const isCod = paymentMethod === 'COD' || paymentMethod === 'Cash on Delivery (COD)' || paymentMethod?.includes('Cash on Delivery');
-    if (!billingAddress || !shippingAddress) {
-      await transaction.rollback();
-      return res.status(400).json({ success: false, message: 'Billing and shipping addresses are required' });
-    }
-
-    const reqPincode = (shippingAddress?.pincode || shippingAddress?.zipCode || '').trim();
-    if (reqPincode) {
-      const activeZone = await DeliveryZone.findOne({ where: { pincode: reqPincode, isActive: true }, transaction });
-      if (!activeZone) {
-        await transaction.rollback();
-        return res.status(400).json({
-          success: false,
-          message: `Delivery is not available for pincode ${reqPincode}. Please enter a pincode listed in our delivery zones.`
-        });
-      }
-    }
-
-    if (!cart || !cart.items || cart.items.length === 0) {
-      await transaction.rollback();
-      return res.status(400).json({ success: false, message: 'Cart is empty' });
-    }
-
-    // 3. Consolidate and Sort Items by productId then variantId ascending to prevent deadlocks
-    const itemsToLock = cart.items.map(item => ({
-      productId: item.productId,
-      variantId: item.variantId || null,
-      quantity: item.quantity,
-      price: parseFloat(item.priceAtAdd),
-      name: item.product?.name || 'Product',
-      image: item.variant?.image || item.variantImage || item.image || item.product?.defaultProductImage || item.product?.images?.[0] || '',
-      selectedVariant: item.selectedVariant || {} // carry full variant attribute snapshot from cart
-    }));
 
     itemsToLock.sort((a, b) => {
       if (a.productId !== b.productId) return a.productId - b.productId;
@@ -771,23 +796,21 @@ const placeOrder = async (req, res) => {
       totalAmount = Math.round(totalAmount);
     }
 
-    // Guard: Enforce strict country-based currency and payment gateway resolution
+    // Guard: Enforce strict location-based currency and payment gateway resolution
     // India (IN) -> Strictly INR & Razorpay
     // UAE / Dubai (AE) -> Strictly AED & Telr
     const shippingCountry = (shippingAddress?.country || '').trim().toLowerCase();
     const billingCountry = (billingAddress?.country || '').trim().toLowerCase();
     const reqGeoCountry = (req.body.geoCountry || '').trim().toUpperCase();
 
-    const isUae = reqGeoCountry === 'AE' ||
-                  ['uae', 'united arab emirates', 'dubai', 'abu dhabi', 'sharjah', 'ae'].includes(shippingCountry) ||
-                  ['uae', 'united arab emirates', 'dubai', 'abu dhabi', 'sharjah', 'ae'].includes(billingCountry);
-
+    // Payment gateway and charge currency are strictly determined by the customer's IP location
+    const isUae = reqGeoCountry === 'AE';
     let orderCurrency = isUae ? 'AED' : 'INR';
 
     // Validate for mixed-currency carts (products priced in different currencies)
     let cartCurrency = null;
-    for (const item of cart.items) {
-      const itemCurrency = item.product?.currency || 'INR';
+    for (const item of itemsToLock) {
+      const itemCurrency = item.currency || 'INR';
       if (!cartCurrency) {
         cartCurrency = itemCurrency;
       } else if (cartCurrency !== itemCurrency) {
@@ -797,19 +820,36 @@ const placeOrder = async (req, res) => {
     }
     // NOTE: Products are stored with INR base price but charged in AED for UAE users via live exchange rate.
 
-    // If order is AED, convert all amounts from INR to AED using exchange rate
+    // If order is AED, convert all amounts from INR to AED using exchange rate or custom priceAED
     let toAed = (inr) => inr;
     if (orderCurrency === 'AED') {
       const liveRate = currencyRateService.getRate(); // cached, zero network overhead
       const rate = liveRate > 0 ? liveRate : ((Number(reqRate) > 0) ? Number(reqRate) : currencyRateService.FALLBACK_RATE);
       toAed = (inr) => Math.round((inr / rate) * 100) / 100; // 2 decimal places
-      subtotal          = toAed(subtotal);
+
+      // If any items have custom AED price, compute AED subtotal from items directly
+      const computedAedSubtotal = itemsToLock.reduce((sum, item) => {
+        const variantRec = item.variantId ? lockedStock[`v_${item.variantId}`] : null;
+        const productRec = lockedStock[`p_${item.productId}`];
+        let itemUnitPrice = null;
+        if (variantRec && variantRec.priceAED !== null && variantRec.priceAED !== undefined && Number(variantRec.priceAED) > 0) {
+          itemUnitPrice = Number(variantRec.priceAED);
+        } else if (productRec && productRec.priceAED !== null && productRec.priceAED !== undefined && Number(productRec.priceAED) > 0) {
+          itemUnitPrice = Number(productRec.priceAED);
+        } else {
+          itemUnitPrice = toAed(item.price);
+        }
+        return sum + (itemUnitPrice * item.quantity);
+      }, 0);
+
+      subtotal          = Math.round(computedAedSubtotal * 100) / 100;
       discountAmount    = toAed(discountAmount);
       loyaltyDiscount   = toAed(loyaltyDiscount);
       shippingAmount    = toAed(shippingAmount);
-      taxableSubtotal   = toAed(taxableSubtotal);
+      taxableSubtotal   = Math.max(0, subtotal - (discountAmount + loyaltyDiscount));
       taxAmount         = toAed(taxAmount);
-      totalAmount       = taxableSubtotal + shippingAmount; // recalculate from converted values
+      const aedGiftWrap = isGiftWrap ? toAed(giftWrapCharge) : 0;
+      totalAmount       = Math.round((taxableSubtotal + shippingAmount + aedGiftWrap) * 100) / 100;
       console.log(`[placeOrder] Converted amounts to AED (rate: ${rate} INR/AED): totalAmount=${totalAmount} AED`);
     }
 
@@ -821,7 +861,7 @@ const placeOrder = async (req, res) => {
     const order = await Order.create({
       orderNumber: `BB${uuidv4().slice(0, 8).toUpperCase()}`,
       customerId: req.customer ? req.customer.id : null,
-      sessionId: req.customer ? null : cart.sessionId,
+      sessionId: req.customer ? null : (cart ? cart.sessionId : (req.cookies?.sessionId || req.headers['x-session-id'])),
       affiliateId,
       couponId,
       status: isCod ? 'CONFIRMED' : 'PENDING_PAYMENT',
@@ -839,9 +879,9 @@ const placeOrder = async (req, res) => {
       currency: orderCurrency,
       shippingAddress,
       billingAddress: billingAddress || shippingAddress,
-      notes: req.body.giftMessage || req.body.notes || null,
+      notes: (isBuyNow ? '[BUY_NOW] ' : '') + (req.body.giftMessage || req.body.notes || ''),
       isGiftWrap: Boolean(isGiftWrap),
-      giftWrapFee: isGiftWrap ? giftWrapCharge : 0,
+      giftWrapFee: isGiftWrap ? (orderCurrency === 'AED' ? toAed(giftWrapCharge) : giftWrapCharge) : 0,
       inventoryProcessed: isCod,
       statusTimeline: isCod
         ? { PENDING: new Date().toISOString(), CONFIRMED: new Date().toISOString() }
@@ -850,10 +890,19 @@ const placeOrder = async (req, res) => {
 
     // 8. Snap order items
     const orderItemsPayload = itemsToLock.map(item => {
-      const unitPrice = (orderCurrency === 'AED') ? toAed(item.price) : item.price;
-      const totalPrice = Math.round((unitPrice * item.quantity) * 100) / 100;
       const variantRec = item.variantId ? lockedStock[`v_${item.variantId}`] : null;
       const productRec = lockedStock[`p_${item.productId}`];
+      let unitPrice = item.price;
+      if (orderCurrency === 'AED') {
+        if (variantRec && variantRec.priceAED !== null && variantRec.priceAED !== undefined && Number(variantRec.priceAED) > 0) {
+          unitPrice = Number(variantRec.priceAED);
+        } else if (productRec && productRec.priceAED !== null && productRec.priceAED !== undefined && Number(productRec.priceAED) > 0) {
+          unitPrice = Number(productRec.priceAED);
+        } else {
+          unitPrice = toAed(item.price);
+        }
+      }
+      const totalPrice = Math.round((unitPrice * item.quantity) * 100) / 100;
       const itemGst = item.gstRate || variantRec?.gstRate || productRec?.gstRate || '0%';
       return {
         orderId: order.id,
@@ -937,8 +986,10 @@ const { syncStorefrontStock, resolveWarehouseIdForItem } = require('./warehouseC
 
       await order.update({ inventoryProcessed: true }, { transaction });
 
-      // Clear server-side cartitems for COD orders
-      await CartItem.destroy({ where: { cartId: cart.id }, transaction });
+      // Clear server-side cartitems for COD orders (unless Buy Now)
+      if (!isBuyNow && cart) {
+        await CartItem.destroy({ where: { cartId: cart.id }, transaction });
+      }
     }
 
     // 10. Process Loyalty Ledger and Points Balance
@@ -1309,7 +1360,7 @@ const getDashboardStats = async (req, res) => {
         pendingOrders, 
         deliveredOrders, 
         totalRevenue: Math.round(totalRevenueINR),
-        totalRevenueAED: Math.round(totalRevenueAED)
+        totalRevenueAED: parseFloat(Number(totalRevenueAED || 0).toFixed(2))
       },
     });
   } catch (err) {

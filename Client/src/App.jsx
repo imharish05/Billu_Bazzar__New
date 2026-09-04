@@ -27,6 +27,7 @@ import SupportPage from './pages/account/SupportPage';
 import MyReviewsPage from './pages/account/MyReviewsPage';
 import ReturnsRefundsPage from './pages/account/ReturnsRefundsPage';
 import NotFoundPage from './pages/NotFoundPage';
+import ServiceUnavailablePage from './pages/ServiceUnavailablePage';
 import LoaderPreviewPage from './pages/LoaderPreviewPage';
 import ContactPage from './pages/ContactPage';
 import AboutPage from './pages/AboutPage';
@@ -203,6 +204,10 @@ const App = () => {
             <Route path="support" element={<SupportPage />} />
             <Route path="reviews" element={<MyReviewsPage />} />
           </Route>
+          <Route path="/503" element={<ServiceUnavailablePage />} />
+          <Route path="/service-unavailable" element={<ServiceUnavailablePage />} />
+          <Route path="/access-denied" element={<ServiceUnavailablePage code="503" title="Access Denied" subtitle="Access Restricted / Forbidden" message="You do not have access to this resource or the service is temporarily restricted. Please return to the store or contact customer support." />} />
+          <Route path="/403" element={<ServiceUnavailablePage code="403" title="Access Denied" subtitle="Access Forbidden" message="You do not have permission to view or manage this resource. If you believe this is in error, please contact customer support." />} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </AnimatePresence>

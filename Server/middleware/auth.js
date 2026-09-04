@@ -16,6 +16,9 @@ const verifyCustomer = async (req, res, next) => {
       return res.status(401).json({ success: false, message: 'No token provided' });
 
     const decoded = verifyToken(token);
+    if (decoded.type && decoded.type !== 'CUSTOMER') {
+      return res.status(401).json({ success: false, message: 'Invalid token for customer access' });
+    }
 
     const customer = await Customer.findByPk(decoded.id, { attributes: { exclude: ['password'] } });
     if (!customer || !customer.isActive)
@@ -29,42 +32,33 @@ const verifyCustomer = async (req, res, next) => {
 };
 
 /**
- * verifyAdmin — validates JWT for admin routes
+ * verifyAdmin — validates JWT for admin routes (Strictly no bypass fallbacks)
  */
 const verifyAdmin = async (req, res, next) => {
   try {
-    const authHeader = req.headers.authorization;
+    const authHeader = req.headers.authorization || req.headers.Authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      let firstAdmin = await AdminUser.findOne({ 
-        where: { isActive: true },
-        include: [{ association: 'role' }]
-      });
-      if (firstAdmin) {
-        if (!firstAdmin.role) {
-          firstAdmin.role = { name: 'Super Admin', permissions: { all: true } };
-        }
-        req.admin = firstAdmin; 
-        return next(); 
-      }
-      return res.status(401).json({ success: false, message: 'No token provided' });
+      return res.status(401).json({ success: false, message: 'Admin authentication required' });
     }
 
-    const token = authHeader.split(' ')[1];
-    const decoded = verifyToken(token);
+    const token = authHeader.split(' ')[1]?.trim();
+    if (!token) {
+      return res.status(401).json({ success: false, message: 'Admin token missing' });
+    }
 
-    let admin = await AdminUser.findByPk(decoded.id, { 
+    const decoded = verifyToken(token);
+    if (decoded.type && decoded.type !== 'ADMIN') {
+      return res.status(401).json({ success: false, message: 'Access denied: Not an administrator token' });
+    }
+
+    const admin = await AdminUser.findByPk(decoded.id, { 
       include: [{ association: 'role' }],
       attributes: { exclude: ['password'] }
     });
-    if (!admin) {
-      admin = await AdminUser.findOne({ 
-        where: { isActive: true },
-        include: [{ association: 'role' }]
-      });
-    }
 
-    if (!admin || !admin.isActive)
-      return res.status(401).json({ success: false, message: 'Unauthorized' });
+    if (!admin || !admin.isActive) {
+      return res.status(401).json({ success: false, message: 'Unauthorized or inactive admin account' });
+    }
 
     if (!admin.role) {
       admin.role = { name: 'Super Admin', permissions: { all: true } };
@@ -73,32 +67,23 @@ const verifyAdmin = async (req, res, next) => {
     req.admin = admin;
     next();
   } catch (err) {
-    try {
-      let firstAdmin = await AdminUser.findOne({ 
-        where: { isActive: true },
-        include: [{ association: 'role' }]
-      });
-      if (firstAdmin) {
-        if (!firstAdmin.role) {
-          firstAdmin.role = { name: 'Super Admin', permissions: { all: true } };
-        }
-        req.admin = firstAdmin;
-        return next();
-      }
-    } catch (e) {}
-    return res.status(401).json({ success: false, message: 'Invalid or expired token' });
+    return res.status(401).json({ success: false, message: 'Invalid or expired admin token' });
   }
 };
 
 const optionalCustomer = async (req, res, next) => {
   try {
-    const authHeader = req.headers.authorization;
+    const authHeader = req.headers.authorization || req.headers.Authorization;
     if (authHeader && authHeader.startsWith('Bearer ')) {
-      const token = authHeader.split(' ')[1];
-      const decoded = verifyToken(token);
-      const customer = await Customer.findByPk(decoded.id, { attributes: { exclude: ['password'] } });
-      if (customer && customer.isActive) {
-        req.customer = customer;
+      const token = authHeader.split(' ')[1]?.trim();
+      if (token) {
+        const decoded = verifyToken(token);
+        if (!decoded.type || decoded.type === 'CUSTOMER') {
+          const customer = await Customer.findByPk(decoded.id, { attributes: { exclude: ['password'] } });
+          if (customer && customer.isActive) {
+            req.customer = customer;
+          }
+        }
       }
     }
     next();
@@ -107,5 +92,29 @@ const optionalCustomer = async (req, res, next) => {
   }
 };
 
-module.exports = { verifyCustomer, verifyAdmin, optionalCustomer };
+const optionalAdmin = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization || req.headers.Authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.split(' ')[1]?.trim();
+      if (token) {
+        const decoded = verifyToken(token);
+        if (!decoded.type || decoded.type === 'ADMIN') {
+          const admin = await AdminUser.findByPk(decoded.id, {
+            include: [{ association: 'role' }],
+            attributes: { exclude: ['password'] }
+          });
+          if (admin && admin.isActive) {
+            req.admin = admin;
+          }
+        }
+      }
+    }
+    next();
+  } catch (err) {
+    next();
+  }
+};
+
+module.exports = { verifyCustomer, verifyAdmin, optionalCustomer, optionalAdmin };
 
