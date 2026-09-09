@@ -362,7 +362,9 @@ const Sidebar = ({
         </div>
         <div className="min-w-0">
           <p className="text-xs font-medium truncate">{admin?.name || 'Admin'}</p>
-          <p className="text-[10px] text-brand-grey truncate">{admin?.role || 'superadmin'}</p>
+          <p className="text-[10px] text-brand-grey truncate">
+            {admin?.name?.toLowerCase().includes('super admin') ? 'Super Admin' : (admin?.role || 'superadmin')}
+          </p>
         </div>
       </div>
       <button

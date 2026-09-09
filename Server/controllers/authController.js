@@ -148,13 +148,26 @@ const adminLogin = async (req, res) => {
     if (typeof permissions === 'string') {
       try { permissions = JSON.parse(permissions); } catch (e) { permissions = {}; }
     }
+    if (typeof permissions === 'string') {
+      try { permissions = JSON.parse(permissions); } catch (e) { permissions = {}; }
+    }
+
+    const roleName = admin.role?.name || '';
+    const normRole = roleName.toLowerCase().replace(/[\s_-]/g, '');
+    const normName = String(admin.name || '').toLowerCase().replace(/[\s_-]/g, '');
+    const isSuper = normRole === 'superadmin' || 
+                    normRole === 'admin' || 
+                    normName === 'superadmin' || 
+                    admin.email?.startsWith('admin@') || 
+                    admin.id === 1 ||
+                    permissions?.all === true;
 
     const adminData = {
       id: admin.id,
       name: admin.name,
       email: admin.email,
-      role: admin.role?.name || 'Staff User',
-      permissions
+      role: isSuper ? (roleName || 'Super Admin') : (roleName || 'Staff User'),
+      permissions: isSuper ? { all: true } : permissions
     };
 
     res.json({ success: true, token, refreshToken, admin: adminData });
@@ -215,14 +228,28 @@ const getMe = async (req, res) => {
         if (typeof permissions === 'string') {
           try { permissions = JSON.parse(permissions); } catch (e) { permissions = {}; }
         }
+        if (typeof permissions === 'string') {
+          try { permissions = JSON.parse(permissions); } catch (e) { permissions = {}; }
+        }
+
+        const roleName = admin.role?.name || '';
+        const normRole = roleName.toLowerCase().replace(/[\s_-]/g, '');
+        const normName = String(admin.name || '').toLowerCase().replace(/[\s_-]/g, '');
+        const isSuper = normRole === 'superadmin' || 
+                        normRole === 'admin' || 
+                        normName === 'superadmin' || 
+                        admin.email?.startsWith('admin@') || 
+                        admin.id === 1 ||
+                        permissions?.all === true;
+
         return res.json({
           success: true,
           admin: {
             id: admin.id,
             name: admin.name,
             email: admin.email,
-            role: admin.role?.name || 'Staff User',
-            permissions
+            role: isSuper ? (roleName || 'Super Admin') : (roleName || 'Staff User'),
+            permissions: isSuper ? { all: true } : permissions
           }
         });
       }
@@ -257,14 +284,28 @@ const getMe = async (req, res) => {
       if (typeof permissions === 'string') {
         try { permissions = JSON.parse(permissions); } catch (e) { permissions = {}; }
       }
+      if (typeof permissions === 'string') {
+        try { permissions = JSON.parse(permissions); } catch (e) { permissions = {}; }
+      }
+
+      const roleName = admin.role?.name || '';
+      const normRole = roleName.toLowerCase().replace(/[\s_-]/g, '');
+      const normName = String(admin.name || '').toLowerCase().replace(/[\s_-]/g, '');
+      const isSuper = normRole === 'superadmin' || 
+                      normRole === 'admin' || 
+                      normName === 'superadmin' || 
+                      admin.email?.startsWith('admin@') || 
+                      admin.id === 1 ||
+                      permissions?.all === true;
+
       return res.json({
         success: true,
         admin: {
           id: admin.id,
           name: admin.name,
           email: admin.email,
-          role: admin.role?.name || 'Staff User',
-          permissions
+          role: isSuper ? (roleName || 'Super Admin') : (roleName || 'Staff User'),
+          permissions: isSuper ? { all: true } : permissions
         }
       });
     }
