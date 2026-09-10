@@ -245,7 +245,7 @@ const VariantAttributeChips = ({ label, value, onChange, suggestions = [] }) => 
 };
 
 
-const VariantModal = ({ variant, onClose, onSave, products, warehouses }) => {
+const VariantModal = ({ variant, variants = [], onClose, onSave, products, warehouses }) => {
   const isEdit = !!variant;
   const [selectedProductId, setSelectedProductId] = useState(variant?.productId || '');
   const [sku, setSku] = useState(variant?.sku || '');
@@ -347,7 +347,7 @@ const VariantModal = ({ variant, onClose, onSave, products, warehouses }) => {
     return Array.from(valuesSet);
   };
 
-  // Sync attributes with selected product's option keys & auto-generate suggested SKU
+  // Sync attributes with selected product's option keys & auto-generate suggested sequential SKU
   useEffect(() => {
     if (!isEdit && selectedProductId) {
       const nextAttrs = {};
@@ -355,22 +355,11 @@ const VariantModal = ({ variant, onClose, onSave, products, warehouses }) => {
         nextAttrs[k] = '';
       });
       setAttributes(nextAttrs);
-      if (selectedProduct?.sku) {
-        const cleanBase = selectedProduct.sku.toUpperCase().replace(/^SKU-/, '');
-        setSku(`SKU-${cleanBase}-VAR-${Date.now().toString().slice(-4)}`);
-      }
+      const prodVariants = (variants || selectedProduct?.variants || []).filter(v => Number(v.productId) === Number(selectedProductId));
+      const nextNum = prodVariants.length + 1;
+      setSku(`SKU-P${selectedProductId}-V${nextNum}`);
     }
-  }, [selectedProductId, isEdit, optionKeys, selectedProduct]);
-
-  useEffect(() => {
-    if (!isEdit && selectedProduct && attributes) {
-      const attrValues = Object.values(attributes).filter(Boolean).join('-').toUpperCase().replace(/[^A-Z0-9-]/g, '').replace(/-+/g, '-').replace(/^-|-$/g, '');
-      if (attrValues) {
-        const baseSku = (selectedProduct.sku || `PROD-${selectedProductId}`).toUpperCase().replace(/^SKU-/, '');
-        setSku(`SKU-${baseSku}-${attrValues}`);
-      }
-    }
-  }, [attributes, selectedProduct, isEdit, selectedProductId]);
+  }, [selectedProductId, isEdit, optionKeys, variants]);
 
   const handleAttributeChange = (key, val) => {
     setAttributes(prev => ({
@@ -458,13 +447,9 @@ const VariantModal = ({ variant, onClose, onSave, products, warehouses }) => {
     }
 
     let finalSku = sku ? sku.trim() : '';
-    if (!finalSku && selectedProduct) {
-      const attrValues = Object.values(attributes).filter(Boolean).join('-').toUpperCase().replace(/[^A-Z0-9-]/g, '').replace(/-+/g, '-').replace(/^-|-$/g, '');
-      const baseSku = (selectedProduct.sku || `PROD-${selectedProductId}`).toUpperCase().replace(/^SKU-/, '');
-      finalSku = attrValues ? `SKU-${baseSku}-${attrValues}` : `SKU-${baseSku}-VAR-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
-    }
-    if (!finalSku) {
-      finalSku = `SKU-PV-${Date.now().toString().slice(-6)}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+    if (!finalSku && selectedProductId) {
+      const prodVariants = (variants || selectedProduct?.variants || []).filter(v => Number(v.productId) === Number(selectedProductId));
+      finalSku = `SKU-P${selectedProductId}-V${prodVariants.length + 1}`;
     }
 
     if (!mainImageFile && !mainImagePreview) {
@@ -514,7 +499,7 @@ const VariantModal = ({ variant, onClose, onSave, products, warehouses }) => {
             <X size={18} />
           </button>
         </div>
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+        <form onSubmit={handleSubmit} noValidate className="p-6 space-y-6">
           <div className="space-y-4">
             {/* Product selection (read-only in Edit mode) */}
             <div>
@@ -608,7 +593,7 @@ const VariantModal = ({ variant, onClose, onSave, products, warehouses }) => {
                   required
                   value={sku}
                   onChange={e => setSku(e.target.value)}
-                  placeholder="e.g. VAR-SKU-001"
+                  placeholder="e.g. SKU-P104-V1"
                   className="w-full border border-neutral-300 focus:border-brand-gold focus:ring-2 focus:ring-brand-gold/15 px-3.5 py-2.5 text-sm rounded-lg font-mono uppercase bg-white text-neutral-900 transition-all outline-none"
                 />
               </div>
@@ -663,7 +648,7 @@ const VariantModal = ({ variant, onClose, onSave, products, warehouses }) => {
                     <input
                       id="var-price"
                       type="number"
-                      step="0.01"
+                      step="1"
                       required
                       value={price}
                       onChange={e => handlePriceChange(e.target.value)}
@@ -694,7 +679,7 @@ const VariantModal = ({ variant, onClose, onSave, products, warehouses }) => {
                     <input
                       id="var-price-aed"
                       type="number"
-                      step="0.01"
+                      step="1"
                       value={priceAED}
                       onChange={e => setPriceAED(e.target.value)}
                       placeholder="0.00"
@@ -719,7 +704,7 @@ const VariantModal = ({ variant, onClose, onSave, products, warehouses }) => {
                     <input
                       id="var-mrp"
                       type="number"
-                      step="0.01"
+                      step="1"
                       value={mrp}
                       onChange={e => handleMrpChange(e.target.value)}
                       placeholder="0.00"
@@ -749,7 +734,7 @@ const VariantModal = ({ variant, onClose, onSave, products, warehouses }) => {
                     <input
                       id="var-mrp-aed"
                       type="number"
-                      step="0.01"
+                      step="1"
                       value={mrpAED}
                       onChange={e => setMrpAED(e.target.value)}
                       placeholder="0.00"
@@ -991,31 +976,29 @@ const VariantsAdminPage = () => {
     // ── CASE: Last remaining variant → cascade warning ───────────────────────
     if (isLastVariant) {
       toast((t) => (
-        <div className="flex flex-col items-start gap-2.5 p-1 max-w-xs">
-          <div className="flex items-center gap-2">
-            <AlertTriangle size={16} className="text-red-600 shrink-0" />
-            <p className="text-sm font-bold text-neutral-900">Delete Last Variant?</p>
-          </div>
-          <div className="bg-red-50 border border-red-200 rounded-lg p-2.5 text-xs text-red-800 leading-relaxed">
-            <strong>{variantSku}</strong> is the last variant of <strong>{productName}</strong>.
-            <br />Deleting it will <strong>permanently remove the entire product</strong> from the catalog.
-          </div>
-          <div className="flex items-center gap-2.5 w-full mt-1">
+        <div className="flex flex-col items-center text-center gap-2 p-1 bg-white">
+          <p className="text-sm font-semibold text-neutral-800">Delete Last Variant?</p>
+          <p className="text-xs text-neutral-600 max-w-xs leading-relaxed">
+            This is the last variant of <strong className="text-neutral-900 font-semibold">{productName}</strong>.
+            <br />
+            Deleting it will permanently remove the entire product.
+          </p>
+          <div className="flex justify-center items-center gap-3 mt-2 w-full">
             <button
               onClick={() => { toast.dismiss(t.id); executeDelete(id); }}
-              className="flex-1 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold uppercase tracking-wider transition-colors rounded shadow-sm"
+              className="px-3.5 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold uppercase tracking-wider transition-colors rounded shadow-sm"
             >
-              Yes, Delete Both
+              Yes, Delete
             </button>
             <button
               onClick={() => toast.dismiss(t.id)}
-              className="flex-1 py-1.5 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 text-xs font-semibold uppercase tracking-wider transition-colors rounded border border-neutral-200"
+              className="px-3.5 py-1.5 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 text-xs font-semibold uppercase tracking-wider transition-colors rounded border border-neutral-200"
             >
               Cancel
             </button>
           </div>
         </div>
-      ), { duration: 8000, position: 'top-center' });
+      ), { duration: 6000, position: 'top-center' });
       return;
     }
 
@@ -1223,6 +1206,7 @@ const VariantsAdminPage = () => {
         {modalOpen && (
           <VariantModal 
             variant={editing} 
+            variants={variants}
             products={products} 
             warehouses={warehouses}
             onClose={() => { setModalOpen(false); setEditing(null); }} 

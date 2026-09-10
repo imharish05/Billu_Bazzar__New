@@ -625,7 +625,7 @@ const DeliveryZonesAdminPage = () => {
                   </button>
                 </div>
 
-                <form onSubmit={handleSave} className="p-5 space-y-4">
+                <form onSubmit={handleSave} noValidate className="p-5 space-y-4">
                   <div>
                     <label className="block text-xs font-semibold text-neutral-700 uppercase tracking-wider mb-1">
                       Indian Pincode <span className="text-red-500">*</span>
@@ -688,7 +688,7 @@ const DeliveryZonesAdminPage = () => {
                       </label>
                       <input
                         type="number"
-                        step="0.01"
+                        step="1"
                         min="0"
                         placeholder="0.00"
                         value={form.deliveryCharge}

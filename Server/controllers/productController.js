@@ -301,7 +301,7 @@ const create = async (req, res) => {
       const [defaultVar, created] = await ProductVariant.findOrCreate({
         where: { productId: product.id },
         defaults: {
-          sku: product.sku || `PV-${product.id}-${Date.now()}`,
+          sku: product.sku ? `${product.sku}-V1` : `SKU-P${product.id}-V1`,
           price: product.price,
           priceAED: product.priceAED || null,
           mrp: product.comparePrice,
@@ -364,9 +364,7 @@ const create = async (req, res) => {
 
           const mainVarImg = vMainPath || v.image || newGalleryPaths[0] || product.defaultProductImage || product.images?.[0] || null;
 
-          const comboLabel = v.attributes ? Object.values(v.attributes).filter(Boolean).join('-').toUpperCase().replace(/[^A-Z0-9-]/g, '').replace(/-+/g, '-').replace(/^-|-$/g, '') : '';
-          const prodPrefix = product.sku ? product.sku.trim().toUpperCase().replace(/^SKU-/, '') : (product.slug ? product.slug.toUpperCase().replace(/[^A-Z0-9]+/g, '-') : `PRD${product.id}`);
-          const fallbackSku = comboLabel ? `SKU-${prodPrefix}-${comboLabel}` : `SKU-${prodPrefix}-VAR-${i + 1}`;
+          const fallbackSku = `SKU-P${product.id}-V${i + 1}`;
 
           const variant = await ProductVariant.create({
             productId: product.id,
@@ -493,9 +491,7 @@ const update = async (req, res) => {
           const varLowStock = v.lowStockThreshold ? parseInt(v.lowStockThreshold, 10) : (product.lowStockThreshold || 10);
           const varGst = (v.gstRate !== undefined && v.gstRate !== null && v.gstRate !== '') ? v.gstRate : (product.gstRate || '0%');
 
-          const comboLabel = v.attributes ? Object.values(v.attributes).filter(Boolean).join('-').toUpperCase().replace(/[^A-Z0-9-]/g, '').replace(/-+/g, '-').replace(/^-|-$/g, '') : '';
-          const prodPrefix = product.sku ? product.sku.trim().toUpperCase().replace(/^SKU-/, '') : (product.slug ? product.slug.toUpperCase().replace(/[^A-Z0-9]+/g, '-') : `PRD${product.id}`);
-          const fallbackSku = comboLabel ? `SKU-${prodPrefix}-${comboLabel}` : `SKU-${prodPrefix}-VAR-${i + 1}`;
+          const fallbackSku = `SKU-P${product.id}-V${i + 1}`;
 
           if (existingVariant) {
             await existingVariant.update({

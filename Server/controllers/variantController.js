@@ -2,12 +2,16 @@
 const { Op } = require('sequelize');
 const { Product, ProductVariant, Warehouse, WarehouseStock, InventoryMovementLog } = require('../models');
 
-// Helper to generate a unique SKU if not provided
-const generateSku = (productId, attributes) => {
-  const comboStr = attributes ? (typeof attributes === 'string' ? JSON.parse(attributes) : attributes) : {};
-  const comboLabel = typeof comboStr === 'object' && comboStr ? Object.values(comboStr).filter(Boolean).join('-').toUpperCase().replace(/[^A-Z0-9-]/g, '').replace(/-+/g, '-').replace(/^-|-$/g, '') : '';
-  const uniqueTag = Math.random().toString(36).substring(2, 6).toUpperCase();
-  return comboLabel ? `SKU-PRD${productId}-${comboLabel}-${uniqueTag}` : `SKU-PRD${productId}-VAR-${uniqueTag}`;
+// Helper to generate a unique sequential SKU if not provided
+const generateSku = async (productId) => {
+  const count = await ProductVariant.count({ where: { productId } });
+  let nextNum = count + 1;
+  let candidate = `SKU-P${productId}-V${nextNum}`;
+  while (await ProductVariant.findOne({ where: { sku: candidate } })) {
+    nextNum++;
+    candidate = `SKU-P${productId}-V${nextNum}`;
+  }
+  return candidate;
 };
 
 // Helper to normalize file paths
@@ -181,7 +185,7 @@ const add = async (req, res) => {
     if (price !== undefined && Number(price) < 0) return res.status(400).json({ success: false, message: 'Price cannot be negative' });
     if (stock !== undefined && Number(stock) < 0) return res.status(400).json({ success: false, message: 'Stock cannot be negative' });
 
-    const finalSku = (sku && sku.trim() !== '') ? sku.trim() : generateSku(productId, attributes);
+    const finalSku = (sku && sku.trim() !== '') ? sku.trim() : await generateSku(productId);
 
     // Check SKU conflicts
     const conflict = await ProductVariant.findOne({ where: { sku: finalSku } });

@@ -153,11 +153,14 @@ Product.beforeValidate(async (product) => {
   }
 
   if (!product.sku || product.sku.trim() === '') {
-    const cleanCode = product.name ? product.name.toUpperCase().trim().replace(/[^A-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) : '';
-    product.sku = cleanCode ? `SKU-${cleanCode}` : `SKU-PROD-${Date.now()}`;
+    if (product.id) {
+      product.sku = `SKU-P${product.id}`;
+    } else {
+      product.sku = `TEMP-SKU-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+    }
   }
 
-  if (product.sku) {
+  if (product.sku && !product.sku.startsWith('TEMP-SKU-')) {
     let finalSku = product.sku.trim().toUpperCase();
     let count = 1;
     const baseSku = finalSku;
@@ -177,6 +180,21 @@ Product.beforeValidate(async (product) => {
 
 Product.afterCreate(async (product, options) => {
   try {
+    if (!product.sku || product.sku.startsWith('TEMP-SKU-') || product.sku.startsWith('SKU-PROD-')) {
+      let finalSku = `SKU-P${product.id}`;
+      let count = 1;
+      while (true) {
+        const existing = await Product.findOne({
+          where: { sku: finalSku, id: { [Op.ne]: product.id } },
+          transaction: options?.transaction
+        });
+        if (!existing) break;
+        finalSku = `SKU-P${product.id}-${count}`;
+        count++;
+      }
+      await product.update({ sku: finalSku }, { transaction: options?.transaction, hooks: false });
+      product.sku = finalSku;
+    }
     const { syncProductKeywords } = require('../services/searchSyncService');
     await syncProductKeywords(product);
   } catch (err) {

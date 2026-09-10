@@ -708,23 +708,15 @@ const ProductModal = ({ product, onClose, onSave }) => {
   });
 
   const generateAutoVariantSku = useCallback((baseSku, productName, combo, idx = 0) => {
-    const comboLabel = combo
-      ? Object.values(combo)
-          .filter(Boolean)
-          .join('-')
-          .toUpperCase()
-          .replace(/[^A-Z0-9-]/g, '')
-          .replace(/-+/g, '-')
-          .replace(/^-|-$/g, '')
-      : '';
-    let prefix = baseSku?.trim() || '';
-    if (!prefix && productName?.trim()) {
-      prefix = productName.toUpperCase().trim().replace(/[^A-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+    if (product?.id) {
+      return `SKU-P${product.id}-V${idx + 1}`;
     }
-    if (!prefix) prefix = 'PROD';
-    const cleanPrefix = prefix.toUpperCase().replace(/^SKU-/, '');
-    return comboLabel ? `SKU-${cleanPrefix}-${comboLabel}` : `SKU-${cleanPrefix}-VAR-${idx + 1}`;
-  }, []);
+    if (baseSku && baseSku.trim() !== '') {
+      const cleanPrefix = baseSku.trim().toUpperCase().replace(/^SKU-/, '');
+      return `SKU-${cleanPrefix}-V${idx + 1}`;
+    }
+    return `SKU-P-V${idx + 1}`;
+  }, [product]);
 
   // Product Variants Matrix State (Single Base Variant Focus)
   const [productVariants, setProductVariants] = useState(() => {
@@ -1027,15 +1019,7 @@ const ProductModal = ({ product, onClose, onSave }) => {
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
   const handleNameChange = (nameVal) => {
-    setForm(p => {
-      const isSkuAuto = !p.sku || p.sku.startsWith('SKU-') || p.sku.startsWith('PROD-');
-      let newSku = p.sku;
-      if (isSkuAuto) {
-        const cleanCode = nameVal.toUpperCase().trim().replace(/[^A-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
-        newSku = cleanCode ? `SKU-${cleanCode}` : '';
-      }
-      return { ...p, name: nameVal, sku: newSku };
-    });
+    setForm(p => ({ ...p, name: nameVal }));
   };
 
   // Filtered Subcategories & SubSubcategories
@@ -1319,14 +1303,6 @@ const ProductModal = ({ product, onClose, onSave }) => {
       return;
     }
     let finalProductSku = form.sku ? form.sku.trim() : '';
-    if (!finalProductSku && form.name) {
-      const cleanCode = form.name.toUpperCase().trim().replace(/[^A-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
-      finalProductSku = cleanCode ? `SKU-${cleanCode}` : `SKU-PROD-${Date.now()}`;
-    }
-    if (!finalProductSku) {
-      toast.error('SKU is required');
-      return;
-    }
     if (!form.categoryId) {
       toast.error('Category is required');
       return;
@@ -1541,7 +1517,7 @@ const ProductModal = ({ product, onClose, onSave }) => {
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-8 overflow-y-auto flex-1 text-neutral-800">
+        <form onSubmit={handleSubmit} noValidate className="p-6 space-y-8 overflow-y-auto flex-1 text-neutral-800">
           
           {/* SECTION 1: BASIC INFORMATION */}
           <div className="bg-neutral-50 p-5 rounded-lg border border-brand-light space-y-4">
@@ -1566,13 +1542,14 @@ const ProductModal = ({ product, onClose, onSave }) => {
 
               {/* Product SKU */}
               <div>
-                <label className="block text-xs font-semibold text-neutral-700 mb-1">Product SKU *</label>
+                <label className="block text-xs font-semibold text-neutral-700 mb-1">
+                  Product SKU <span className="text-neutral-400 font-normal">(leave blank for auto genarate)</span>
+                </label>
                 <input
                   type="text"
                   value={form.sku}
                   onChange={e => set('sku', e.target.value)}
-                  required
-                  placeholder="e.g. SKU-EMERALD"
+                  placeholder="Auto-assigned (e.g. SKU-P104)"
                   className="w-full border border-brand-light px-3 py-2 text-sm focus:outline-none focus:border-brand-gold rounded-sm bg-white font-mono uppercase"
                 />
               </div>
@@ -2061,7 +2038,7 @@ const ProductModal = ({ product, onClose, onSave }) => {
                               </div>
                               <input
                                 type="number"
-                                step="0.01"
+                                step="1"
                                 value={v.price !== undefined ? v.price : ''}
                                 onChange={e => handleVariantPriceChange(v.id, e.target.value)}
                                 placeholder="0.00"
@@ -2087,7 +2064,7 @@ const ProductModal = ({ product, onClose, onSave }) => {
                               </div>
                               <input
                                 type="number"
-                                step="0.01"
+                                step="1"
                                 value={v.priceAED !== undefined && v.priceAED !== null ? v.priceAED : ''}
                                 onChange={e => updateVariantRow(v.id, 'priceAED', e.target.value)}
                                 placeholder="0.00"
@@ -2110,7 +2087,7 @@ const ProductModal = ({ product, onClose, onSave }) => {
                               </div>
                               <input
                                 type="number"
-                                step="0.01"
+                                step="1"
                                 value={v.mrp !== undefined ? v.mrp : ''}
                                 onChange={e => handleVariantMrpChange(v.id, e.target.value)}
                                 placeholder="0.00"
@@ -2136,7 +2113,7 @@ const ProductModal = ({ product, onClose, onSave }) => {
                               </div>
                               <input
                                 type="number"
-                                step="0.01"
+                                step="1"
                                 value={v.mrpAED !== undefined && v.mrpAED !== null ? v.mrpAED : ''}
                                 onChange={e => updateVariantRow(v.id, 'mrpAED', e.target.value)}
                                 placeholder="0.00"

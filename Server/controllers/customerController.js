@@ -41,8 +41,15 @@ const getOne = async (req, res) => {
 };
 
 const areVariantsEqual = (varA, varB) => {
-  const a = varA || {};
-  const b = varB || {};
+  // Some MySQL/MariaDB drivers return JSON columns as serialized strings.
+  const normalize = value => {
+    if (typeof value === 'string') {
+      try { value = JSON.parse(value); } catch { return {}; }
+    }
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  };
+  const a = normalize(varA);
+  const b = normalize(varB);
   const keysA = Object.keys(a).sort();
   const keysB = Object.keys(b).sort();
   if (keysA.length !== keysB.length) return false;

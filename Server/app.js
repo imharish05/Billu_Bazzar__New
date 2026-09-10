@@ -64,8 +64,9 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
 
 // ── API Routes ────────────────────────────────────────────────────────────────
 app.use('/api/auth',       require('./routes/authRoutes'));
-app.use('/mob-api/auth',   require('./mob-api/Auth/authRoutes'));
-app.use('/api/mob/auth',   require('./mob-api/Auth/authRoutes'));
+require('./mob-api/swaggerUi')(app);
+app.use('/mob-api', require('./mob-api'));
+app.use('/api/mob', require('./mob-api'));
 app.use('/api/products',   require('./routes/productRoutes'));
 app.use('/api/variants',   require('./routes/variantRoutes'));
 app.use('/api/warehouses', require('./routes/warehouseRoutes'));
@@ -137,49 +138,6 @@ try {
   }
 
   // ── Mobile API Swagger Documentation (/mob-api-docs) ─────────────────────────
-  const mobSwaggerSpecPath = path.join(__dirname, 'swagger-mob-output.json');
-  if (fs.existsSync(mobSwaggerSpecPath)) {
-    const mobSwaggerDocument = JSON.parse(fs.readFileSync(mobSwaggerSpecPath, 'utf8'));
-
-    const serveMobSwagger = (req, res, next) => {
-      const reqHost = req.get('host');
-      const forwardedProto = req.headers['x-forwarded-proto'];
-      const reqProtocol = forwardedProto || req.protocol || 'http';
-      const dynamicUrl = `${reqProtocol}://${reqHost}`;
-
-      mobSwaggerDocument.servers = [
-        { url: '/', description: 'Current Domain / Relative Path (Recommended for Live HTTPS)' },
-        { url: dynamicUrl, description: `Request Origin (${dynamicUrl})` },
-        ...(process.env.API_URL ? [{ url: process.env.API_URL, description: 'Environment API_URL' }] : [])
-      ];
-      req.swaggerDoc = mobSwaggerDocument;
-      next();
-    };
-
-    app.use('/mob-api-docs', serveMobSwagger, swaggerUi.serve, (req, res, next) => {
-      swaggerUi.setup(req.swaggerDoc, {
-        customSiteTitle: 'Billu Bazaar Mobile API Documentation',
-        swaggerOptions: {
-          persistAuthorization: true,
-          displayRequestDuration: true,
-          docExpansion: 'list',
-          filter: true
-        }
-      })(req, res, next);
-    });
-
-    app.use('/mob-api/docs', serveMobSwagger, swaggerUi.serve, (req, res, next) => {
-      swaggerUi.setup(req.swaggerDoc, {
-        customSiteTitle: 'Billu Bazaar Mobile API Documentation',
-        swaggerOptions: {
-          persistAuthorization: true,
-          displayRequestDuration: true,
-          docExpansion: 'list',
-          filter: true
-        }
-      })(req, res, next);
-    });
-  }
 } catch (swaggerErr) {
   console.log('⚠️ Swagger UI setup note:', swaggerErr.message);
 }

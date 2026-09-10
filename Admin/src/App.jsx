@@ -82,7 +82,9 @@ const App = () => {
         position="top-center"
         containerStyle={{ zIndex: 999999 }}
         toastOptions={{
-          duration: 4000,
+          duration: 2500,
+          success: { duration: 2000 },
+          error: { duration: 3500 },
           style: { zIndex: 999999 },
         }}
       />

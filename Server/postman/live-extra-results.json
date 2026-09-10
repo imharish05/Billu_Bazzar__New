@@ -1,0 +1,22 @@
+[
+  {
+    "name": "Checkout OTP email delivery",
+    "status": "PASS",
+    "note": "HTTP 200 from Newman; user confirmed email receipt. Fresh delivery was also successful. Covers main-collection scenario MOB-205 separately."
+  },
+  {
+    "name": "First checkout OTP verification",
+    "status": "FAIL",
+    "note": "HTTP 400 incorrect/expired. The backend uses an in-memory store; a development restart occurred between delivery and verification. Password unchanged."
+  },
+  {
+    "name": "Fresh checkout OTP verification",
+    "status": "PASS",
+    "note": "Executed through Newman with the fresh user-provided code; HTTP 200, Security verification successful. Covers main-collection scenario MOB-206 separately."
+  },
+  {
+    "name": "Used checkout OTP replay",
+    "status": "PASS",
+    "note": "Reusing the same code returned HTTP 400. The code was not saved in this report."
+  }
+]

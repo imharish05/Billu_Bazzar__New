@@ -54,10 +54,13 @@ ProductVariant.beforeValidate(async (variant) => {
   const { Op } = require('sequelize');
 
   if (!variant.sku || variant.sku.trim() === '') {
-    const comboStr = variant.attributes ? (typeof variant.attributes === 'string' ? JSON.parse(variant.attributes) : variant.attributes) : {};
-    const comboLabel = typeof comboStr === 'object' && comboStr ? Object.values(comboStr).filter(Boolean).join('-').toUpperCase().replace(/[^A-Z0-9-]/g, '').replace(/-+/g, '-').replace(/^-|-$/g, '') : '';
-    const uniqueTag = Math.random().toString(36).substring(2, 6).toUpperCase();
-    variant.sku = comboLabel ? `SKU-PRD${variant.productId || 'V'}-${comboLabel}-${uniqueTag}` : `SKU-PRD${variant.productId || 'V'}-VAR-${uniqueTag}`;
+    const pId = variant.productId || 'V';
+    let nextNum = 1;
+    if (variant.productId) {
+      const count = await ProductVariant.count({ where: { productId: variant.productId } });
+      nextNum = count + 1;
+    }
+    variant.sku = `SKU-P${pId}-V${nextNum}`;
   }
 
   if (variant.sku) {

@@ -1,0 +1,52 @@
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const read = name => JSON.parse(fs.readFileSync(path.join(__dirname, name), 'utf8'));
+const run = read('run.local.json');
+const scenarios = read('scenarios.json');
+const environment = Object.fromEntries(read('executed.local.json').values.map(v => [v.key, v.value]));
+const executions = new Map((run.run.executions || []).map(e => [e.item.name.split(' ')[0], e]));
+const rows = scenarios.map(s => {
+  const e = executions.get(s.id);
+  const failures = e?.assertions?.filter(a => a.error).map(a => a.error.message) || [];
+  const status = e?.requestError ? 'ERROR' : !e?.response ? 'NOT RUN' : (e.response.code !== s.expected || failures.length) ? 'FAIL' : 'PASS';
+  return { ...s, status, actual: e?.response?.code || null, durationMs: e?.response?.responseTime || null,
+    failures, ...(e?.requestError ? { reason: e.requestError.code || e.requestError.message } : {}), ...(status === 'NOT RUN' ? { reason: s.manual ? 'Integration prerequisites; runManual=false' : 'Required fixture was not captured: ' + s.prerequisites.join(', ') } : {}),
+    ...(status === 'FAIL' ? { response: (() => { try { const body = JSON.parse(Buffer.from(e.response.stream.data || e.response.stream).toString()); delete body.token; delete body.resetToken; return body; } catch { return 'See local raw result'; } })() } : {}),
+  };
+});
+const totals = Object.fromEntries(['PASS','FAIL','ERROR','NOT RUN'].map(k => [k, rows.filter(r => r.status === k).length]));
+const fixtureKeys = ['baseUrl','qaEmail','qaEmailB','qaPhone','qaPhoneB','customerId','productId','productSlug','productName','productPrice','productStock','variantId','categoryId','cartItemId','couponCode','couponSubtotal','pincode'];
+const data = Object.fromEntries(fixtureKeys.filter(k => environment[k] !== undefined).map(k => [k,environment[k]]));
+const slowRequests = rows.filter(r => r.durationMs > 5000).map(({id,name,durationMs}) => ({id,name,durationMs}));
+const supplemental = fs.existsSync(path.join(__dirname,'live-extra-results.json')) ? read('live-extra-results.json') : [];
+fs.writeFileSync(path.join(__dirname,'results.json'),JSON.stringify({generatedAt:new Date().toISOString(),runner:'Newman 6.2.2 (Postman collection runner)',totals,assertions:run.run.stats.assertions,slowRequests,supplemental,fixtures:data,scenarios:rows},null,2));
+const escape = x => String(x ?? '').replace(/\|/g,'\\|').replace(/\r?\n/g,' ');
+let md = '# Mobile API Postman test report\n\n';
+md += `Executed with Newman 6.2.2 against ${environment.baseUrl}. This is an HTTP integration run against the running backend and its MySQL database, not the earlier mocked unit tests. Postman desktop was not used.\n\n`;
+md += `**${totals.PASS} passed, ${totals.FAIL} failed, ${totals.ERROR} connection errors, ${totals['NOT RUN']} not run; ${rows.length} scenarios total.** A passing negative test proves rejection, not successful completion of the corresponding business flow.\n\n`;
+md += '## Actual test data\n\n| Variable | Actual value |\n|---|---|\n'+Object.entries(data).map(([k,v])=>`| ${k} | ${escape(v)} |`).join('\n')+'\n\n';
+md += 'Passwords and tokens are omitted from this report. They are stored only in ignored local environment/result files. Product and cart IDs were captured from API responses. Pincode 600001 was independently confirmed as an active Chennai delivery zone.\n\n';
+md += '## Failures\n\n';
+const failed = rows.filter(r=>r.status==='FAIL');
+md += failed.length ? failed.map(r=>`- **${r.id}: ${r.name}** — expected ${r.expected}, got ${r.actual}. ${r.failures.map(escape).join('; ')}\n  Response: ${escape(JSON.stringify(r.response))}`).join('\n')+'\n\n' : 'No failed executed scenarios.\n\n';
+md += '## Request errors\n\n';
+const errors = rows.filter(r=>r.status==='ERROR');
+md += errors.length ? errors.map(r=>`- **${r.id}: ${r.name}** — ${r.reason}; no HTTP response within the runner timeout.`).join('\n')+'\n\n' : 'No request errors.\n\n';
+md += '## Performance checks\n\n';
+md += slowRequests.map(r=>`- ${r.id}: ${r.name} took ${(r.durationMs/1000).toFixed(1)} seconds.`).join('\n')+'\n\n';
+md += 'The latest run allows 60 seconds per request. Earlier affiliate requests timed out at 30 seconds. Eventual functional success does not resolve this latency. Direct reads of Affiliates also stalled, while SELECT 1 and an indexed ID lookup responded. The local MySQL log contains InnoDB consistency warnings, but a causal link to this latency has not been established. No database repair or restart was performed.\n\n';
+md += '## Additional live email checks\n\n';
+md += supplemental.map(r=>`- ${r.name}: ${r.status}. ${r.note || ''}`).join('\n')+'\n\n';
+md += '## Fixes found during live testing\n\n';
+md += '- Subcategory and sub-subcategory routes previously called the root-category controller. They now call their own handlers, and the collection checks subCategories/subSubCategories response arrays.\n- Marketing-message requests previously called the banner controller. The route now returns the messages array from the marketing-message controller.\n- Wishlist variant JSON was returned as a serialized string by this database. The comparison now normalizes serialized JSON before matching, so the second toggle removes the item. The final run verifies the added -> removed transition.\n- Test fixtures now use India-format phone numbers accepted by account/profile validation, and the stock-alert JSON payload was corrected.\n\nAuth implementation and token behavior were not changed. The eight existing mocked boundary-test groups also passed after the fixes.\n\n';
+md += '## Pending integration scenarios\n\n';
+md += rows.filter(r=>r.status==='NOT RUN').map(r=>`- ${r.id}: ${r.name}. ${r.reason}. ${r.note}`).join('\n')+'\n\n';
+md += 'The main collection keeps email/payment cases disabled by default; separately executed mailbox checks are listed above. Successful gateway verification needs sandbox credentials and a completed gateway transaction. Reviews/returns need a delivered order owned by the QA customer, with eligible items and return evidence. No skipped main-collection case is counted as passed.\n\n';
+md += '## What was tested\n\nAuthentication and recovery validation; catalog and settings; offers; cart create/update/sync/remove; two-customer cart ownership; profile and password updates; wishlist, loyalty, support, personal shopping, stock alerts; invalid orders/payments/reviews/returns; admin-route isolation; missing-token rejection for every documented protected operation.\n\n';
+md += '## Test records and cleanup\n\nThe run creates two QA customers and their signup loyalty entries. It also creates a QA support ticket, personal-shopping request, and stock alert, and records a search. The cleanup folder clears both QA carts; the wishlist toggle is reversed and the QA password is restored. QA accounts and service records are retained for review rather than deleted directly from the database. Check the individual cleanup results below before assuming cleanup succeeded. No completed purchase, payment charge, delivered order, return shipment is claimed.\n\n';
+md += 'Earlier exploratory runs created additional clearly labeled QA accounts/service records. Their records, including wishlist entries created before the fix, remain for inspection. before-fixes-results.json preserves the preceding run summary; the table below is the final run.\n\n';
+md += '## Every scenario\n\n| ID | Scenario | Method / route | Expected | Actual | Result |\n|---|---|---|---:|---:|---|\n';
+md += rows.map(r=>`| ${r.id} | ${escape(r.name)} | ${r.method} ${escape(r.route)} | ${r.expected} | ${r.actual??'—'} | ${r.status} |`).join('\n')+'\n';
+fs.writeFileSync(path.join(__dirname,'REPORT.md'),md);
+console.log(JSON.stringify({totals,failures:failed.map(r=>({id:r.id,name:r.name,expected:r.expected,actual:r.actual,response:r.response}))},null,2));
